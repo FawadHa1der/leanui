@@ -147,6 +147,31 @@ def testRender : IO Unit := do
   unless got == want do throw (IO.userError s!"render: {got}")
   IO.println "  render: ok"
 
+/-! ## Subscriptions shared by several parts of an app -/
+inductive SMsg | urlA (u : String) | urlB (u : String) | tickA | tickB
+def subsProg : Program (Array String) SMsg where
+  init _ := (#[], .none)
+  update m log := (log.push (match m with
+    | .urlA u => s!"A {u}" | .urlB u => s!"B {u}" | .tickA => "tickA" | .tickB => "tickB"), .none)
+  view log := el "ul" #[] (log.map fun s => el "li" #[] #[text s])
+  -- two components that both follow the URL and both tick every second
+  subscriptions _ := .batch #[(Sub.urlChanges SMsg.urlA), .every 1000 .tickA,
+    (Sub.batch #[.urlChanges .urlB, .every 1000 .tickB])]
+
+def testSharedSubs : IO Unit := do
+  let r ← run subsProg
+  let d ← r.dom.get
+  let cbOf (pfx : String) : IO UInt32 := do
+    let ws := d.effects.filter (·.startsWith pfx)
+    unless ws.size == 1 do throw (IO.userError s!"expected one {pfx} subscription, got {ws}")
+    return (((ws[0]!.drop pfx.length).takeWhile Char.isDigit).toString.toNat!).toUInt32
+  let url ← cbOf s!"op{Op.urlListen} "
+  let tick ← cbOf "interval "
+  r.inst.callback url true "/x"
+  r.inst.callback tick true ""
+  r.check (subsProg.view #["A /x", "B /x", "tickA", "tickB"]) "shared subscriptions"
+  IO.println "  shared subscriptions: ok"
+
 def main : IO UInt32 := do
   IO.println "leanui tests"
   testRender
@@ -156,5 +181,6 @@ def main : IO UInt32 := do
   testLists .keyed 400
   testLists .positional 400
   testLists .keyedLazy 400
+  testSharedSubs
   IO.println "all passed"
   return 0

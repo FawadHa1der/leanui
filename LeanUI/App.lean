@@ -36,7 +36,9 @@ structure Instance where
   callback : UInt32 → Bool → String → IO Unit
 
 structure Callback (Msg : Type) where
-  decode : Bool → String → Option Msg
+  /-- The messages the result produces: one for a command's continuation, one per subscriber for
+  a subscription that several parts of the app share. -/
+  decode : Bool → String → Array Msg
   /-- Subscription callbacks persist; command continuations are freed after one call. -/
   persistent : Bool
 
@@ -78,14 +80,14 @@ partial def execCmd (c : Cmd Msg) (acc : Array Msg) : RunM Model Msg (Array Msg)
   | .batch cs => cs.foldlM (fun acc c => execCmd c acc) acc
   | .send m => return acc.push m
   | .fetch req k =>
-    let cb ← allocCb { decode := fun ok p => some (k (parseResponse ok p)), persistent := false }
+    let cb ← allocCb { decode := fun ok p => #[k (parseResponse ok p)], persistent := false }
     emitR (·.fetchCmd cb req); return acc
   | .after ms m =>
-    let cb ← allocCb { decode := fun _ _ => some m, persistent := false }
+    let cb ← allocCb { decode := fun _ _ => #[m], persistent := false }
     emitR (·.timeoutCmd cb ms); return acc
   | .storageSet k v => emitR (·.storageSetCmd k v); return acc
   | .storageGet k f =>
-    let cb ← allocCb { decode := fun ok v => some (f (if ok then some v else none)), persistent := false }
+    let cb ← allocCb { decode := fun ok v => #[f (if ok then some v else none)], persistent := false }
     emitR (·.storageGetCmd cb k); return acc
   | .storageRemove k => emitR (·.storageRemoveCmd k); return acc
   | .pushUrl u => emitR (·.urlCmd true u); return acc
@@ -96,24 +98,35 @@ partial def execCmd (c : Cmd Msg) (acc : Array Msg) : RunM Model Msg (Array Msg)
   | .log s => emitR (·.logCmd s); return acc
   | .title s => emitR (·.titleCmd s); return acc
   | .nextFrame k =>
-    let cb ← allocCb { decode := fun _ t => some (k (Float.ofNat (t.toNat?.getD 0))), persistent := false }
+    let cb ← allocCb { decode := fun _ t => #[k (Float.ofNat (t.toNat?.getD 0))], persistent := false }
     emitR (·.frameCmd cb); return acc
+
+/-- The wanted subscriptions grouped by identity, in first-seen order: one browser subscription
+per identity, whose callback delivers a message to every part of the app that wants it (two
+components can both follow the URL, or both tick every second). -/
+def groupSubs (want : Array (String × Nat × (String → Option Msg))) :
+    Array (String × Nat × Array (String → Option Msg)) :=
+  want.foldl (init := #[]) fun acc (ident, ms, f) =>
+    match acc.findIdx? (·.1 == ident) with
+    | some i => acc.modify i fun (k, ms, fs) => (k, ms, fs.push f)
+    | none => acc.push (ident, ms, #[f])
 
 /-- Start, stop and retarget subscriptions so the active set matches `sub`. -/
 def syncSubs (sub : Sub Msg) : RunM Model Msg Unit := do
-  let want := sub.flatten
+  let want := groupSubs sub.flatten
   let st ← get
   -- stop the ones no longer wanted
   let mut keep := #[]
   for (ident, cb) in st.subs do
     if want.any (·.1 == ident) then keep := keep.push (ident, cb)
     else emitR (·.subClear cb); freeCb cb
-  -- start new ones; retarget kept ones (their message may have changed)
-  for (ident, ms, f) in want do
+  -- start new ones; retarget kept ones (their messages may have changed)
+  for (ident, ms, fs) in want do
+    let c : Callback Msg := { decode := fun _ p => fs.filterMap (· p), persistent := true }
     match keep.find? (·.1 == ident) with
-    | some (_, cb) => modify fun s => { s with cbs := s.cbs.set! cb.toNat (some { decode := fun _ p => f p, persistent := true }) }
+    | some (_, cb) => modify fun s => { s with cbs := s.cbs.set! cb.toNat (some c) }
     | none =>
-      let cb ← allocCb { decode := fun _ p => f p, persistent := true }
+      let cb ← allocCb c
       if ident == "url" then emitR (·.urlListen cb) else emitR (·.intervalSet cb ms)
       keep := keep.push (ident, cb)
   modify fun s => { s with subs := keep }
@@ -182,8 +195,7 @@ def start (p : Program Model Msg) (host : Host) (flags selector : String) (hydra
       | none => st
       | some c =>
         let st := if c.persistent then st else ((freeCb cb).run st).2
-        match c.decode ok payload with
-        | some m => ((stepMsgs p #[m]).run st).2
-        | none => st }
+        let msgs := c.decode ok payload
+        if msgs.isEmpty then st else ((stepMsgs p msgs).run st).2 }
 
 end LeanUI
