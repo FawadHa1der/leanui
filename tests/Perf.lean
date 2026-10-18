@@ -304,7 +304,8 @@ def allocsNodes : IO Unit := do
     ("element + 1 text child", el "td" #[] #[text "x"]),
     ("element + 2 text children", el "td" #[] #[text "x", text "y"]),
     ("lazy (text)", .lazy (some "k") (.nat 1) fun _ => text "x"),
-    ("benchmark row (lazy)", (Bench.lazyRows { rows := #[{ id := 7, label := "a b c" }] })[0]!)]
+    ("benchmark row (lazy)", (Bench.lazyRows { rows := #[{ id := 7, label := "a b c" }] })[0]!),
+    ("tbody of 1,000 benchmark rows", el "tbody" #[] (Bench.lazyRows (Bench.build {} 1000)))]
   IO.println "| shape | small objects to mount (encoding included) | of which encoding |"
   IO.println "|---|--:|--:|"
   for (name, v) in shapes do
@@ -315,6 +316,16 @@ def allocsNodes : IO Unit := do
     let w ← warm ()
     let (_, e) ← smallObjects fun _ => replay w.buf cs
     IO.println s!"| {name} | {n - calib} | {e - calib} |"
+  -- the same tbody into a state with free handles and slots (as after clearing 1,000 rows)
+  let rows := el "tbody" #[] (Bench.lazyRows (Bench.build {} 1000))
+  let v ← prepare rows
+  let w ← warm ()
+  let handles : Array UInt32 := (Array.range 20000).map fun i => i.toUInt32 + 1
+  let slotIds : Array UInt32 := (Array.range 3000).map fun i => i.toUInt32 + 1
+  let w ← IO.lazyPure fun _ =>
+    { w with freeNodes := handles, nextNode := 20001, freeSlots := slotIds, slots := Array.replicate 3001 none }
+  let (_, n) ← smallObjects fun _ => (mount v).run w
+  IO.println s!"| tbody of 1,000 rows, reusing free handles and slots | {n - calib} | |"
 
 def main (args : List String) : IO UInt32 := do
   if args == ["allocs"] then allocs; return 0
