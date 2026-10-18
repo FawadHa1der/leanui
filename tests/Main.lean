@@ -1,5 +1,6 @@
 import LeanUI
 import LeanUI.Testing.Harness
+import Std.Data.HashSet
 open LeanUI LeanUI.Testing Attr
 
 /-! A deterministic PRNG for randomised tests. -/
@@ -136,6 +137,43 @@ def testKeyContract : IO Unit := do
     r.check (keyContractView rows) s!"key contract: rows {rows} with equal deps"
   IO.println "  keyed lazy rows with equal deps (key compared like a dependency): ok"
 
+/-! ## Childless elements share one empty array
+
+Mounting a childless element (or one without listeners) must not allocate an empty array for it:
+a `#[]` written in an argument position is allocated every time it runs, and 1,000 benchmark rows
+would keep 2,000 such arrays alive. Checked by address, on rows mounted at startup and on rows
+created by an update (the patch path). -/
+private unsafe def addrImpl {α : Type} (a : α) : USize := ptrAddrUnsafe a
+@[implemented_by addrImpl] opaque addrOf {α : Type} (a : α) : USize
+
+/-- The distinct addresses of the empty children arrays and the empty listener tables. -/
+partial def emptyArrays (n : Node Unit) (acc : Std.HashSet USize × Std.HashSet USize := ({}, {})) :
+    Std.HashSet USize × Std.HashSet USize :=
+  match n with
+  | .elem _ _ _ _ _ ls kids _ =>
+    let acc := if kids.isEmpty then (acc.1.insert (addrOf kids), acc.2) else acc
+    let acc := if ls.isEmpty then (acc.1, acc.2.insert (addrOf ls)) else acc
+    kids.foldl (fun acc k => emptyArrays k acc) acc
+  | .lazy _ _ n => emptyArrays n acc
+  | .text .. => acc
+
+/-- A benchmark-like row: two childless elements (the span and the last cell), one listener. -/
+def emptyRow (i : Nat) : Html Unit :=
+  el "tr" #[] #[el "td" #[cls "col-md-1"] #[text (toString i)],
+    el "td" #[] #[el "a" #[onClick ()] #[text "label"]],
+    el "td" #[] #[el "a" #[] #[el "span" #[cls "remove"] #[]]], el "td" #[] #[]]
+
+def testSharedEmpty : IO Unit := do
+  let p : Program Nat Unit := {
+    init := fun _ => (1000, .none), update := fun _ n => (n + 1000, .none)
+    view := fun n => el "tbody" #[] ((Array.range n).map emptyRow) }
+  let st := initState p "" "#app" false
+  let st := ((stepMsgs p #[()]).run st).2
+  let (kids, ls) := emptyArrays st.tree
+  unless kids.size == 1 && ls.size == 1 do
+    throw (IO.userError s!"2,000 rows hold {kids.size} distinct empty children arrays and {ls.size} distinct empty listener tables (want 1 each)")
+  IO.println "  childless elements share one empty array: ok"
+
 /-! ## The planner's list model -/
 def testPlanner (iters : Nat) : IO Unit := do
   let mut rng : Rng := ⟨42⟩
@@ -210,6 +248,7 @@ def main : IO UInt32 := do
   testCounter
   testLazy
   testKeyContract
+  testSharedEmpty
   testLists .keyed 400
   testLists .positional 400
   testLists .keyedLazy 400
