@@ -42,12 +42,15 @@ inductive LMsg | setRows (rows : Array Nat) | pick (k : Nat)
 structure LModel where
   rows : Array Nat := #[]
   picked : Option Nat := none
-/-- How the test list renders its rows. -/
-inductive ListMode | positional | keyed | keyedLazy
+/-- How the test list renders its rows. `keyedLazyNoId` leaves the row's id out of the lazy deps,
+the idiom Bench and TodoMVC use: the rows are then told apart by their keys alone, so the list is
+correct only if the diff compares a lazy node's key like a dependency. -/
+inductive ListMode | positional | keyed | keyedLazy | keyedLazyNoId
   deriving BEq
 
 def ListMode.name : ListMode → String
   | .positional => "positional" | .keyed => "keyed" | .keyedLazy => "keyed lazy"
+  | .keyedLazyNoId => "keyed lazy (key not in deps)"
 
 def rowView (keyed : Bool) (picked : Bool) (k : Nat) : Html LMsg :=
   el "li" ((if keyed then #[Attr.key (toString k)] else #[]) ++
@@ -60,7 +63,8 @@ def listView (mode : ListMode) (m : LModel) : Html LMsg :=
     match mode with
     | .positional => rowView false picked k
     | .keyed => rowView true picked k
-    | .keyedLazy => keyed (toString k) (lazy (k, picked) fun _ => rowView false picked k))
+    | .keyedLazy => keyed (toString k) (lazy (k, picked) fun _ => rowView false picked k)
+    | .keyedLazyNoId => keyedLazy (toString k) picked fun _ => rowView false picked k)
 def listProg (mode : ListMode) : Program LModel LMsg where
   init _ := ({}, .none)
   update m s := match m with | .setRows rs => ({ s with rows := rs }, .none) | .pick k => ({ s with picked := some k }, .none)
@@ -72,7 +76,7 @@ def decodeRows (s : String) : Option LMsg :=
 /-- Drive a list through random edits. A hidden control button carries the next row list in its
 event payload, so every edit goes through the same event path the browser uses. -/
 def testLists (mode : ListMode) (iters : Nat) : IO Unit := do
-  let mut rng : Rng := ⟨if mode == .keyed then 7 else if mode == .keyedLazy then 3 else 11⟩
+  let mut rng : Rng := ⟨match mode with | .keyed => 7 | .keyedLazy => 3 | .keyedLazyNoId => 5 | .positional => 11⟩
   let p : Program LModel LMsg := { listProg mode with
     view := fun m => el "div" #[] #[
       el "button" #[id "go", Attr.on "click" { payload := .value, decode := decodeRows }] #[],
@@ -109,6 +113,28 @@ def testLists (mode : ListMode) (iters : Nat) : IO Unit := do
       | some h => r.fire h "click"; model := { model with picked := some k }; r.check (p.view model) s!"pick {k} at {it}"
       | none => throw (IO.userError s!"row {k} not found")
   IO.println s!"  {mode.name} lists, {iters} random edits: ok"
+
+/-! ## A lazy node's key is compared like a dependency
+
+`keyedLazy k deps render` rows whose deps are all equal (here `()`) differ only by key. Both
+places where the diff skips a lazy node must compare the key: `sameF` (the unchanged-subtree check,
+which pairs children by position in a small subtree) and `patchNode` (reached for lists diffed by
+position, e.g. with a duplicate key). Each step below fails if one of them compares deps only. -/
+def keyContractView (rows : Array Nat) : Html LMsg :=
+  el "div" #[] #[
+    el "button" #[id "go", Attr.on "click" { payload := .value, decode := decodeRows }] #[],
+    el "ul" #[id "list"] (rows.map fun k => keyedLazy (toString k) () fun _ => el "li" #[] #[text s!"row {k}"])]
+
+def testKeyContract : IO Unit := do
+  let p : Program LModel LMsg := { listProg .keyedLazyNoId with view := fun m => keyContractView m.rows }
+  let r ← run p
+  r.check (keyContractView #[]) "key contract: mount"
+  -- [1,2,3] then reversed: a small subtree, so `sameF` pairs the rows by position;
+  -- then lists with a duplicate key, diffed by position through `patchNode`
+  for rows in [#[1, 2, 3], #[3, 2, 1], #[1, 1, 2], #[2, 1, 1], #[1, 2, 1]] do
+    r.fire (← r.find "id" "go") "click" (",".intercalate (rows.toList.map toString))
+    r.check (keyContractView rows) s!"key contract: rows {rows} with equal deps"
+  IO.println "  keyed lazy rows with equal deps (key compared like a dependency): ok"
 
 /-! ## The planner's list model -/
 def testPlanner (iters : Nat) : IO Unit := do
@@ -183,9 +209,11 @@ def main : IO UInt32 := do
   testPlanner 20000
   testCounter
   testLazy
+  testKeyContract
   testLists .keyed 400
   testLists .positional 400
   testLists .keyedLazy 400
+  testLists .keyedLazyNoId 400
   testSharedSubs
   testVoid
   IO.println "all passed"

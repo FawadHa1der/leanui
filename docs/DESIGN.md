@@ -26,7 +26,8 @@ built against. It was first written on 2026-10-18 from the research in
   compared value (`ToDep` builds one from naturals, strings, booleans, options, pairs, lists),
   never a hash; a lazy node carries its own key (`keyed k h`, or directly `keyedLazy k deps
   render`), so a keyed list of lazy rows reconciles without rendering them, and the key is
-  compared like a dependency. Void elements (`input`, `br`, …) get no children
+  compared like a dependency (rows may leave the key out of their deps; tests/Main.lean's
+  `testKeyContract` and `keyedLazyNoId` lists pin this). Void elements (`input`, `br`, …) get no children
   (`effectiveKids`), whatever the view says, in the DOM, in rendered HTML and in hydration alike.
 - **Templates** (`LeanUI.Syntax`, `docs/SYNTAX.md`): JSX-style syntax, compile-time only
   (`meta import`); it expands to the constructors above, so the generated C equals the

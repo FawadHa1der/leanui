@@ -209,7 +209,9 @@ def keyed (k : String) : Html Msg → Html Msg
   | h => h
 /-- `keyed k (lazy deps render)`, built directly: a keyed lazy row of a long list. The key is
 compared too, so `deps` need not include what the key already determines (a row keyed by its
-id depends on the rest of the row): `keyedLazy (toString r.id) (r.label, selected) fun _ => row r`. -/
+id depends on the rest of the row): `keyedLazy (toString r.id) (r.label, selected) fun _ => row r`.
+This is a contract of the diff (`sameF` and `patchNode` skip a lazy node only if key *and* deps are
+equal); `testKeyContract` and the `keyedLazyNoId` lists in tests/Main.lean fail if it breaks. -/
 @[inline] def keyedLazy [ToDep α] (k : String) (deps : α) (render : Unit → Html Msg) : Html Msg :=
   .lazy (some k) (toDep deps) render
 /-- `keyed k (memo a f)`, built directly. -/
