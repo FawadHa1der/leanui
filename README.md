@@ -40,6 +40,76 @@ def program : Program Int Msg where
 | **Testing** (`LeanUI.Testing`) | a pure DOM model that applies command buffers exactly as the browser does, property tests and fuzzing against a reference model, a strict protocol checker, SSR parser checks, browser suites in Chromium and Firefox |
 | **Examples** | a counter, [TodoMVC](examples/TodoMVC.lean) (the full spec, proved invariants), [the LeanUI site](examples/Site.lean) (routed pages, components, fetch, SVG; server-rendered), the js-framework-benchmark app, an effects lab, [the guide's notes app](docs/GUIDE.md) |
 
+## How it works
+
+An app is built twice from the same Lean code. Emscripten is used only at build time: the
+browser receives its output, never the compiler.
+
+```mermaid
+flowchart LR
+  app["Your app in Lean<br/>model, update, view"]
+  app -->|"lake"| c["C code"]
+  c -->|"Emscripten, in Docker,<br/>at build time"| wasm["app.wasm + app.js<br/>the app as wasm64"]
+  app -->|"lake, native"| server["Server binary<br/>optional"]
+  rt["runtime/leanui.js<br/>about 5 KB, the same for every app"]
+  wasm --> browser(("Browser"))
+  rt --> browser
+  server -.->|"serves pages and files"| browser
+```
+
+At run time, Lean does all the computing and a small fixed JavaScript runtime makes the DOM
+calls, because WebAssembly cannot reach the DOM directly. One page, from the first request to
+the user's clicks:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant B as Browser DOM
+  participant J as leanui.js
+  participant W as App in wasm (Lean)
+  participant S as Lean server (native)
+
+  B->>S: GET /examples
+  S->>S: init and view run natively, Html.render
+  S-->>B: complete HTML, visible before any script runs
+  B->>J: load leanui.js, LeanUI.boot
+  alt Browser has WebAssembly Memory64 (Chrome, Firefox)
+    J->>W: load app.wasm, leanui_boot(flags, hydrate)
+    W-->>J: command buffer: claim the existing nodes, attach listeners
+    J->>B: adopt the server-rendered nodes (hydration)
+    loop every interaction
+      U->>B: click, type, submit
+      B->>J: one delegated listener per event type
+      J->>W: leanui_event(listener slot, payload)
+      W->>W: update, view, diff
+      W-->>J: command buffer, read in place from wasm memory
+      J->>B: DOM calls: create, set attribute, insert, remove
+      opt the update asked for an effect, such as fetch
+        J->>S: GET /data/benchmarks.json
+        S-->>J: response
+        J->>W: leanui_callback(id, ok, body)
+      end
+    end
+  else No Memory64 (Safari): the server runs the same program
+    J->>S: POST /leanui/session: h (hydrate)
+    S->>S: a session starts the program natively
+    S-->>J: command buffer
+    J->>B: adopt the server-rendered nodes
+    loop every interaction
+      U->>B: click, type, submit
+      B->>J: one delegated listener per event type
+      J->>S: POST /leanui/session: e, listener slot, payload
+      S->>S: update, view, diff
+      S-->>J: command buffer
+      J->>B: DOM calls
+    end
+  end
+```
+
+The server is optional. Served by any static file host (`leanui serve`), a page starts empty
+and the wasm mounts the app, with every interaction as in the first branch above.
+
 ## How it performs
 
 The [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) keyed operations,
