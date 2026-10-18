@@ -10,7 +10,8 @@ below. This document is normative for both.
 A buffer is two byte arrays:
 
 - **words**: little-endian unsigned 32-bit integers, a sequence of *commands*. Each command is an
-  opcode word followed by a fixed number of operand words (section 3).
+  opcode word followed by its operand words (section 3): a fixed number, except for `TEMPLATE`
+  and `CLONE`, whose operands end with a count and that many node handles.
 - **strings**: UTF-8 text. A string operand is two words, `(offset, length)`, counted in **UTF-16
   code units** from the start of the decoded string area. The receiver decodes the whole area once
   (`TextDecoder`) and slices it (`substr(offset, length)`), so a buffer costs one decode no matter
@@ -54,6 +55,8 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 17 | INTERN | id, s | define name `id` |
 | 18 | MOUNT | s, n | `querySelector(s).replaceChildren(n)`; `s` becomes the app's container |
 | 19 | HYDRATE | s, first, count | adopt the container's existing nodes (section 5) |
+| 20 | TEMPLATE | tid, count, n1..ncount | keep a copy of the subtree rooted at `n1`, whose nodes are `n1..ncount` in pre-order, as template `tid` (section 7) |
+| 21 | CLONE | tid, count, n1..ncount | `nodes[n1..ncount]` = a copy of template `tid`, in pre-order (section 7) |
 | 32 | FETCH | cb, s method, s url, s body, s headers | `fetch`; headers are `name: value` lines; reply `cb` with ok = 2xx and payload `"<status>\n<body>"` (status 0 on network error) |
 | 33 | TIMEOUT | cb, ms | reply `cb` (ok, `""`) after `ms` |
 | 34 | INTERVAL_SET | sub, ms | reply `sub` (ok, `""`) every `ms` until cleared |
@@ -72,7 +75,9 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 47 | SCROLL_INTO_VIEW | s selector | after this buffer, scroll the first match into view |
 
 Unknown opcodes are fatal (the receiver stops and reports). New commands get new numbers; numbers
-are never reused.
+are never reused. Opcode 22 is unused: an `INSERT_MANY` (insert a run of children with one
+DocumentFragment) was measured and left out, since it made creating rows slower in Chromium and
+no faster in Firefox.
 
 ## 4. Events
 
@@ -120,3 +125,30 @@ The page calls `LeanUI.connect({ endpoint, session })`. Every report is a `POST
 
 The response body is an encoded buffer (possibly empty). Requests are sent one at a time, in
 order.
+
+## 7. Template cloning
+
+Most created DOM comes from lists whose rows share one shape, so Lean creates repeated subtrees
+by copying a template (one `cloneNode(true)`) instead of one command per node.
+
+- `TEMPLATE tid count n1..ncount` follows, in the same buffer, the commands that built the
+  subtree rooted at `n1` (before it is attached anywhere); `n1..ncount` are all of its nodes in
+  pre-order (elements and texts). The receiver keeps a copy taken now, with only those nodes:
+  nodes the subtree gained otherwise (an `innerHTML` property, say) are not part of the template.
+  Form controls in the copy are fresh: a copied `input` or `textarea` has the template's
+  attributes and children but neither its value nor its checkedness (nor their dirty flags), as a
+  newly created one. Template ids are ≥ 1, defined once per session; there are at most 256.
+- `CLONE tid count n1..ncount` makes `n1..ncount` (handles that are not live) the nodes of a new
+  copy of template `tid`, in pre-order; `count` is the template's size. The copy is detached and
+  carries the template's namespaces, tags, attributes and texts, and no listeners. The commands
+  that follow make it what a mount of the view builds: `SET_TEXT` for the texts that differ, every
+  property (`SET_PROP_*`), every listener (`SET_LISTENER`), and the attributes that follow a
+  property in the view (a property can reflect onto an attribute).
+
+Lean templates element subtrees of 4 to 64 nodes that contain no lazy node and no property on an
+element with children (mount sets properties before the children exist; a copy has them
+already). A subtree's shape is its namespaces and tags, each element's attributes (names and
+values, in order) and property names (in order), and its structure; listeners, keys and text
+contents are not part of it. The second subtree of a shape becomes the template, later ones are
+clones; shapes are compared exactly, never by hash alone. `LeanUI/Testing/Dom.lean` models both
+commands (the model's copy carries attributes and texts, not properties).
