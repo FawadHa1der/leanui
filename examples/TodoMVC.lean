@@ -3,6 +3,7 @@ public import LeanUI
 public import LeanUI.Router
 public import LeanUI.Json
 meta import LeanUI.Json.Derive
+meta import LeanUI.Syntax
 /-!
 # TodoMVC
 
@@ -166,47 +167,55 @@ def visible (f : Filter) (t : Todo) : Bool :=
   | .active => !t.completed
   | .completed => t.completed
 
-def checkbox (cl : String) (on : Bool) (k : Bool → Msg) (extra : Array (Attr Msg) := #[]) : Html Msg :=
-  el "input" (#[cls cl, Attr.attr "type" "checkbox", checked on, onCheck k] ++ extra) #[]
-
 def viewTodo (t : Todo) (draft : Option String) : Html Msg :=
-  el "li" #[classes [("completed", t.completed), ("editing", draft.isSome)]] (#[
-    el "div" #[cls "view"] #[
-      checkbox "toggle" t.completed (.toggle t.id),
-      el "label" #[onDblClick (.edit t.id)] #[text t.title],
-      el "button" #[cls "destroy", onClick (.destroy t.id)] #[]]] ++
-    match draft with
-    | some d => #[el "input" #[cls "edit", value d, onInput .draft, onKeyDown (fun k => some (.editKey k)), onBlur .commit] #[]]
-    | none => #[])
+  <li class:completed={t.completed} class:editing={draft.isSome}>
+    <div class="view">
+      <input class="toggle" type="checkbox" checked={t.completed} onCheck={.toggle t.id} />
+      <label onDblClick={.edit t.id}>{t.title}</label>
+      <button class="destroy" onClick={.destroy t.id} />
+    </div>
+    {...draft.map fun d =>
+      <input class="edit" value={d} onInput={.draft} onKeyDown={fun k => some (.editKey k)} onBlur={.commit} />}
+  </li>
 
 def filterLink (current f : Filter) (label : String) : Html Msg :=
-  el "li" #[] #[router.link f #[cls (if current == f then "selected" else "")] #[text label]]
+  <li>{router.link f #[cls (if current == f then "selected" else "")] #[text label]}</li>
 
 def view (m : Model) : Html Msg :=
   let active := (m.todos.filter (!·.completed)).size
   let completed := m.todos.size - active
+  -- keyed lazy rows: a row is rendered and diffed only when its todo or its editing state changes
   let rows := m.todos.filter (visible m.filter) |>.map fun t =>
     let draft := if m.editing == some t.id then some m.draft else none
-    keyed (toString t.id) (lazy (t.id, t.title, t.completed, draft) fun _ => viewTodo t draft)
-  el "div" #[] #[
-    el "section" #[cls "todoapp"] (#[
-      el "header" #[cls "header"] #[
-        el "h1" #[] #[text "todos"],
-        el "input" #[cls "new-todo", Attr.attr "placeholder" "What needs to be done?", Attr.attr "autofocus" "",
-          value m.field, onInput .field, onKeyDown (fun k => if k == "Enter" then some (.newKey k) else none)] #[]]] ++
-      if m.todos.isEmpty then #[] else #[
-        el "section" #[cls "main"] #[
-          checkbox "toggle-all" (active == 0) .toggleAll #[id "toggle-all"],
-          el "label" #[Attr.attr "for" "toggle-all"] #[text "Mark all as complete"],
-          el "ul" #[cls "todo-list"] rows],
-        el "footer" #[cls "footer"] (#[
-          el "span" #[cls "todo-count"] #[el "strong" #[] #[text (toString active)], text (if active == 1 then " item left" else " items left")],
-          el "ul" #[cls "filters"] #[filterLink m.filter .all "All", filterLink m.filter .active "Active", filterLink m.filter .completed "Completed"]] ++
-          if completed > 0 then #[el "button" #[cls "clear-completed", onClick .clearCompleted] #[text "Clear completed"]] else #[])]),
-    el "footer" #[cls "info"] #[
-      el "p" #[] #[text "Double-click to edit a todo"],
-      el "p" #[] #[text "Written in Lean 4 with LeanUI"],
-      el "p" #[] #[text "Part of ", el "a" #[Attr.attr "href" "https://todomvc.com"] #[text "TodoMVC"]]]]
+    keyed (toString t.id) (lazy (t.id, t.title, t.completed, draft) fun _ => viewTodo t draft);
+  <div>
+    <section class="todoapp">
+      <header class="header">
+        <h1>todos</h1>
+        <input class="new-todo" placeholder="What needs to be done?" autofocus value={m.field}
+          onInput={.field} onKeyDown={fun k => if k == "Enter" then some (.newKey k) else none} />
+      </header>
+      <section class="main" if={!m.todos.isEmpty}>
+        <input id="toggle-all" class="toggle-all" type="checkbox" checked={active == 0} onCheck={.toggleAll} />
+        <label for="toggle-all">Mark all as complete</label>
+        <ul class="todo-list">{...rows}</ul>
+      </section>
+      <footer class="footer" if={!m.todos.isEmpty}>
+        <span class="todo-count"><strong>{active}</strong>{if active == 1 then " item left" else " items left"}</span>
+        <ul class="filters">
+          {filterLink m.filter .all "All"}
+          {filterLink m.filter .active "Active"}
+          {filterLink m.filter .completed "Completed"}
+        </ul>
+        <button class="clear-completed" onClick={.clearCompleted} if={completed > 0}>Clear completed</button>
+      </footer>
+    </section>
+    <footer class="info">
+      <p>Double-click to edit a todo</p>
+      <p>Written in Lean 4 with LeanUI</p>
+      <p>Part of <a href="https://todomvc.com">TodoMVC</a></p>
+    </footer>
+  </div>
 
 def program : Program Model Msg := { init, update, view, subscriptions }
 

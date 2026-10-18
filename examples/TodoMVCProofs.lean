@@ -155,7 +155,9 @@ theorem clearCompleted_keeps (m : Model) (t : Todo) (ht : t ∈ m.todos.toList) 
   exact ⟨ht, by simp [ha]⟩
 
 theorem addTodo_blank (m : Model) (h : m.field.trimAscii.toString.isEmpty = true) : (addTodo m).todos = m.todos := by
-  unfold addTodo; dsimp only; rw [if_pos h]
+  unfold addTodo; dsimp only; split
+  · rfl
+  · contradiction
 
 /-! The build fails if any of these ever depends on `sorryAx` or on a non-standard axiom. -/
 
