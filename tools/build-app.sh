@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MOD="$1"; NAME="${2:-$(echo "$MOD" | tr '.' '-' | tr 'A-Z' 'a-z')}"; MODE="${3:-}"
 L="${LEAN_BIN:-$HOME/.elan/toolchains/leanprover--lean4---v4.34.0/bin}"
 . "$ROOT/toolchain/fork.lock"
-TC="$ROOT/.toolchain/wasm64"; [ -f "$TC/lib/libInit.a" ] || { echo "run toolchain/build-archives.sh first" >&2; exit 2; }
+TC="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}/wasm64"; [ -f "$TC/lib/libInit.a" ] || { echo "run toolchain/build-archives.sh first" >&2; exit 2; }
 OUT="$ROOT/dist/$NAME"; WORK="$ROOT/.lake/wasm/$NAME"
 rm -rf "$WORK" && mkdir -p "$WORK/obj" "$OUT"
 ( cd "$ROOT" && "$L/lake" build "$MOD" 2>&1 | { grep -E "error|warning: " -A3 || true; } | head -40 )
@@ -19,26 +19,28 @@ cat > "$WORK/leanui_init.c" <<C
 extern lean_object *$SYM(uint8_t builtin);
 lean_object *leanui_initialize_app(void) { return $SYM(1); }
 C
-# the framework's runtime modules and the app's own modules (everything under its top directory)
-TOP="$(echo "$MOD" | cut -d. -f1)"
-find "$IR/LeanUI" -name '*.c' ! -path '*/Testing/*' ! -path '*/Server*' ! -name 'Syntax*.c' > "$WORK/fw.list"
-echo "$IR/LeanUI.c" >> "$WORK/fw.list"
-: > "$WORK/app.list"; if [ -d "$IR/$TOP" ]; then find "$IR/$TOP" -name '*.c' >> "$WORK/app.list"; fi; if [ -f "$IR/$TOP.c" ]; then echo "$IR/$TOP.c" >> "$WORK/app.list"; fi
-FSFLAG="${LEANUI_FS:--sFILESYSTEM=0}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--profiling-funcs"
+# Every package module goes into one archive and only the entry module is linked directly, so the
+# linker pulls exactly what the app reaches (meta-only modules such as LeanUI.Syntax drop out).
+# Excluded: tests, the CLI, the native-only testing and server modules, and other app entry points.
+find "$IR" -name '*.c' ! -path "$IR/tests/*" ! -path "$IR/cli/*" ! -path '*/Testing/*' ! -path '*/Server*' ! -path "$APPC" \
+  | { grep -v -E "^$IR/[^/]+App\.c$" || true; } > "$WORK/fw.list"
+echo "$APPC" > "$WORK/app.list"
+FSFLAG="${LEANUI_FS:-}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--profiling-funcs"
 CG="-m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -D LEAN_EMSCRIPTEN"
 map() { sed "s|^$ROOT|/proj|"; }
-docker run --rm -v "$ROOT":/proj -v "$ROOT/.toolchain/ccache":/root/.ccache -e EM_COMPILER_WRAPPER=ccache -w /proj "$image" bash -lc "
+TCD="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}"
+docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e EM_COMPILER_WRAPPER=ccache -w /proj "$image" bash -lc "
   set -e
   W=/proj/.lake/wasm/$NAME
-  cc1() { f=\$1; o=\$W/obj/\$(echo \$f | md5sum | cut -c1-12).o; emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c \$f -o \$o && echo \$o; }
+  cc1() { f=\$1; o=\$W/obj/\$(echo \$f | md5sum | cut -c1-12).o; emcc $OPT $CG -I /tc/wasm64/include -c \$f -o \$o && echo \$o; }
   export -f cc1; export W
   cat \$W/fw.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/fw.objs
   cat \$W/app.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/app.objs
-  emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c /proj/runtime/leanui_wasm.c -o \$W/obj/shim.o
-  emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c \$W/leanui_init.c -o \$W/obj/init.o
+  emcc $OPT $CG -I /tc/wasm64/include -c /proj/runtime/leanui_wasm.c -o \$W/obj/shim.o
+  emcc $OPT $CG -I /tc/wasm64/include -c \$W/leanui_init.c -o \$W/obj/init.o
   rm -f \$W/libleanui.a && emar rcs \$W/libleanui.a \$(cat \$W/fw.objs)
   emcc $OPT $CG $DBG \$W/obj/shim.o \$W/obj/init.o \$(cat \$W/app.objs) \$W/libleanui.a \
-    /proj/.toolchain/wasm64/lib/libStd.a /proj/.toolchain/wasm64/lib/libInit.a /proj/.toolchain/wasm64/lib/libleanrt.a /proj/.toolchain/wasm64/lib/libuv.a \
+    /tc/wasm64/lib/libStd.a /tc/wasm64/lib/libInit.a /tc/wasm64/lib/libleanrt.a /tc/wasm64/lib/libuv.a \
     -sMALLOC=mimalloc -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16777216 -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
     -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
     -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=stringToNewUTF8 \

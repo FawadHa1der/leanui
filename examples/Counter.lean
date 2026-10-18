@@ -1,10 +1,9 @@
 module
 public import LeanUI
-public import LeanUI.Host.Wasm
 public section
 open LeanUI Attr
 
-namespace Examples.Counter
+namespace Counter
 
 inductive Msg | inc | dec | set (n : Int) | reset
 
@@ -28,6 +27,4 @@ def view (n : Int) : Html Msg :=
 
 def program : Program Int Msg := { init := fun _ => (0, .none), update, view }
 
-end Examples.Counter
-
-leanui_app Examples.Counter.program
+end Counter

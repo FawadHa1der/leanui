@@ -1,23 +1,74 @@
 name = "leanui"
 version = "0.1.0"
-defaultTargets = ["LeanUI", "LeanUITesting", "leanui-tests", "Examples"]
+defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
+  "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
+  "leanui-server-tests", "leanui", "leanui-demo-server"]
 
+# The runtime core every app links.
 [[lean_lib]]
 name = "LeanUI"
 
+# The browser host (wasm only).
 [[lean_lib]]
 name = "LeanUIHost"
 roots = ["LeanUI.Host.Wasm"]
 
+# JSX-style templates: compile-time only, reached through `meta import`.
 [[lean_lib]]
-name = "Examples"
-srcDir = "examples"
-roots = ["Counter"]
+name = "LeanUISyntax"
+roots = ["LeanUI.Syntax"]
+
+# Routing and JSON (opt-in for apps).
+[[lean_lib]]
+name = "LeanUIKit"
+roots = ["LeanUI.Router", "LeanUI.Json"]
+
+# The native server (Std.Http): SSR, static files, server-driven sessions.
+[[lean_lib]]
+name = "LeanUIServer"
+roots = ["LeanUI.Server"]
+
+# Machine-checked properties.
+[[lean_lib]]
+name = "LeanUIProofs"
+roots = ["LeanUI.Proofs.Keyed"]
 
 [[lean_lib]]
 name = "LeanUITesting"
-roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness"]
+roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness", "LeanUI.Testing.Gen"]
+
+# Example programs (`X`) and their wasm entry points (`XApp`, one `leanui_app` each).
+[[lean_lib]]
+name = "Examples"
+srcDir = "examples"
+roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp"]
 
 [[lean_exe]]
 name = "leanui-tests"
 root = "tests.Main"
+
+[[lean_exe]]
+name = "leanui-props"
+root = "tests.Props"
+
+[[lean_exe]]
+name = "leanui-syntax-tests"
+root = "tests.Syntax"
+
+[[lean_exe]]
+name = "leanui"
+root = "cli.Main"
+
+[[lean_exe]]
+name = "leanui-kit-tests"
+root = "tests.Kit"
+
+[[lean_exe]]
+name = "leanui-server-tests"
+root = "tests.Server"
+
+# A native server that serves the examples both ways: hydrated by wasm, or server-driven.
+[[lean_exe]]
+name = "leanui-demo-server"
+srcDir = "examples"
+root = "ServerDemo"

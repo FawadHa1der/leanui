@@ -1,0 +1,1 @@
+def main : IO UInt32 := do IO.println "props: no tests yet"; return 0
