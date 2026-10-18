@@ -66,23 +66,25 @@ namespace LeanUI
 A buffer for 1,000 benchmark rows holds 122,000 words and 10,000 strings, so the two primitives
 below are the hot path of every update. Their Lean bodies are the specification (what the kernel
 and proofs see); compiled code uses the C expression in `extern c inline` instead, which the Lean
-compiler pastes at each call site: no call at all, natively and in wasm alike, and no C file or
-build step. The C reserves room (if the array is shared or full, it moves the bytes to a fresh
-array of twice the capacity, as `ByteArray.push` does), then stores the bytes and bumps the size.
-Byte stores keep the layout little-endian on any host (the C compiler merges them into one store).
-The snippets use only `lean.h` and GNU statement expressions (`({ … })`), which clang (`leanc`,
-`emcc`) and GCC accept. Nothing evaluates them at compile time (the interpreter cannot run an
-inline C extern). -/
+compiler pastes at each call site, natively and in wasm alike (no C file, no build step). When the
+array is exclusive and has room (almost always: capacity doubles as it grows), the C stores the
+bytes and bumps the size, with no call at all; otherwise it runs what the Lean body compiles to
+(`lean_byte_array_push`; `lean_string_to_utf8` and `lean_byte_array_copy_slice`), which copies or
+grows the array. Byte stores keep the layout little-endian on any host (the C compiler merges them
+into one store). The snippets are GNU statement expressions (`({ … })`), which clang (`leanc`,
+`emcc`) and GCC accept. Nothing evaluates these functions at compile time (the interpreter cannot
+run an inline C extern). -/
 
 /-- Append a little-endian `u32`. -/
 @[extern c inline "({ lean_object *a_ = #1; uint32_t x_ = #2; size_t n_ = lean_sarray_size(a_); \
-  if (LEAN_UNLIKELY(!lean_is_exclusive(a_) || lean_sarray_capacity(a_) - n_ < 4)) { \
-    size_t c_ = 2 * lean_sarray_capacity(a_); if (c_ < n_ + 4) c_ = n_ + 4; \
-    lean_object *r_ = lean_alloc_sarray(1, n_, c_); \
-    __builtin_memcpy(lean_sarray_cptr(r_), lean_sarray_cptr(a_), n_); lean_dec_ref(a_); a_ = r_; } \
-  uint8_t *p_ = lean_sarray_cptr(a_) + n_; \
-  p_[0] = (uint8_t)x_; p_[1] = (uint8_t)(x_ >> 8); p_[2] = (uint8_t)(x_ >> 16); p_[3] = (uint8_t)(x_ >> 24); \
-  lean_to_sarray(a_)->m_size = n_ + 4; a_; })"]
+  if (LEAN_LIKELY(lean_is_exclusive(a_) && lean_sarray_capacity(a_) - n_ >= 4)) { \
+    uint8_t *p_ = lean_sarray_cptr(a_) + n_; \
+    p_[0] = (uint8_t)x_; p_[1] = (uint8_t)(x_ >> 8); p_[2] = (uint8_t)(x_ >> 16); p_[3] = (uint8_t)(x_ >> 24); \
+    lean_to_sarray(a_)->m_size = n_ + 4; \
+  } else { \
+    a_ = lean_byte_array_push(a_, (uint8_t)x_); a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 8)); \
+    a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 16)); a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 24)); \
+  } a_; })"]
 def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
   b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8
 
@@ -90,12 +92,14 @@ def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
 (one `memcpy`, no intermediate `ByteArray`). -/
 @[extern c inline "({ lean_object *a_ = #1; lean_object *s_ = #2; size_t n_ = lean_sarray_size(a_); \
   size_t k_ = lean_string_size(s_) - 1; \
-  if (LEAN_UNLIKELY(!lean_is_exclusive(a_) || lean_sarray_capacity(a_) - n_ < k_)) { \
-    size_t c_ = 2 * lean_sarray_capacity(a_); if (c_ < n_ + k_) c_ = n_ + k_; \
-    lean_object *r_ = lean_alloc_sarray(1, n_, c_); \
-    __builtin_memcpy(lean_sarray_cptr(r_), lean_sarray_cptr(a_), n_); lean_dec_ref(a_); a_ = r_; } \
-  __builtin_memcpy(lean_sarray_cptr(a_) + n_, lean_string_cstr(s_), k_); \
-  lean_to_sarray(a_)->m_size = n_ + k_; a_; })"]
+  if (LEAN_LIKELY(lean_is_exclusive(a_) && lean_sarray_capacity(a_) - n_ >= k_)) { \
+    __builtin_memcpy(lean_sarray_cptr(a_) + n_, lean_string_cstr(s_), k_); lean_to_sarray(a_)->m_size = n_ + k_; \
+  } else { \
+    extern lean_object *lean_string_to_utf8(lean_object *); \
+    extern lean_object *lean_byte_array_copy_slice(lean_object *, lean_object *, lean_object *, lean_object *, lean_object *, uint8_t); \
+    lean_object *t_ = lean_string_to_utf8(s_); \
+    a_ = lean_byte_array_copy_slice(t_, lean_box(0), a_, lean_box(n_), lean_box(k_), 0); lean_dec_ref(t_); \
+  } a_; })"]
 def appendUtf8 (b : ByteArray) (s : @& String) : ByteArray := b ++ s.toUTF8
 
 /-- A command buffer under construction, plus the session's interned names. -/

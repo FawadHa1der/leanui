@@ -1,5 +1,6 @@
 import LeanUI
 import LeanUI.Testing.Harness
+import LeanUI.Testing.Wire
 open LeanUI LeanUI.Testing Attr
 
 /-! A deterministic PRNG for randomised tests. -/
@@ -177,8 +178,62 @@ def testVoid : IO Unit := do
     unless isVoid t == voidElements.contains t do throw (IO.userError s!"isVoid {t}")
   IO.println "  void elements: ok"
 
+/-! ## Encoding primitives (`pushU32`, `appendUtf8` and interning; compiled as inline C) -/
+
+/-- The specification of `pushU32`, compiled as ordinary Lean (byte pushes). -/
+def refPushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
+  b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8
+
+def encStrs : Array String := #["", "a", "col-md-1", "é", "😀 x", "naïve \x00 nul",
+  String.ofList (List.replicate 70000 'z'), "remove glyphicon glyphicon-remove"]
+
+/-- One random append (`k = 0`: a word, else a string), by the primitives or by the specification. -/
+def encStep (spec : Bool) (a : ByteArray) (k x : Nat) : ByteArray :=
+  if k == 0 then
+    let w := (x * 2654435761 % 4294967296).toUInt32
+    if spec then refPushU32 a w else pushU32 a w
+  else
+    let s := encStrs[x % encStrs.size]!
+    if spec then a ++ s.toUTF8 else appendUtf8 a s
+
+def testEncoding : IO Unit := do
+  let fail (what : String) : IO Unit := throw (IO.userError s!"encoding: {what}")
+  -- random appends to arrays of every starting capacity; every 7th step appends to a shared array
+  -- (the old one stays alive and must not change)
+  let mut rng : Rng := ⟨7⟩
+  for cap in [0, 1, 3, 4, 5, 8, 4096] do
+    let mut a := ByteArray.emptyWithCapacity cap
+    let mut ref := ByteArray.emptyWithCapacity cap
+    for step in [0:400] do
+      let (r1, k) := rng.below 3; let (r2, x) := r1.below 0x7fffffff; rng := r2
+      if step % 7 == 0 then
+        let keep := a
+        let before := keep.toList
+        a := encStep false a k x
+        if keep.toList != before then fail s!"shared array changed (cap {cap}, step {step})"
+      else
+        a := encStep false a k x
+      ref := encStep true ref k x
+      if a != ref then fail s!"cap {cap}, step {step}: {a.size} bytes, want {ref.size}"
+  -- interning: ids from 1 in order of first use, one INTERN each, `intern` agrees with the writers
+  let b : Buf := {}
+  let b := b.setAttr 1 "class" "x" |>.setAttr 2 "class" "y" |>.createElement 3 .html "td"
+  let (cid, b) := b.intern "class"
+  let (tid, b) := b.intern "td"
+  let (nid, b) := b.intern "new"
+  let (nid2, b) := b.intern "new"
+  unless (cid, tid, nid, nid2, b.nextName, b.names.size) == (1, 2, 3, 3, 4, 3) do
+    fail s!"intern ids {(cid, tid, nid, nid2, b.nextName, b.names.size)}"
+  match Wire.decode b.ops b.strs with
+  | .error e => fail s!"wire: {e}"
+  | .ok cmds =>
+    let interns := cmds.filterMap fun c => match c.op with | .intern i s => some (i, s) | _ => none
+    unless interns == #[(1, "class"), (2, "td"), (3, "new")] do fail s!"INTERN commands {interns}"
+  IO.println "  encoding primitives: ok"
+
 def main : IO UInt32 := do
   IO.println "leanui tests"
+  testEncoding
   testRender
   testPlanner 20000
   testCounter
