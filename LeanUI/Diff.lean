@@ -91,16 +91,23 @@ private def setOne (h : UInt32) : Attr Msg → DiffM Msg Unit
   | _ => pure ()
 
 /-- Set every attribute and listener of a freshly mounted (or claimed) element. While hydrating,
-attributes are already in the server-rendered HTML, so only properties and listeners are sent. -/
+attributes are already in the server-rendered HTML, so only properties and listeners are sent.
+A repeated listener for one event replaces the earlier one (the last one wins, as for attributes),
+so an element holds exactly one slot per event. -/
 def mountAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
   let hydrating := (← get).hydrating
   let mut ls := #[]
   for a in attrs do
     match a with
     | .on ev hd =>
-      let sl ← allocSlot hd
-      emit (·.setListener h ev sl hd.payload hd.flags)
-      ls := ls.push (ev, sl)
+      match ls.find? (·.1 == ev) with
+      | some (_, sl) =>
+        setSlot sl hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+      | none =>
+        let sl ← allocSlot hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+        ls := ls.push (ev, sl)
     | .attr .. => if !hydrating then setOne h a
     | .prop .. => setOne h a
     | .key _ => pure ()
@@ -114,12 +121,21 @@ private def sameShape (a b : Attr Msg) : Bool :=
   | .key _, .key _ => true
   | _, _ => false
 
+/-- Is `as[i]` overridden by a later attribute of the same kind and name? The last one is the one
+the DOM shows (`setAttribute` keeps the last value), so the earlier ones are never sent. -/
+private def shadowed (as : Array (Attr Msg)) (i : Nat) : Bool := Id.run do
+  let a := as[i]!
+  for j in [i + 1:as.size] do
+    if sameShape a as[j]! then return true
+  return false
+
+-- the value the DOM shows: the last attribute of that name
 private def findAttr (n : String) (as : Array (Attr Msg)) : Option String :=
-  as.findSome? fun | .attr m v => if m == n then some v else none | _ => none
+  as.findSomeRev? fun | .attr m v => if m == n then some v else none | _ => none
 private def findProp (n : String) (as : Array (Attr Msg)) : Option PropValue :=
-  as.findSome? fun | .prop m v => if m == n then some v else none | _ => none
+  as.findSomeRev? fun | .prop m v => if m == n then some v else none | _ => none
 private def findOn (e : String) (as : Array (Attr Msg)) : Option (Handler Msg) :=
-  as.findSome? fun | .on f hd => if f == e then some hd else none | _ => none
+  as.findSomeRev? fun | .on f hd => if f == e then some hd else none | _ => none
 
 /-- Update one listener in place: same event, so keep the slot and swap the handler; re-send the
 listener only if what the browser extracts or does changed. -/
@@ -131,25 +147,28 @@ private def updateListener (h : UInt32) (ev : String) (sl : UInt32) (old new : H
 def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt32))
     (new : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
   if old.size == new.size && (old.zip new).all fun (a, b) => sameShape a b then
-    -- fast path: same attributes in the same order
-    for (a, b) in old.zip new do
-      match a, b with
-      | .attr _ v, .attr n w => if v != w then emit (·.setAttr h n w)
-      | .prop _ v, .prop n w => if v != w then emit (·.setProp h n w)
+    -- fast path: same attributes in the same order (so the same ones are shadowed on both sides)
+    for i in [0:new.size] do
+      match old[i]!, new[i]! with
+      | .attr _ v, .attr n w => if v != w && !shadowed new i then emit (·.setAttr h n w)
+      | .prop _ v, .prop n w => if v != w && !shadowed new i then emit (·.setProp h n w)
       | .on ev ho, .on _ hn =>
-        match ls.find? (·.1 == ev) with
-        | some (_, sl) => updateListener h ev sl ho hn
-        | none => pure ()
+        if !shadowed new i then
+          match ls.find? (·.1 == ev) with
+          | some (_, sl) => updateListener h ev sl ho hn
+          | none => pure ()
       | _, _ => pure ()
     return ls
   -- general path: attribute lists are short, so linear scans
-  for a in old do
-    match a with
+  for i in [0:old.size] do
+    if shadowed old i then continue
+    match old[i]! with
     | .attr n _ => if (findAttr n new).isNone then emit (·.removeAttr h n)
     | .prop n _ => if (findProp n new).isNone then emit (·.removeProp h n)
     | _ => pure ()
-  for b in new do
-    match b with
+  for i in [0:new.size] do
+    if shadowed new i then continue
+    match new[i]! with
     | .attr n w => if findAttr n old != some w then emit (·.setAttr h n w)
     | .prop n w => if findProp n old != some w then emit (·.setProp h n w)
     | _ => pure ()
@@ -159,10 +178,10 @@ def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt
     | some hn, some ho => updateListener h ev sl ho hn; out := out.push (ev, sl)
     | some hn, none => setSlot sl hn; out := out.push (ev, sl)
     | none, _ => emit (·.removeListener h ev); freeSlot sl
-  for b in new do
-    match b with
+  for i in [0:new.size] do
+    match new[i]! with
     | .on ev hd =>
-      if !(out.any (·.1 == ev)) then
+      if !shadowed new i && !(out.any (·.1 == ev)) then
         let sl ← allocSlot hd
         emit (·.setListener h ev sl hd.payload hd.flags)
         out := out.push (ev, sl)
