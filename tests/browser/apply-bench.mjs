@@ -21,8 +21,8 @@
 // 3. Per opcode: the measured buffer's command counts, and with --profile a sampled CPU profile
 //    of the measured applies only (hot mode), by function: the DOM natives each opcode calls and
 //    the runtime's own JavaScript (Chromium: the V8 profiler, with the runtime's time per source
-//    line; Firefox: the Gecko profiler, one browser per variant, by the innermost JavaScript or
-//    DOM-binding label frame, e.g. "Node.appendChild").
+//    line; Firefox: the Gecko profiler, one browser per variant, by the innermost named frame:
+//    a DOM-binding label such as "Node.appendChild", or the runtime's own function).
 // Timing needs fine timers: the pages are cross-origin isolated (5 µs in Chromium), and
 // Firefox's timer rounding is turned off. Run it under the host browser lock.
 import http from "node:http";
@@ -232,7 +232,7 @@ for (const engine of ENGINES) {
 
   // Firefox: the Gecko profiler records from startup to shutdown, so each profile is a browser of
   // its own running one variant's samples (hot). Samples count only under the `__measured` frame,
-  // by their innermost JavaScript or label frame (DOM bindings label themselves "Node.appendChild").
+  // by their innermost named frame (DOM bindings label themselves, e.g. "Node.appendChild").
   async function geckoProfile(op, v) {
     const dump = path.join(os.tmpdir(), `leanui-apply-${process.pid}.json`);
     try { fs.rmSync(dump); } catch (e) {}
@@ -262,21 +262,26 @@ function summariseGecko(raw) {
       const S = th.samples, sStack = S.schema.stack, sTime = S.schema.time, data = S.data;
       const st = th.stackTable, ss = st.schema, ft = th.frameTable, fsc = ft.schema;
       const label = (fi) => { const loc = ft.data[fi][fsc.location]; return typeof loc === "number" ? strs[loc] : String(loc); };
-      const memo = new Map();   // stack -> under __measured?
-      const under = (si) => {
-        if (si === null) return false;
+      // per stack: under __measured? and its innermost named frame (JIT frames are bare addresses)
+      const memo = new Map();
+      const info = (si) => {
+        if (si === null) return { under: false, name: null };
         if (memo.has(si)) return memo.get(si);
-        const row = st.data[si];
-        const v = /^__measured\b/.test(label(row[ss.frame])) || under(row[ss.prefix]);
+        const row = st.data[si], nm = label(row[ss.frame]), up = info(row[ss.prefix]);
+        const named = !/^0x[0-9a-f]+$/.test(nm);
+        const v = { under: up.under || /^__measured\b/.test(nm), name: named ? nm : up.name };
         memo.set(si, v);
         return v;
       };
       for (let i = 0; i < data.length; i++) {
         const si = data[i][sStack];
-        if (si === null || !under(si)) continue;
+        if (si === null) continue;
+        const { under, name } = info(si);
+        if (!under) continue;
         const dt = i + 1 < data.length ? data[i + 1][sTime] - data[i][sTime] : 0.05;
-        // JIT frames without a name are the runtime's own compiled code
-        const k = label(st.data[si][ss.frame]).replace(/ \(http[^)]*\)/, "").replace(/\[\d+\]$/, "").replace(/^0x[0-9a-f]+$/, "(jit code)");
+        // a sample whose innermost named frame is the runtime itself is the runtime's own code
+        let k = (name || "?").replace(/ \(http[^)]*\)/, "").replace(/\[\d+\]$/, "");
+        if (/^(__measured|apply)\b/.test(k)) k = "the runtime's own code (" + k + ")";
         self.set(k, (self.get(k) || 0) + dt); total += dt;
       }
     }
