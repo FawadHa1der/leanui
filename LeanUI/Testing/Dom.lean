@@ -124,20 +124,6 @@ partial def instantiate (d : Dom) (hs : Array UInt32) (t : Snap) (parent : Optio
       (d, j', ks.push hs[j]!)
     (d.put h { ns, tag, attrs, kids := ks, parent }, j)
 
-/-- Insert `cs`, in order, into `p` before `r` (0: append), as one DocumentFragment insertion. -/
-def insertMany (d : Dom) (p r : UInt32) (cs : Array UInt32) : Dom := Id.run do
-  let mut d := d
-  if r != 0 && cs.contains r then d := d.err s!"insertMany: reference {r} is one of the inserted nodes"
-  -- into the fragment: each node leaves its parent first
-  for c in cs do d := d.detach c
-  let kids := (d.get p).kids
-  let found := if r == 0 then some kids.size else kids.idxOf? r
-  if found.isNone then d := d.err s!"insertMany: {r} is not a child of {p}"
-  let at_ := found.getD kids.size
-  d := d.upd p fun pn => { pn with kids := pn.kids.extract 0 at_ ++ cs ++ pn.kids.extract at_ pn.kids.size }
-  for c in cs do d := d.upd c fun n => { n with parent := some p }
-  return d
-
 /-- Apply one command buffer. -/
 def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
   let us := utf16Units strs
@@ -214,23 +200,21 @@ def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
       d := { d with roots := (d.roots.filter (·.1 != sel)).push (sel, h) }; pc := pc + 16
     else if op == Op.hydrate then
       d := { d with effects := d.effects.push s!"hydrate {str (pc + 4)} {word (pc + 12)} {word (pc + 16)}" }; pc := pc + 20
-    else if op == Op.template || op == Op.clone || op == Op.insertMany then
+    else if op == Op.template || op == Op.clone then
       -- variable width: a count, then that many handles
-      let base := if op == Op.insertMany then pc + 12 else pc + 8
+      let base := pc + 8
       let count := (word base).toNat
       let hs := (Array.range count).map fun k => word (base + 4 + 4 * k)
       if op == Op.template then
         let pre := if hs.isEmpty then #[] else d.preorderOf hs[0]!
         if hs.isEmpty || pre != hs then d := d.err s!"template {a}: the handles are not the subtree of {hs[0]?.getD 0} in pre-order"
         else d := { d with templates := d.templates.insert a (d.snap hs[0]!) }
-      else if op == Op.clone then
+      else
         match d.templates.get? a with
         | none => d := d.err s!"clone: no template {a}"
         | some t =>
           if t.size != count then d := d.err s!"clone: template {a} has {t.size} nodes, not {count}"
           else d := (d.instantiate hs t none 0).1
-      else
-        d := d.insertMany a (word (pc + 8)) hs
       pc := base + 4 + 4 * count
     else if op == Op.fetch then
       d := { d with effects := d.effects.push s!"fetch cb={a} {str (pc + 8)} {str (pc + 16)}" }; pc := pc + 40

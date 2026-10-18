@@ -21,9 +21,7 @@ command the browser could not apply as intended, even those `Dom.apply` tolerate
 * names used before `INTERN`, an id interned twice;
 * a `TEMPLATE` that does not name a live subtree completely (every node of the root's subtree,
   each after its parent), or redefines an id; a `CLONE` of an unknown template, with a count that
-  is not the template's size, or onto handles that are live or repeated; an `INSERT_MANY` whose
-  nodes repeat, contain the parent, or whose reference is not a child of the parent or is one of
-  the inserted nodes;
+  is not the template's size, or onto handles that are live or repeated;
 * string slices outside the string area, truncated operands, unknown opcodes.
 
 It also counts redundancies (a `remove` of a node that has no parent, a `removeListener` with
@@ -54,7 +52,6 @@ inductive WOp where
   | hydrate (sel : String) (first count : UInt32)
   | template (tid : UInt32) (hs : Array UInt32)
   | clone (tid : UInt32) (hs : Array UInt32)
-  | insertMany (p ref : UInt32) (hs : Array UInt32)
   | effect (op : UInt32)
   deriving Inhabited, Repr
 
@@ -66,7 +63,7 @@ def WOp.name : WOp → String
   | .replace .. => "replace" | .free .. => "free" | .setListener .. => "setListener"
   | .removeListener .. => "removeListener" | .intern .. => "intern" | .mount .. => "mount"
   | .hydrate .. => "hydrate" | .template .. => "template" | .clone .. => "clone"
-  | .insertMany .. => "insertMany" | .effect op => s!"effect{op}"
+  | .effect op => s!"effect{op}"
 
 /-- A decoded command and the word range `[start, start + len)` it occupies. -/
 structure Cmd where
@@ -112,11 +109,10 @@ def decode (ops strs : ByteArray) : Except String (Array Cmd) := do
   let mut i := 0
   while i < w.size do
     let op := w[i]!
-    -- TEMPLATE, CLONE and INSERT_MANY carry a count, then that many handles
-    let counted := if op == Op.template || op == Op.clone then some 2 else if op == Op.insertMany then some 3 else none
-    let n? := match counted with
-      | some k => if i + k < w.size then some (k + 1 + w[i + k]!.toNat) else some (k + 1)
-      | none => width op
+    -- TEMPLATE and CLONE carry a count, then that many handles
+    let n? := if op == Op.template || op == Op.clone then
+        some (if i + 2 < w.size then 3 + w[i + 2]!.toNat else 3)
+      else width op
     let some n := n? | throw s!"unknown opcode {op} at word {i}"
     if i + n > w.size then throw s!"opcode {op} at word {i} needs {n} words, {w.size - i} left"
     let a (k : Nat) : UInt32 := w[i + k]!
@@ -145,7 +141,6 @@ def decode (ops strs : ByteArray) : Except String (Array Cmd) := do
       else if op == Op.hydrate then pure (.hydrate (← str 1) (a 3) (a 4))
       else if op == Op.template then pure (.template (a 1) ((Array.range (a 2).toNat).map fun k => a (3 + k)))
       else if op == Op.clone then pure (.clone (a 1) ((Array.range (a 2).toNat).map fun k => a (3 + k)))
-      else if op == Op.insertMany then pure (.insertMany (a 1) (a 2) ((Array.range (a 3).toNat).map fun k => a (4 + k)))
       else pure (.effect op)
     out := out.push { op := c, start := i, len := n }
     i := i + n
@@ -345,20 +340,6 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
       s := s.created hs[k] kd
       if let some p := par then s := { s with parent := s.parent.insert hs[k] hs[p]! }
     return (s, ghosts)
-  | .insertMany p r hs => Id.run do
-    let mut s := s.needElem "insertMany" p
-    let mut seen : Std.HashSet UInt32 := {}
-    for x in hs do
-      s := s.needLive "insertMany" x
-      if seen.contains x then s := s.err s!"insertMany: {x} listed twice"
-      seen := seen.insert x
-      if s.ancestor x p then s := s.err s!"insertMany: {x} is an ancestor of {p} (cycle)"
-    if r != 0 then
-      s := s.needLive "insertMany" r
-      if seen.contains r then s := s.err s!"insertMany: reference {r} is one of the inserted nodes"
-      else if s.parent.get? r != some p then s := s.err s!"insertMany: reference {r} is not a child of {p}"
-    if hs.size < 2 then s := s.warn s!"insertMany of {hs.size} node(s) (appendChild/insertBefore is shorter)"
-    return ({ s with parent := hs.foldl (fun m x => m.insert x p) s.parent }, ghosts)
   | .effect _ => (s, ghosts)
 
 /-- Every live node, by reachability from the roots. -/

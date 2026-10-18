@@ -1,4 +1,4 @@
-// Template cloning and batched insertion in real browsers: what the DOM model cannot see.
+// Template cloning in real browsers: what the DOM model cannot see.
 //
 //   node tests/browser/templates.mjs [chromium|firefox|both]      (run under the host browser lock)
 //
@@ -7,8 +7,7 @@
 //      in the template, so CLONE still gives every handle its node (pre-order);
 //   2. a template's form controls are fresh: a clone's input has neither the template's value nor
 //      its checkedness, and is not dirty (a later value/checked attribute shows), as after a mount;
-//   3. INSERT_MANY inserts in order, before a reference or at the end, moving attached nodes;
-//   4. a CLONE of a template with SVG and MathML elements, empty and adjacent texts.
+//   3. a CLONE of a template with SVG and MathML elements, empty and adjacent texts.
 // LeanUI/Testing/Dom.lean models the same commands for everything else (tests/browser/fuzz.mjs).
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -59,12 +58,12 @@ function cases() {
       [2, 3, S("t")], [10, 1, 3], [1, 4, 0, N("b")], [10, 1, 4], [2, 5, S("u")], [10, 4, 5],
       [20, 1, 5, 1, 2, 3, 4, 5],
       [21, 1, 5, 6, 7, 8, 9, 10], [5, 7, N("innerHTML"), S("<i>z</i>")], [9, 8, S("T")], [9, 10, S("U")],
-      [1, 11, 0, N("p")], [22, 11, 0, 2, 1, 6], [18, S("#app"), 11]]);
+      [1, 11, 0, N("p")], [10, 11, 1], [10, 11, 6], [18, S("#app"), 11]]);
     const n = rt.nodes;
     check("innerHTML: original intact", n[1].outerHTML === "<div><span><i>x</i><i>y</i></span>t<b>u</b></div>", n[1].outerHTML);
     check("innerHTML: clone built", n[6].outerHTML === "<div><span><i>z</i></span>T<b>U</b></div>", n[6].outerHTML);
     check("innerHTML: clone handles", n[7].localName === "span" && n[8].data === "T" && n[9].localName === "b" && n[10].data === "U" && n[10].parentNode === n[9]);
-    check("innerHTML: insertMany appended both", document.getElementById("app").innerHTML === "<p>" + n[1].outerHTML + n[6].outerHTML + "</p>", document.getElementById("app").innerHTML);
+    check("innerHTML: both in the document", document.getElementById("app").innerHTML === "<p>" + n[1].outerHTML + n[6].outerHTML + "</p>", document.getElementById("app").innerHTML);
   }
 
   // 2. form controls in a template are fresh
@@ -90,24 +89,7 @@ function cases() {
     check("controls: properties after the clone", n[6].value === "v2" && n[7].checked === false);
   }
 
-  // 3. INSERT_MANY
-  {
-    const { rt, apply } = fresh();
-    const mk = [];
-    for (let h = 2; h <= 7; h++) mk.push([1, h, 0, N("b")], [3, h, N("value"), S("n" + h)]);
-    apply([...intern, [1, 1, 0, N("div")], ...mk, [1, 8, 0, N("div")],
-      [22, 1, 0, 2, 2, 3],            // 2 3
-      [22, 1, 3, 2, 4, 5],            // 2 4 5 3
-      [10, 8, 6], [10, 8, 7],          // 6 and 7 in another parent
-      [22, 1, 4, 3, 7, 3, 6],         // 2 7 3 6 4 5  (3 moves within the parent, 7 and 6 from 8)
-      [22, 1, 0, 1, 2],               // 7 3 6 4 5 2
-      [18, S("#app"), 1]]);
-    const order = [...rt.nodes[1].children].map((e) => e.getAttribute("value")).join(" ");
-    check("insertMany: order", order === "n7 n3 n6 n4 n5 n2", order);
-    check("insertMany: moved out of the other parent", rt.nodes[8].childNodes.length === 0);
-  }
-
-  // 4. namespaces, empty and adjacent texts
+  // 3. namespaces, empty and adjacent texts
   {
     const { rt, apply } = fresh();
     apply([...intern,

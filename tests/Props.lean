@@ -737,7 +737,6 @@ def measureRows (before : Option (Html String)) (after : Html String) (runs : Na
           match c.op with
           | .insertBefore .. => moves := moves + 1
           | .appendChild p _ => if p == 1 && creates == 0 then moves := moves + 1
-          | .insertMany _ _ hs => moves := moves + hs.size
           | .createElement .. | .createText .. => creates := creates + 1
           | .free _ => frees := frees + 1
           | _ => pure ()
@@ -776,9 +775,9 @@ def scaleSuite (o : Opts) : IO Outcome := do
         | "update every 10th row" => some (n / 10)
         | "select a row" => some 1
         | "remove one row" => some 5
-        -- each new row is a clone of the row template (CLONE, two texts, the listener), and
-        -- the rows go in with one INSERT_MANY
-        | "append 1000 rows" => some 4001
+        -- each new row is a clone of the row template (CLONE, two texts, the listener) and
+        -- is appended
+        | "append 1000 rows" => some 5000
         | _ => none
       if let some e := expect then
         if m.commands != e then fails := fails.push s!"{name} ({n} rows): {m.commands} commands, expected {e}"
@@ -911,7 +910,6 @@ def keyedSuite (o : Opts) : IO Outcome := do
           | .ok cs => for cm in cs do
               match cm.op with
               | .insertBefore p _ _ | .appendChild p _ => if p == ul then inserts := inserts + 1
-              | .insertMany p _ hs => if p == ul then inserts := inserts + hs.size
               | _ => pure ()
           | .error e => fails := fails.push e
         let want := minimalInserts keys ks
@@ -964,8 +962,8 @@ def poolViews (o : Opts) (i : Nat) (steps : Nat) : Array T × Bool :=
   let hydrate := i % 4 == 3
   (((Pool.session steps (flowOnly := hydrate)).run' (Rng.ofCase (o.seed + 61) i)).1, hydrate)
 
-/-- Mutation testing for the clone path: delete single TEMPLATE, CLONE and INSERT_MANY commands
-and the fix-ups after each CLONE from real buffers (at most 40 per buffer); the invariants must
+/-- Mutation testing for the clone path: delete single TEMPLATE and CLONE commands and the
+fix-ups after each CLONE from real buffers (at most 40 per buffer); the invariants must
 notice every deletion. Returns (deletions, caught, kinds). -/
 def poolMutations (o : Opts) : IO (Nat × Nat × Std.HashMap String (Nat × Nat)) := do
   let mut total := 0; let mut killed := 0
@@ -993,7 +991,7 @@ def poolMutations (o : Opts) : IO (Nat × Nat × Std.HashMap String (Nat × Nat)
         let mut afterClone := false
         for h : j in [0:cmds.size] do
           match cmds[j].op with
-          | .template .. | .insertMany .. => picks := picks.push j; afterClone := false
+          | .template .. => picks := picks.push j; afterClone := false
           | .clone .. => picks := picks.push j; afterClone := true
           | .intern .. | .setAttr .. => pure ()
           | .setListener nd ev .. => if afterClone && !twice j nd ev then picks := picks.push j
@@ -1032,11 +1030,11 @@ def templatesSuite (o : Opts) : IO Outcome := do
         IO.println s!"  minimized to {m.edits.size} steps / {m.t0.size} nodes: {f'[0]?.getD "(passes after shrinking?)"}"
         for l in (m.toLean.splitOn "\n") do IO.println s!"    {l}"
   let n (k : String) := counts.getD k 0
-  IO.println s!"  {n "template"} TEMPLATE, {n "clone"} CLONE, {n "insertMany"} INSERT_MANY; {n "createElement" + n "createText"} nodes created one at a time; {n "setText"} setText, {n "setListener"} setListener"
+  IO.println s!"  {n "template"} TEMPLATE, {n "clone"} CLONE; {n "createElement" + n "createText"} nodes created one at a time; {n "setText"} setText, {n "setListener"} setListener"
   let (total, killed, byKind) ← poolMutations o
   let rows := (byKind.toList.toArray.qsort (fun a b => a.2.1 > b.2.1)).toList.map fun (k, (a, z)) => s!"{k} {z}/{a}"
   IO.println s!"  mutations (single deletions, caught/made): {", ".intercalate rows}"
-  let ok := failed == 0 && n "template" > 0 && n "clone" > 10 * n "template" && n "insertMany" > 0 && killed == total && total > 0
+  let ok := failed == 0 && n "template" > 0 && n "clone" > 10 * n "template" && killed == total && total > 0
   return { name := "templates", ok,
            line := s!"{cases} sessions ({cases / 4} hydrated), {steps} patches of views with {nodes / (max steps 1)} nodes on average, compared with the engine without templates; {failed} failing; {killed}/{total} command deletions caught" }
 
@@ -1150,7 +1148,7 @@ def corpusSuite (o : Opts) (dir : String) : IO Outcome := do
     steps := steps + entries.size
     let html := if hyd then Corpus.json (Ssr.roundTrip c.t0).html else "null"
     lines := lines.push s!"\{\"case\":{i},\"chaos\":{i % 5 == 4},\"html\":{html},\"steps\":{Corpus.jsonArr entries}}"
-  -- rows that repeat a few shapes: TEMPLATE, CLONE and INSERT_MANY in the browser
+  -- rows that repeat a few shapes: TEMPLATE and CLONE in the browser
   for i in [0:20 * o.factor] do
     let (views, hyd) := poolViews o i 12
     let cnt ← IO.mkRef 0

@@ -561,17 +561,6 @@ partial def cloneKids (hs : Array UInt32) (sks : Array TplShape) (kids : Array (
   else return (acc, j)
 end
 
-/-- Insert the mounted nodes `ns[lo:hi]`, in order, into `parent` before `ref` (0: append), with
-one command. -/
-def insertRun (parent ref : UInt32) (ns : Array (Node Msg)) (lo hi : Nat) : DiffM Msg Unit :=
-  if hi ≤ lo then pure ()
-  else if hi == lo + 1 then
-    let c := ns[lo]!.handle
-    emit fun b => if ref == 0 then b.appendChild parent c else b.insertBefore parent c ref
-  else
-    let hs := (ns.extract lo hi).map (·.handle)
-    emit (·.insertMany parent ref hs 0 hs.size)
-
 /-! ## Trees -/
 
 /-- True if every node has a key and the keys are pairwise distinct. -/
@@ -730,12 +719,8 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
     for j in p.removed do
       emit (·.remove oldMid[j]!.handle)
       release oldMid[j]!
-    -- right to left, so the anchor (the node after a child) is already final. Consecutive
-    -- children that move (or are new) go before one anchor: each run is inserted with one
-    -- command, once its leftmost child is known: `out[pre + i, pre + runEnd)`.
+    -- right to left, so the anchor (the node after i) is already final
     let mut i := newMid.size
-    let mut runEnd := 0
-    let mut inRun := false
     while i > 0 do
       i := i - 1
       let n ← match p.src[i]! with
@@ -743,16 +728,9 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
         | none => mount newMid[i]! true
       out := out.set! (pre + i) n
       if p.move[i]! then
-        if !inRun then
-          inRun := true
-          runEnd := i + 1
-      else if inRun then
-        inRun := false
-        let nxt := pre + runEnd
-        insertRun parent (if nxt < new.size then out[nxt]!.handle else 0) out (pre + i + 1) nxt
-    if inRun then
-      let nxt := pre + runEnd
-      insertRun parent (if nxt < new.size then out[nxt]!.handle else 0) out pre nxt
+        let nxt := pre + i + 1
+        if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
+        else emit (·.appendChild parent n.handle)
     return (out, true)
   if old.size == new.size then return (← patchSame parent old new)
   -- positional, different lengths
@@ -761,8 +739,9 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
   for i in [0:common] do
     out := out.push (← patch parent old[i]! new[i]!)
   for i in [common:new.size] do
-    out := out.push (← mount new[i]! true)
-  insertRun parent 0 out common new.size
+    let n ← mount new[i]! true
+    emit (·.appendChild parent n.handle)
+    out := out.push n
   for i in [common:old.size] do
     emit (·.remove old[i]!.handle)
     release old[i]!

@@ -109,7 +109,6 @@
           case 19: { this.setContainer(S(i + 1)); this.hydrate(w[i + 3], w[i + 4]); i += 5; break; }
           case 20: i = this.template(w, i); break;
           case 21: i = this.clone(w, i); break;
-          case 22: i = this.insertMany(w, i); break;
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
           case 33: { const cb = w[i + 1]; setTimeout(() => this.callback(cb, true, ""), w[i + 2]); i += 3; break; }
           case 34: { const sub = w[i + 1]; this.timers.set(sub, setInterval(() => this.callback(sub, true, ""), w[i + 2])); i += 3; break; }
@@ -206,14 +205,6 @@
         N[w[k++]] = n;
       }
       return k;
-    }
-    // INSERT_MANY parent ref count h1..hcount: insert the nodes, in order, before ref (0: append),
-    // with one DocumentFragment.
-    insertMany(w, i) {
-      const N = this.nodes, end = i + 4 + w[i + 3], f = document.createDocumentFragment();
-      for (let k = i + 4; k < end; k++) f.appendChild(N[w[k]]);
-      N[w[i + 1]].insertBefore(f, w[i + 2] === 0 ? null : N[w[i + 2]]);
-      return end;
     }
 
     fetch(cb, method, url, body, headerLines) {
