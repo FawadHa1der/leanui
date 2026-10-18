@@ -116,32 +116,65 @@ namespace Buf
   let n := utf16Len str
   { b with ops := pushU32 (pushU32 b.ops b.units) n, strs := appendUtf8 b.strs str, units := b.units + n }
 
+/-- Define a new name: give it the next id and emit `INTERN id nm`. Out of line: it runs once per
+name and session, while `intern` is inlined into every command writer. -/
+@[noinline] def define (b : Buf) (nm : String) : Buf :=
+  let id := b.nextName
+  { b with names := b.names.insert nm id, nextName := id + 1 }.w Op.intern |>.w id |>.s nm
+
 /-- The id of an interned name. On first use this emits `INTERN id str` *before* the caller
-starts its own command, so commands are never interleaved. -/
+starts its own command, so commands are never interleaved. Ids start at 1, so `getD … 0` finds a
+name without allocating an `Option`. -/
 @[inline] def intern (b : Buf) (nm : String) : UInt32 × Buf :=
-  match b.names.get? nm with
-  | some id => (id, b)
-  | none =>
-    let id := b.nextName
-    (id, ({ b with names := b.names.insert nm id, nextName := id + 1 }.w Op.intern |>.w id |>.s nm))
+  let id := b.names.getD nm 0
+  if id != 0 then (id, b)
+  else
+    let b := b.define nm
+    (b.nextName - 1, b)
+
+/-- `k` applied to the buffer and the id of `nm`, interned first if new (`intern` in continuation
+form, which the command writers use). Each `k` below is a call to a writer that takes the id: the
+buffer then stays one object that every write updates in place. (When `k` writes the words itself,
+or goes through `intern`'s pair, the compiler takes the buffer apart where the two branches meet
+and allocates a new one for every command.) -/
+@[inline] def named (b : Buf) (nm : String) (k : Buf → UInt32 → Buf) : Buf :=
+  let id := b.names.getD nm 0
+  if id != 0 then k b id
+  else
+    let b := b.define nm
+    k b (b.nextName - 1)
 
 /-! ### One writer per command (each interns first, then writes the opcode and operands) -/
 
-def createElement (b : Buf) (node : UInt32) (ns : Ns) (tag : String) : Buf :=
-  let (t, b) := b.intern tag; b.w Op.createElement |>.w node |>.w ns.code |>.w t
-def createText (b : Buf) (node : UInt32) (txt : String) : Buf := b.w Op.createText |>.w node |>.s txt
-def setAttr (b : Buf) (node : UInt32) (nm v : String) : Buf :=
-  let (n, b) := b.intern nm; b.w Op.setAttr |>.w node |>.w n |>.s v
-def removeAttr (b : Buf) (node : UInt32) (nm : String) : Buf :=
-  let (n, b) := b.intern nm; b.w Op.removeAttr |>.w node |>.w n
-def setProp (b : Buf) (node : UInt32) (nm : String) (v : PropValue) : Buf :=
-  let (n, b) := b.intern nm
+@[noinline] private def createElementId (b : Buf) (node : UInt32) (ns : Ns) (t : UInt32) : Buf :=
+  b.w Op.createElement |>.w node |>.w ns.code |>.w t
+@[noinline] private def setAttrId (b : Buf) (node n : UInt32) (v : String) : Buf :=
+  b.w Op.setAttr |>.w node |>.w n |>.s v
+@[noinline] private def removeAttrId (b : Buf) (node n : UInt32) : Buf :=
+  b.w Op.removeAttr |>.w node |>.w n
+@[noinline] private def setPropId (b : Buf) (node n : UInt32) (v : PropValue) : Buf :=
   match v with
   | .str x => b.w Op.setPropStr |>.w node |>.w n |>.s x
   | .bool x => b.w Op.setPropBool |>.w node |>.w n |>.w (if x then 1 else 0)
   | .num x => b.w Op.setPropNum |>.w node |>.w n |>.s (toString x)
+@[noinline] private def removePropId (b : Buf) (node n : UInt32) : Buf :=
+  b.w Op.removeProp |>.w node |>.w n
+@[noinline] private def setListenerId (b : Buf) (node e slot : UInt32) (payload : Payload) (flags : UInt32) : Buf :=
+  b.w Op.setListener |>.w node |>.w e |>.w slot |>.w payload.code |>.w flags
+@[noinline] private def removeListenerId (b : Buf) (node e : UInt32) : Buf :=
+  b.w Op.removeListener |>.w node |>.w e
+
+def createElement (b : Buf) (node : UInt32) (ns : Ns) (tag : String) : Buf :=
+  b.named tag fun b t => createElementId b node ns t
+def createText (b : Buf) (node : UInt32) (txt : String) : Buf := b.w Op.createText |>.w node |>.s txt
+def setAttr (b : Buf) (node : UInt32) (nm v : String) : Buf :=
+  b.named nm fun b n => setAttrId b node n v
+def removeAttr (b : Buf) (node : UInt32) (nm : String) : Buf :=
+  b.named nm fun b n => removeAttrId b node n
+def setProp (b : Buf) (node : UInt32) (nm : String) (v : PropValue) : Buf :=
+  b.named nm fun b n => setPropId b node n v
 def removeProp (b : Buf) (node : UInt32) (nm : String) : Buf :=
-  let (n, b) := b.intern nm; b.w Op.removeProp |>.w node |>.w n
+  b.named nm fun b n => removePropId b node n
 def setText (b : Buf) (node : UInt32) (txt : String) : Buf := b.w Op.setText |>.w node |>.s txt
 def appendChild (b : Buf) (parent child : UInt32) : Buf := b.w Op.appendChild |>.w parent |>.w child
 def insertBefore (b : Buf) (parent child ref : UInt32) : Buf := b.w Op.insertBefore |>.w parent |>.w child |>.w ref
@@ -149,9 +182,9 @@ def remove (b : Buf) (node : UInt32) : Buf := b.w Op.remove |>.w node
 def replace (b : Buf) (old new : UInt32) : Buf := b.w Op.replace |>.w old |>.w new
 def free (b : Buf) (node : UInt32) : Buf := b.w Op.free |>.w node
 def setListener (b : Buf) (node : UInt32) (ev : String) (slot : UInt32) (payload : Payload) (flags : UInt32) : Buf :=
-  let (e, b) := b.intern ev; b.w Op.setListener |>.w node |>.w e |>.w slot |>.w payload.code |>.w flags
+  b.named ev fun b e => setListenerId b node e slot payload flags
 def removeListener (b : Buf) (node : UInt32) (ev : String) : Buf :=
-  let (e, b) := b.intern ev; b.w Op.removeListener |>.w node |>.w e
+  b.named ev fun b e => removeListenerId b node e
 def mount (b : Buf) (selector : String) (node : UInt32) : Buf := b.w Op.mount |>.s selector |>.w node
 def hydrate (b : Buf) (selector : String) (first count : UInt32) : Buf := b.w Op.hydrate |>.s selector |>.w first |>.w count
 
