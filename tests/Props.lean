@@ -20,6 +20,7 @@ Suites (all deterministic from `--seed`):
   effects   commands and subscriptions: timers == subscriptions, one-shot and persistent callbacks
   ssr       `Html.render` parsed back: node count, kinds, tags, texts, attributes; hazard lint
   hydrate   SSR → DOM model → `initState` with hydrate = true → invariants → random patches
+  soak      long sessions (1500 edits): every invariant, handles and slots bounded by high-water marks
   lazy      exact lazy-thunk counts in targeted scenarios
   mutation  drop single commands from real buffers: how many do the invariants catch?
   shrink    the shrinker against mutant engines (it must find tiny repros)
@@ -492,6 +493,61 @@ def ssrSuite (o : Opts) : IO Outcome := do
       IO.println s!"    e.g. {cls}: {(Ssr.roundTrip m).html}  →  {(Ssr.roundTrip m).failures[0]?.getD ""}"
   return { name := "ssr", ok := cleanFail == 0,
            line := s!"{n} trees rendered and parsed back; {clean - cleanFail}/{clean} hazard-free exact, {diverged}/{hazardous} hazardous diverge (lint sound: {cleanFail == 0})" }
+
+/-! ## soak: long sessions, bounded allocation -/
+
+structure Soak where
+  steps : Nat := 0
+  /-- High-water marks: nodes alive across one patch (old + new tree), listeners likewise. -/
+  hiNodes : Nat := 0
+  hiSlots : Nat := 0
+  /-- What the allocator handed out by the end. -/
+  next : Nat := 0
+  table : Nat := 0
+  fail : Option String := none
+
+def soakSession (cfg : Config) (seed : UInt64) (i : Nat) (edits : Nat) : IO Soak := do
+  let c := genCase cfg seed i edits
+  let cnt ← IO.mkRef 0
+  let (s0, f) ← Session.mount cnt c.t0
+  if let some e := f[0]? then return { fail := some e }
+  let mut s := s0
+  let mut t := c.t0
+  let mut prev := (c.t0.size, Session.viewListeners s.eff)
+  let mut r : Soak := { hiNodes := prev.1, hiSlots := prev.2 }
+  -- (iterating `for h : k in [0:c.edits.size]` with `c` let-bound to `genCase …` sends the
+  -- kernel into a deep recursion unfolding the bounds proof)
+  let mut k := 0
+  for e in c.edits do
+    t := e.apply t
+    k := k + 1
+    let (s', f) ← s.step t s!"soak {i} edit {k}" (idempotence := k % 10 == 0)
+    s := s'
+    if let some e := f[0]? then return { r with fail := some e }
+    let now := (t.size, Session.viewListeners s.eff)
+    r := { r with steps := r.steps + 1, hiNodes := max r.hiNodes (prev.1 + now.1), hiSlots := max r.hiSlots (prev.2 + now.2) }
+    prev := now
+    let next := s.diff.nextNode.toNat - 1
+    let table := s.diff.slots.size - 1
+    if next > r.hiNodes then return { r with fail := some s!"soak {i} edit {k}: {next} handles allocated, at most {r.hiNodes} were ever needed" }
+    if table > r.hiSlots then return { r with fail := some s!"soak {i} edit {k}: slot table of {table}, at most {r.hiSlots} listeners were ever needed" }
+  return { r with next := s.diff.nextNode.toNat - 1, table := s.diff.slots.size - 1 }
+
+/-- Long sessions (1500 edits each) with every invariant after every step, and the allocator's
+high-water marks: handles and slots are reused, so `nextNode` never exceeds the most nodes ever
+alive across one patch, and the slot table the most listeners. -/
+def soakSuite (o : Opts) : IO Outcome := do
+  let sessions := 2 * o.factor
+  let mut total : Soak := {}
+  let mut fails : Array String := #[]
+  for i in [0:sessions] do
+    let r ← soakSession (if i % 2 == 1 then Config.chaos else {}) (o.seed + 71) i 1500
+    total := { total with steps := total.steps + r.steps, hiNodes := max total.hiNodes r.hiNodes, hiSlots := max total.hiSlots r.hiSlots,
+                          next := max total.next r.next, table := max total.table r.table }
+    if let some e := r.fail then fails := fails.push e
+  for f in fails.toList.take 3 do IO.println s!"  FAIL {oneLine f 200}"
+  return { name := "soak", ok := fails.isEmpty,
+           line := s!"{sessions} sessions × 1500 edits ({total.steps} patches): at most {total.next} handles and {total.table} slots allocated (bounds {total.hiNodes}, {total.hiSlots})" }
 
 /-! ## lazy: exact thunk counts -/
 
@@ -1000,6 +1056,7 @@ def main (args : List String) : IO UInt32 := do
     ("effects", effectsSuite o),
     ("ssr", ssrSuite o),
     ("hydrate", diffSuite o "hydrate" {} (100 * o.factor) 15 (hydrate := true)),
+    ("soak", soakSuite o),
     ("lazy", lazySuite o),
     ("mutation", mutationSuite o),
     ("shrink", shrinkSuite o),
