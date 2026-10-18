@@ -2,7 +2,7 @@ name = "leanui"
 version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
-  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests"]
+  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests", "leanui-keyed-dom"]
 
 # The runtime core every app links.
 [[lean_lib]]
@@ -89,3 +89,8 @@ root = "SiteServer"
 [[lean_exe]]
 name = "leanui-notes-tests"
 root = "tests.Notes"
+
+# Prints the command buffers of random keyed-list edits for tests/browser/keyed-dom.mjs.
+[[lean_exe]]
+name = "leanui-keyed-dom"
+root = "tests.KeyedDom"

@@ -1,7 +1,7 @@
 // Keyed reconciliation against the real DOM (the one link docs/PROOFS.md cannot prove).
 //
-// tests/KeyedDom.lean runs the real LeanUI runtime natively over random edits of a keyed list and
-// prints every command buffer. Here runtime/leanui.js applies those buffers in Chromium and
+// tests/KeyedDom.lean (the leanui-keyed-dom executable, built by `lake build`) runs the real LeanUI
+// runtime natively over random edits of a keyed list and prints every command buffer. Here runtime/leanui.js applies those buffers in Chromium and
 // Firefox, and after every update we check, independently of Lean:
 //   * order: the <li>s are exactly the rows the model shows;
 //   * identity: every row that survives an update is the same DOM node (moved, never recreated);
@@ -16,13 +16,14 @@ const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/p
 const pw = require("playwright");
 
 const root = new URL("../..", import.meta.url).pathname;
-const bin = process.env.HOME + "/.elan/toolchains/leanprover--lean4---v4.34.0/bin";
 const steps = process.argv[2] || "1500";
 const seed = process.argv[3] || "1";
 const engines = (process.argv[4] || "chromium,firefox").split(",");
 
 const t0 = Date.now();
-const data = JSON.parse(execFileSync(bin + "/lake", ["env", bin + "/lean", "--run", "tests/KeyedDom.lean", steps, seed],
+// compiled, not `lean --run`: the command buffer's primitives are inline C (LeanUI/Patch.lean),
+// which the interpreter cannot run
+const data = JSON.parse(execFileSync(root + ".lake/build/bin/leanui-keyed-dom", [steps, seed],
   { cwd: root, maxBuffer: 1 << 30 }).toString());
 const genMs = Date.now() - t0;
 const runtime = readFileSync(root + "runtime/leanui.js", "utf8");
