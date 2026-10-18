@@ -185,9 +185,10 @@ def view (m : Model) : Html Msg :=
   let active := (m.todos.filter (!·.completed)).size
   let completed := m.todos.size - active
   -- keyed lazy rows: a row is rendered and diffed only when its todo or its editing state changes
+  -- (the key is compared too, so the id need not be a dependency)
   let rows := m.todos.filter (visible m.filter) |>.map fun t =>
     let draft := if m.editing == some t.id then some m.draft else none
-    keyed (toString t.id) (lazy (t.id, t.title, t.completed, draft) fun _ => viewTodo t draft);
+    keyedLazy (toString t.id) (t.title, t.completed, draft) fun _ => viewTodo t draft;
   <div>
     <section class="todoapp">
       <header class="header">

@@ -184,7 +184,7 @@ tests and the property suites against an independent reference model.
 ## Method
 
 **The apps.** [`examples/Bench.lean`](../examples/Bench.lean) is the standard benchmark app: the same
-buttons, ids, table structure and class names, keyed rows (`keyed` + `lazy` on id, label and
+buttons, ids, table structure and class names, keyed rows (`keyedLazy`: keyed by id, lazy on label and
 selection), and labels from a 64-bit LCG instead of `Math.random`.
 [`bench/vanilla/index.html`](../bench/vanilla/index.html) is the reference: template cloning,
 direct node references and event delegation, the usual fastest hand-written approach, with the

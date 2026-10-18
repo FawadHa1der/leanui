@@ -24,8 +24,9 @@ built against. It was first written on 2026-10-18 from the research in
   (mount, patch, render, hydration). A `Handler` says which part of the event the browser
   extracts (`Payload`) and decodes that string to `Option Msg`. `Dep` is a closed, exactly
   compared value (`ToDep` builds one from naturals, strings, booleans, options, pairs, lists),
-  never a hash; a lazy node carries its own key (`keyed k h`), so a keyed list of lazy rows
-  reconciles without rendering them. Void elements (`input`, `br`, …) get no children
+  never a hash; a lazy node carries its own key (`keyed k h`, or directly `keyedLazy k deps
+  render`), so a keyed list of lazy rows reconciles without rendering them, and the key is
+  compared like a dependency. Void elements (`input`, `br`, …) get no children
   (`effectiveKids`), whatever the view says, in the DOM, in rendered HTML and in hydration alike.
 - **Templates** (`LeanUI.Syntax`, `docs/SYNTAX.md`): JSX-style syntax, compile-time only
   (`meta import`); it expands to the constructors above, so the generated C equals the
@@ -74,6 +75,8 @@ built against. It was first written on 2026-10-18 from the research in
 
 - `LeanUI.Html` types and smart constructors; `LeanUI.Attr.*` helpers (additions allowed).
   2026-10-18: `Html.lazy` gained a key and its dependencies became an exact `Dep` (was `UInt64`).
+  Added: `keyedLazy`, `keyedMemo` (a keyed lazy node in one constructor) and the constant
+  dependencies `Dep.boolTrue`, `Dep.boolFalse`, `Dep.optNone`.
 - `LeanUI.Patch` opcodes and operand layouts (additions allowed with new numbers; never renumber).
 - `LeanUI.Keyed.Plan` fields `src`, `removed`, `move` and their meaning (the diff relies on them).
 - `LeanUI.Program`, `Host`, `Instance`, `start`, `Cmd`, `Sub` constructors (additions allowed).
