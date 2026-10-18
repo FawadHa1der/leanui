@@ -389,9 +389,10 @@ so a hash collision never clones the wrong thing.
 Policy: element subtrees of `tplMin`..`tplMax` DOM nodes, without `lazy` nodes (mounting would
 force them) and without properties on elements that have children (mount sets properties before
 the children exist, a clone after: `select.value`, `textContent`), never while hydrating, at most
-`tplLimit` templates per session. Candidates are the children `patchKids` mounts and the
-children of elements with at least two (a chain of single children is never hashed, so mounting
-a deep chain stays linear). -/
+`tplLimit` templates per session. Candidates are the children `patchKids` mounts, and the
+children of an element with at least two that have a neighbouring sibling of their kind (the same
+tag, or both lazy): the rows of a list. A `[label, sublist]` pair or a chain of single children is
+never hashed, so mounting a deep tree stays linear. -/
 
 def tplMin : Nat := 4
 def tplMax : Nat := 64
@@ -554,12 +555,12 @@ private def addTemplate (h : UInt64) (sh : TplShape) (size : Nat) : DiffM Msg UI
   (tid, { s with tpl := { shapes := t.shapes.push sh, sizes := t.sizes.push size, ids := t.ids.insert h tid,
                           seen := t.seen.erase h, last := tid } })
 
-/-- The last template, if `v` has its shape (else 0). -/
+/-- With one look at the state: 0 when templates are off (or hydrating), the last template if `v`
+has its shape, else `tplMake`. -/
 private def lastTemplate (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
+  if !s.templates || s.hydrating then (0, s) else
   let t := s.tpl.last
-  (if t != 0 && s.templates && !s.hydrating && s.tpl.shapes[t.toNat - 1]!.matches v then t else 0, s)
-
-@[inline] private def templatesOn : DiffM Msg Bool := modifyGet fun s => (s.templates && !s.hydrating, s)
+  (if t != 0 && s.tpl.shapes[t.toNat - 1]!.matches v then t else tplMake, s)
 
 private def allocLoop (s : DiffState Msg) (hs : Array UInt32) : Nat → Array UInt32 × DiffState Msg
   | 0 => (hs, s)
@@ -662,6 +663,16 @@ partial def cloneKids (hs : Array UInt32) (sks : Array TplShape) (kids : Array (
   else return (acc, j)
 end
 
+/-- Siblings of a kind (template candidates): elements with the same tag, or two lazy nodes. -/
+@[inline] private def alike : Html Msg → Html Msg → Bool
+  | .elem _ t _ _, .elem _ u _ _ => t == u
+  | .lazy .., .lazy .. => true
+  | _, _ => false
+
+/-- Has child `i` a neighbouring sibling of its kind? -/
+private def likeNeighbour (ks : Array (Html Msg)) (i : Nat) : Bool :=
+  (i > 0 && alike ks[i - 1]! ks[i]!) || (i + 1 < ks.size && alike ks[i]! ks[i + 1]!)
+
 /-! ## Trees -/
 
 /-- True if every node has a key and the keys are pairwise distinct. -/
@@ -691,16 +702,16 @@ partial def mount (v : Html Msg) (tpl : Bool := false) : DiffM Msg (Node Msg) :=
 its shape, else `mountShape` if it is templatable, else node by node. -/
 partial def mountCandidate (v : Html Msg) : DiffM Msg (Node Msg) := do
   let last ← lastTemplate v
-  if last != 0 then return ← cloneOf last v
-  if ← templatesOn then
+  if last != 0 && last != tplMake then return ← cloneOf last v
+  if last != 0 then
     let left := shapeFuel (tplMax + 1) v
     if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
   match v with
   | .elem ns tag attrs kids => mountElem ns tag attrs kids true
   | _ => mount v
 
-/-- Mount an element node by node. With `tplKids`, the children of an element with at least two
-are template candidates. -/
+/-- Mount an element node by node. With `tplKids`, its children that have a neighbouring sibling
+of their kind are template candidates. -/
 partial def mountElem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids : Array (Html Msg))
     (tplKids : Bool) : DiffM Msg (Node Msg) := do
   let kids := effectiveKids tag kids
@@ -711,7 +722,7 @@ partial def mountElem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids 
   let tk := tplKids && kids.size ≥ 2
   let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
   for k in kids do
-    let n ← mount k tk
+    let n ← mount k (tk && likeNeighbour kids ks.size)
     if !hydrating then emit (·.appendChild h n.handle)
     ks := ks.push n
   return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
