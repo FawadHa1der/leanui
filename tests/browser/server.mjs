@@ -70,7 +70,8 @@ try {
   // ---- static serving (engine-independent) ----
   {
     const S = `http://127.0.0.1:${STATIC}`;
-    const w = await fetch(S + "/app.wasm");
+    const ID = { "accept-encoding": "identity" };
+    const w = await fetch(S + "/app.wasm", { headers: ID });
     const wasmBytes = new Uint8Array(await w.arrayBuffer());
     check(w.status === 200 && w.headers.get("content-type") === "application/wasm", "wasm MIME", w.headers.get("content-type"));
     check(wasmBytes.length === fs.statSync(wasmPath).size, "wasm size");
@@ -79,10 +80,10 @@ try {
     check(js.headers.get("content-type") === "text/javascript; charset=utf-8", "js MIME", js.headers.get("content-type"));
     const idx = await fetch(S + "/"); const idxText = await idx.text();
     check(idx.headers.get("content-type") === "text/html; charset=utf-8" && idxText.includes("leanui.js"), "index.html for /");
-    const head = await fetch(S + "/app.wasm", { method: "HEAD" });
+    const head = await fetch(S + "/app.wasm", { method: "HEAD", headers: ID });
     check(head.status === 200 && Number(head.headers.get("content-length")) === wasmBytes.length && (await head.arrayBuffer()).byteLength === 0, "HEAD");
     const etag = w.headers.get("etag");
-    const nm = await fetch(S + "/app.wasm", { headers: { "if-none-match": etag } });
+    const nm = await fetch(S + "/app.wasm", { headers: { ...ID, "if-none-match": etag } });
     check(nm.status === 304, "ETag revalidation", nm.status);
     const trav = await rawGet(STATIC, "/%2e%2e/%2e%2e/lakefile.toml");
     check(/^HTTP\/1\.1 40[04]/.test(trav) && !trav.includes("defaultTargets"), "traversal refused", trav.slice(0, 40));
@@ -90,9 +91,19 @@ try {
     check(/^HTTP\/1\.1 40[04]/.test(trav2) && !trav2.includes("defaultTargets"), "encoded traversal refused", trav2.slice(0, 40));
     const missing = await fetch(S + "/nope.js"); await missing.arrayBuffer();
     check(missing.status === 404, "404");
+    // precompressed siblings (leanui build --compress): sent when accepted, decoded to the same bytes
+    if (fs.existsSync(wasmPath + ".br")) {
+      for (const coding of ["br", "gzip"]) {
+        const c = await fetch(S + "/app.wasm", { headers: { "accept-encoding": coding } });
+        const bytes = new Uint8Array(await c.arrayBuffer());
+        check(c.headers.get("content-encoding") === coding && c.headers.get("content-type") === "application/wasm" &&
+          bytes.length === wasmBytes.length && bytes.every((b, i) => b === wasmBytes[i]), "precompressed " + coding, c.headers.get("content-encoding"));
+        report.static[coding] = fs.statSync(wasmPath + (coding === "br" ? ".br" : ".gz")).size;
+      }
+    }
     const demoWasm = await fetch(`http://127.0.0.1:${DEMO}/assets/counter/app.wasm`); await demoWasm.arrayBuffer();
     check(demoWasm.headers.get("content-type") === "application/wasm" && !demoWasm.headers.get("cross-origin-opener-policy"), "demo assets: wasm MIME, no COOP by default");
-    report.static = { wasmBytes: wasmBytes.length, etag, traversal: trav.split("\r\n")[0] };
+    Object.assign(report.static, { wasmBytes: wasmBytes.length, etag, traversal: trav.split("\r\n")[0] });
   }
 
   // ---- load: many server-driven sessions at once over HTTP keep-alive (engine-independent) ----
@@ -225,6 +236,13 @@ try {
       await page.click("#reset");
       check(await value(page) === "0", engine + ": wasm reset");
       check(requests.filter((u) => u.endsWith("/app.wasm")).length === 1 && requests.filter((u) => u.endsWith("/app.js")).length === 1, engine + ": each asset fetched once", requests);
+      // what the wasm cost on the wire (a precompressed sibling when the build has one)
+      R.wasmTransfer = await page.evaluate(() => {
+        const e = performance.getEntriesByType("resource").find((e) => e.name.endsWith("/app.wasm"));
+        return e ? { encoded: e.encodedBodySize, decoded: e.decodedBodySize } : null;
+      });
+      if (fs.existsSync(wasmPath + ".gz"))
+        check(R.wasmTransfer && R.wasmTransfer.encoded > 0 && R.wasmTransfer.encoded < R.wasmTransfer.decoded / 3, engine + ": the wasm travels compressed", R.wasmTransfer);
       const after = await stats();
       check(after.reserved === before.reserved && after.spawned === before.spawned, engine + ": a wasm page costs no session", { before, after });
       await ctx.close();

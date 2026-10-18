@@ -5,7 +5,7 @@ public import LeanUI.Server.Run
 # The `leanui` command
 
     leanui serve <dir> [--port N] [--host H] [--coop] [--cache MODE] [--spa] [--no-listing] [--quiet]
-    leanui build <EntryModule> [name] [--debug]
+    leanui build <EntryModule> [name] [--debug] [--compress]
     leanui new <Name> [--dir DIR]
     leanui help | version
 
@@ -33,10 +33,12 @@ usage:
       --spa            serve index.html for unknown extension-less paths (client-side routes)
       --no-listing     no directory listings
       --quiet          do not log requests
-  leanui build <EntryModule> [name] [--debug]
+  leanui build <EntryModule> [name] [--debug] [--compress]
                        compile an app entry module (one `leanui_app`) to dist/<name>/ with
                        tools/build-app.sh (Docker image with emsdk; wasm64 archives in
-                       $LEANUI_TOOLCHAIN, found automatically from a git worktree)
+                       $LEANUI_TOOLCHAIN, found automatically from a git worktree);
+                       --compress also writes .br/.gz siblings, which leanui serve and
+                       LeanUI.Server.Static send to clients that accept them
   leanui new <Name> [--dir DIR]
                        scaffold DIR/<Name>.lean (the program) and DIR/<Name>App.lean (its
                        wasm entry point); DIR defaults to examples/ when it exists
@@ -129,7 +131,22 @@ def findToolchain (root : System.FilePath) : IO (Option System.FilePath) := do
 /-- The output name `tools/build-app.sh` derives from a module name. -/
 def defaultName (mod : String) : String := (mod.map fun c => if c == '.' then '-' else c).toLower
 
-def buildCmd (mod : String) (name : Option String) (debug : Bool) : IO UInt32 := do
+/-- The files of a build worth precompressing. -/
+def compressible : List String := ["app.wasm", "app.js", "leanui.js"]
+
+/-- Write `f.br` and `f.gz` next to each built file (with Node's zlib, which the build already
+needs), so `Static` can send them to clients that accept them. -/
+def compressBuild (dir : System.FilePath) : IO UInt32 := do
+  let script := "const fs=require('fs'),z=require('zlib');for(const f of process.argv.slice(1)){if(!fs.existsSync(f))continue;" ++
+    "const b=fs.readFileSync(f);const br=z.brotliCompressSync(b,{params:{[z.constants.BROTLI_PARAM_QUALITY]:11}});" ++
+    "const gz=z.gzipSync(b,{level:9});fs.writeFileSync(f+'.br',br);fs.writeFileSync(f+'.gz',gz);" ++
+    "console.log('[leanui] '+f.split('/').pop().padEnd(10)+String(b.length).padStart(9)+' -> br '+String(br.length).padStart(8)+', gz '+String(gz.length).padStart(8));}"
+  let out ← IO.Process.output { cmd := "node", args := #["-e", script] ++ (compressible.toArray.map fun (f : String) => (dir / f).toString) }
+  IO.print out.stdout
+  if out.exitCode != 0 then IO.eprint out.stderr
+  return out.exitCode
+
+def buildCmd (mod : String) (name : Option String) (debug : Bool) (compress : Bool := false) : IO UInt32 := do
   let cwd ← IO.currentDir
   let some root ← findRoot cwd
     | IO.eprintln "leanui build: not inside a LeanUI checkout (no tools/build-app.sh above this directory)"; return 1
@@ -147,10 +164,16 @@ def buildCmd (mod : String) (name : Option String) (debug : Bool) : IO UInt32 :=
     cwd := root, env := #[("LEANUI_TOOLCHAIN", some tc.toString)] }
   let code ← child.wait
   let dt := (← IO.monoMsNow) - t0
-  if code == 0 then
-    IO.println s!"[leanui] built dist/{name}/ in {dt / 1000}.{(dt % 1000) / 100}s; try: leanui serve {root / "dist" / name}"
-  else IO.eprintln s!"[leanui] build failed (exit {code})"
-  return code
+  if code != 0 then
+    IO.eprintln s!"[leanui] build failed (exit {code})"; return code
+  IO.println s!"[leanui] built dist/{name}/ in {dt / 1000}.{(dt % 1000) / 100}s; try: leanui serve {root / "dist" / name}"
+  if compress then return ← compressBuild (root / "dist" / name)
+  -- stale siblings would be served instead of the new build
+  for f in compressible do
+    for ext in [".br", ".gz"] do
+      let p : System.FilePath := (root / "dist" / name / f).toString ++ ext
+      if ← p.pathExists then IO.FS.removeFile p
+  return 0
 
 /-! ## new -/
 
@@ -251,10 +274,11 @@ def main (args : List String) : IO UInt32 := do
     | .error e => IO.eprintln s!"leanui {e}"; return 2
   | "build" :: rest =>
     let debug := rest.contains "--debug"
-    match rest.filter (· != "--debug") with
-    | [m] => buildCmd m none debug
-    | [m, n] => buildCmd m (some n) debug
-    | _ => IO.eprintln "usage: leanui build <EntryModule> [name] [--debug]"; return 2
+    let compress := rest.contains "--compress"
+    match rest.filter (fun a => a != "--debug" && a != "--compress") with
+    | [m] => buildCmd m none debug compress
+    | [m, n] => buildCmd m (some n) debug compress
+    | _ => IO.eprintln "usage: leanui build <EntryModule> [name] [--debug] [--compress]"; return 2
   | "new" :: rest =>
     match rest with
     | [n] => newCmd n none
