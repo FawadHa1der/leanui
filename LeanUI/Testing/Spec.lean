@@ -184,7 +184,7 @@ partial def nodeMatches (d : Dom) : Node String → UInt32 → Array String
     else if !dn.isText then #[s!"node: engine text {h} is a DOM element"]
     else if dn.text != s then #[s!"node: engine text {h} is {s.quote}, DOM has {dn.text.quote}"]
     else #[]
-  | .elem h' _ tag _ _ ls kids, h =>
+  | .elem h' _ tag _ _ ls kids _, h =>
     let dn := d.get h
     if h' != h then #[s!"node: engine element handle {h'} where the DOM has {h}"]
     else if dn.isText then #[s!"node: engine element {h} is a DOM text"]

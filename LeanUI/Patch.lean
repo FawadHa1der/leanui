@@ -121,6 +121,14 @@ def removeListener (b : Buf) (node : UInt32) (ev : String) : Buf :=
 def mount (b : Buf) (selector : String) (node : UInt32) : Buf := b.w Op.mount |>.s selector |>.w node
 def hydrate (b : Buf) (selector : String) (first count : UInt32) : Buf := b.w Op.hydrate |>.s selector |>.w first |>.w count
 
+/-- `hydrate` placed before everything already written: hydration mounts first and only then
+knows how many nodes it claimed. Its selector goes at the end of the string area (offsets are
+absolute, so nothing else moves). -/
+def prependHydrate (b : Buf) (selector : String) (first count : UInt32) : Buf :=
+  let n := utf16Len selector
+  let head := pushU32 (pushU32 (pushU32 (pushU32 (pushU32 (ByteArray.emptyWithCapacity 20) Op.hydrate) b.units) n) first) count
+  { b with ops := head ++ b.ops, strs := b.strs ++ selector.toUTF8, units := b.units + n }
+
 /-- True if nothing was written since the last `reset`. -/
 @[inline] def isEmpty (b : Buf) : Bool := b.ops.size == 0
 

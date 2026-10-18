@@ -246,7 +246,7 @@ partial def expectedClaims (t : T) (acc : Array Claim := #[]) (withProps := true
       if as.any (·.1 == n) then none else match v with
         | .str s => some (n, s) | .bool true => some (n, "") | .bool false => none | .num q => some (n, toString (Float.ofInt q / 4))
     let acc := acc.push (.elem ns.code tag (as ++ ps))
-    kids.foldl (fun acc k => expectedClaims k acc withProps) acc
+    (effectiveKids tag kids).foldl (fun acc k => expectedClaims k acc withProps) acc
 
 def sortAttrs (as : Array (String × String)) : Array (String × String) := as.qsort (fun a b => a.1 < b.1)
 

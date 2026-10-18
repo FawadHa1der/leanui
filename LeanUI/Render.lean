@@ -13,10 +13,6 @@ merge them) and an empty text node (`<!--t-->`, or it would not exist).
 public section
 namespace LeanUI
 
-/-- Elements that have no closing tag and no children. -/
-def voidElements : List String :=
-  ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
-
 /-- Escape text or an attribute value. `\r` is written as a character reference: the HTML parser
 turns every literal `\r` (and `\r\n`) into `\n` before anything else. -/
 def escapeHtml (attr : Bool) (acc : String) (s : String) : String :=

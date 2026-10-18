@@ -945,15 +945,18 @@ def profileSuite (_ : Opts) : IO Outcome := do
 
 def knownSuite (_ : Opts) : IO Outcome := do
   let mut lines : Array String := #[]
-  -- K1: lazy rows in a keyed list are diffed positionally (Html.key? cannot see through lazy)
+  -- K1 (fixed): keyed lazy rows. The key goes on the lazy node itself (`keyed k (lazy …)`), so a
+  -- list of lazy rows stays keyed without rendering them; a key inside the body cannot be seen.
   let cnt ← IO.mkRef 0
   let ids := Array.range 100
-  let (s, _) ← Session.mount cnt (lazyRows ids)
-  let c0 := s.commands; let r0 ← cnt.get
-  let (s, f) ← s.step (lazyRows (ids.extract 1 100)) "drop the first lazy row"
-  let k1 := (s.commands - c0, (← cnt.get) - r0)
-  lines := lines.push s!"{if k1.1 > 5 then "XFAIL" else "XPASS"} K1 keyed rows wrapped in `lazy` lose keyed diffing: removing the first of 100 rows sends {k1.1} commands and forces {k1.2} thunks (unwrapped: 5 commands, 0 thunks). Html.key? returns none for `.lazy`, so patchKids falls back to positional. Repro: el \"ul\" #[] (ids.map fun i => lazy i fun _ => el \"li\" #[.key (toString i)] #[...]); drop ids[0]."
-  if !f.isEmpty then lines := lines.push s!"  (unexpected failure: {f[0]!})"
+  let rows (ids : Array Nat) : Html String :=
+    el "ul" #[] (ids.map fun i => keyed s!"r{i}" (lazy i fun u => tick cnt u fun _ => rowH i s!"row {i}" false))
+  let (n0, st0) ← IO.lazyPure fun _ => (mount (rows ids)).run ({} : DiffState String)
+  let r0 ← cnt.get
+  let (_, st1) ← IO.lazyPure fun _ => (patch 0 n0 (rows (ids.extract 1 100))).run { st0 with buf := st0.buf.reset }
+  let k1cmds := match Wire.decode st1.buf.ops st1.buf.strs with | .ok cs => cs.size | .error _ => 9999
+  let k1forced := (← cnt.get) - r0
+  lines := lines.push s!"{if k1cmds > 5 || k1forced > 0 then "XFAIL" else "XPASS"} K1 keyed lazy rows (`keyed k (lazy deps fun _ => row)`): removing the first of 100 rows sends {k1cmds} commands and forces {k1forced} thunks (keyed: at most 5 commands, 0 thunks)."
   -- K2: hydration forces every lazy thunk twice
   let cnt2 ← IO.mkRef 0
   let (_, _, extra) ← Session.hydrate cnt2 (lazyRows (Array.range 10))
@@ -961,7 +964,7 @@ def knownSuite (_ : Opts) : IO Outcome := do
   -- K3: children of void elements: mount creates them, Render drops them, hydration miscounts
   let v : T := .elem .html "div" #[] #[.elem .html "input" #[] #[.text "x"]]
   let rep := Ssr.roundTrip v
-  lines := lines.push s!"{if !rep.failures.isEmpty then "XFAIL" else "XPASS"} K3 a void element with children (el \"input\" #[] #[text \"x\"]) mounts the child on the client, Render drops it ({rep.html}), so hydration finds {(rep.claims.size)} of {v.size} nodes. Suggest: reject or warn in a debug build."
+  lines := lines.push s!"{if !rep.failures.isEmpty then "XFAIL" else "XPASS"} K3 a void element with children (el \"input\" #[] #[text \"x\"]): mount, patch and Render all drop the children of void elements ({rep.html}), so hydration claims {rep.claims.size} nodes{if rep.failures.isEmpty then "" else s!" ({rep.failures[0]!})"}."
   -- K4: the test DOM model is quadratic in a parent's child count (appendChild/insertBefore copy)
   let mk (n : Nat) : IO Float := do
     let v := table (Array.range n)

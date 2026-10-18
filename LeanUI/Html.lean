@@ -138,6 +138,15 @@ inductive Html (Msg : Type) where
 
 instance : Inhabited (Html Msg) := ⟨.text ""⟩
 
+/-- Elements that have no closing tag and no children (`LeanUI.Render` writes none). -/
+def voidElements : List String :=
+  ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
+
+/-- The children an element really gets: none for a void element, whatever the view says, so the
+browser DOM, server rendering and hydration agree. -/
+@[inline] def effectiveKids (tag : String) (kids : Array α) : Array α :=
+  if kids.isEmpty then kids else if voidElements.contains tag then #[] else kids
+
 namespace Html
 
 /-- The reconciliation key of a node, if it has one. -/

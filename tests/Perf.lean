@@ -68,9 +68,9 @@ def parts : IO Unit := do
   let m := st.model
   let v := Bench.view m
   let rowsOld : Array (Node Bench.Msg) := match st.tree with
-    | .elem _ _ _ _ _ _ kids => match kids[1]! with
-      | .elem _ _ _ _ _ _ k2 => match k2[0]! with
-        | .elem _ _ _ _ _ _ k3 => k3 | _ => #[]
+    | .elem _ _ _ _ _ _ kids _ => match kids[1]! with
+      | .elem _ _ _ _ _ _ k2 _ => match k2[0]! with
+        | .elem _ _ _ _ _ _ k3 _ => k3 | _ => #[]
       | _ => #[]
     | _ => #[]
   let rowsNew : Array (Html Bench.Msg) := match v with

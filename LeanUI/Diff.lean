@@ -17,11 +17,12 @@ event on a node carrying slot `s` calls `handlerOf s`.
 public section
 namespace LeanUI
 
-/-- A mounted node: the view it came from, its handle, its key (cached), and its listener slots. -/
+/-- A mounted node: the view it came from, its handle, its key and its size (both cached), and its
+listener slots. `size` counts the DOM nodes (elements and texts) of the subtree. -/
 inductive Node (Msg : Type) where
   | text (h : UInt32) (s : String)
   | elem (h : UInt32) (ns : Ns) (tag : String) (key : Option String) (attrs : Array (Attr Msg))
-      (listeners : Array (String × UInt32)) (kids : Array (Node Msg))
+      (listeners : Array (String × UInt32)) (kids : Array (Node Msg)) (size : Nat)
   | lazy (key : Option String) (deps : Dep) (inner : Node Msg)
 
 instance : Inhabited (Node Msg) := ⟨.text 0 ""⟩
@@ -35,11 +36,14 @@ def key? : Node Msg → Option String
   | .elem _ _ _ k .. => k
   | .lazy k _ _ => k
   | _ => none
-/-- Number of DOM nodes (elements and texts) in the subtree. -/
-partial def size : Node Msg → Nat
+/-- Number of DOM nodes (elements and texts) in the subtree (cached in elements). -/
+def size : Node Msg → Nat
   | .text .. => 1
-  | .elem _ _ _ _ _ _ kids => kids.foldl (fun n k => n + k.size) 1
+  | .elem _ _ _ _ _ _ _ s => s
   | .lazy _ _ n => n.size
+
+/-- The size of an element with these children. -/
+@[inline] def sizeOf (kids : Array (Node Msg)) : Nat := kids.foldl (fun n k => n + k.size) 1
 end Node
 
 structure DiffState (Msg : Type) where
@@ -77,7 +81,7 @@ def freeSlot (i : UInt32) : DiffM Msg Unit :=
 /-- Forget a whole mounted subtree: free its handles and slots. The caller detaches its root. -/
 partial def release : Node Msg → DiffM Msg Unit
   | .text h _ => do emit (·.free h); modify fun s => { s with freeNodes := s.freeNodes.push h }
-  | .elem h _ _ _ _ ls kids => do
+  | .elem h _ _ _ _ ls kids _ => do
     for k in kids do release k
     for (_, sl) in ls do freeSlot sl
     emit (·.free h); modify fun s => { s with freeNodes := s.freeNodes.push h }
@@ -262,7 +266,8 @@ partial def sameF (f : Nat) (n : Node Msg) (v : Html Msg) : Nat :=
   match n, v with
   | .text _ s, .text t => if s == t then f - 1 else 0
   | .lazy k d _, .lazy k' e _ => if k == k' && d == e then f - 1 else 0
-  | .elem _ ns tag _ attrs _ kids, .elem ns' tag' attrs' kids' =>
+  | .elem _ ns tag _ attrs _ kids _, .elem ns' tag' attrs' kids' =>
+    let kids' := effectiveKids tag kids'
     if ns == ns' && tag == tag' && kids.size == kids'.size && attrs.size == attrs'.size &&
         attrsSame attrs attrs' then
       kidsSameF (f - 1) kids kids' 0
@@ -279,7 +284,8 @@ mutual
 /-- Re-point the listener slots of an unchanged subtree (`sameF` succeeded) at the new view's
 handlers, in the order `patchAttrs` would. Lazy subtrees with equal dependencies keep theirs. -/
 partial def rebind (sl : Array (Option (Handler Msg))) : Node Msg → Html Msg → Array (Option (Handler Msg))
-  | .elem _ _ _ _ _ ls kids, .elem _ _ attrs' kids' =>
+  | .elem _ _ tag _ _ ls kids _, .elem _ _ attrs' kids' =>
+    let kids' := effectiveKids tag kids'
     let sl := attrs'.foldl (init := sl) fun sl a => match a with
       | .on ev hn => let s := slotOf ls ev; if s == 0 then sl else sl.set! s.toNat (some hn)
       | _ => sl
@@ -291,9 +297,15 @@ partial def rebindKids (sl : Array (Option (Handler Msg))) (ks : Array (Node Msg
   if i < ks.size && i < vs.size then rebindKids (rebind sl ks[i]! vs[i]!) ks vs (i + 1) else sl
 end
 
+/-- Is showing `v` where `n` is mounted command-free? Only subtrees within the budget are checked
+(their size is cached), so a check never runs out of fuel and each node is examined by the checks
+of at most `sameBudget` ancestors: re-checking stays linear however deep the tree. -/
+@[inline] def unchanged (n : Node Msg) (v : Html Msg) : Bool :=
+  n.size < sameBudget && sameF sameBudget n v != 0
+
 /-- First index `j ≥ i` whose child is not unchanged (or `old.size`). -/
 private partial def runSame (old : Array (Node Msg)) (new : Array (Html Msg)) (i : Nat) : Nat :=
-  if i < old.size && i < new.size && sameF sameBudget old[i]! new[i]! != 0 then runSame old new (i + 1) else i
+  if i < old.size && i < new.size && unchanged old[i]! new[i]! then runSame old new (i + 1) else i
 
 private partial def rebindRange (sl : Array (Option (Handler Msg))) (old : Array (Node Msg))
     (new : Array (Html Msg)) (i j : Nat) : Array (Option (Handler Msg)) :=
@@ -340,6 +352,7 @@ partial def mount (v : Html Msg) : DiffM Msg (Node Msg) := do
     if !(← get).hydrating then emit (·.createText h s)
     return .text h s
   | .elem ns tag attrs kids =>
+    let kids := effectiveKids tag kids
     let h ← allocNode
     let hydrating := (← get).hydrating
     if !hydrating then emit (·.createElement h ns tag)
@@ -349,7 +362,7 @@ partial def mount (v : Html Msg) : DiffM Msg (Node Msg) := do
       let n ← mount k
       if !hydrating then emit (·.appendChild h n.handle)
       ks := ks.push n
-    return .elem h ns tag (attrsKey attrs) attrs ls ks
+    return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
   | .lazy k deps r => return .lazy k deps (← mount (r ()))
 
 /-- Update `old` (a child of `parent`) to show `new`; returns the updated mounted node. -/
@@ -359,7 +372,7 @@ partial def patch (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Ms
 /-- `patch`, also reporting whether the mounted node changed. An unchanged subtree returns the
 *same* mounted node, so a no-op re-render costs comparisons only. -/
 partial def patchC (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg × Bool) := do
-  if sameF sameBudget old new != 0 then
+  if unchanged old new then
     modify fun s => { s with slots := rebind s.slots old new }
     return (old, false)
   patchNode parent old new
@@ -377,12 +390,12 @@ partial def patchNode (parent : UInt32) (old : Node Msg) (new : Html Msg) : Diff
     if s == t then return (old, false)
     emit (·.setText h t)
     return (.text h t, true)
-  | .elem h ns tag k attrs ls kids, .elem ns' tag' attrs' kids' =>
+  | .elem h ns tag k attrs ls kids sz, .elem ns' tag' attrs' kids' =>
     if ns == ns' && tag == tag' && k == attrsKey attrs' then
       let (ls', ac) ← patchAttrs h attrs ls attrs'
-      let (ks, kc) ← patchKidsC h kids kids'
+      let (ks, kc) ← patchKidsC h kids (effectiveKids tag kids')
       if !ac && !kc then return (old, false)
-      return (.elem h ns tag k (if ac then attrs' else attrs) ls' ks, true)
+      return (.elem h ns tag k (if ac then attrs' else attrs) ls' ks (if kc then Node.sizeOf ks else sz), true)
     else return (← replaceNode old new, true)
   | _, _ => return (← replaceNode old new, true)
 

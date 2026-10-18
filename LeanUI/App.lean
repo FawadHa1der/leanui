@@ -151,10 +151,10 @@ def stepMsgs (p : Program Model Msg) (msgs : Array Msg) : RunM Model Msg Unit :=
   modify fun s => { s with tree, diff }
   syncSubs (p.subscriptions model)
 
-/-- Count the DOM nodes a view produces (what hydration claims). -/
+/-- Count the DOM nodes a view produces (what hydration claims; void elements get no children). -/
 partial def countNodes : Html Msg → Nat
   | .text _ => 1
-  | .elem _ _ _ kids => kids.foldl (fun n k => n + countNodes k) 1
+  | .elem _ tag _ kids => (effectiveKids tag kids).foldl (fun n k => n + countNodes k) 1
   | .lazy _ _ r => countNodes (r ())
 
 /-- The first state: mount (or hydrate) the initial view into `selector` and run `init`'s
@@ -164,7 +164,9 @@ def initState (p : Program Model Msg) (flags selector : String) (hydrate : Bool)
   let v := p.view model
   let (tree, diff) :=
     if hydrate then
-      (mount v).run { hydrating := true, buf := ({} : Buf).hydrate selector 1 (countNodes v).toUInt32 }
+      -- claim first, then say how many nodes were claimed: the view is forced once
+      let (n, d) := (mount v).run { hydrating := true }
+      (n, { d with buf := d.buf.prependHydrate selector 1 n.size.toUInt32 })
     else
       (do let n ← mount v; emit (·.mount selector n.handle); pure n).run {}
   let st : State Model Msg := { model, tree, diff := { diff with hydrating := false } }

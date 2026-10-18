@@ -67,15 +67,18 @@ namespace Dom
 
 def get (d : Dom) (h : UInt32) : DNode := d.nodes.getD h default
 def put (d : Dom) (h : UInt32) (n : DNode) : Dom := { d with nodes := d.nodes.insert h n }
+/-- Update a node in place (reading it with `get` and writing it back would share its child
+array with the map, so every append would copy it: quadratic on a wide parent). -/
+@[inline] def upd (d : Dom) (h : UInt32) (f : DNode → DNode) : Dom :=
+  if d.nodes.contains h then { d with nodes := d.nodes.modify h f } else d.put h (f default)
 def err (d : Dom) (m : String) : Dom := { d with errors := d.errors.push m }
 
 def detach (d : Dom) (c : UInt32) : Dom :=
   match (d.get c).parent with
   | none => d
   | some p =>
-    let pn := d.get p
-    let d := d.put p { pn with kids := pn.kids.filter (· != c) }
-    d.put c { d.get c with parent := none }
+    let d := d.upd p fun pn => { pn with kids := pn.kids.filter (· != c) }
+    d.upd c fun n => { n with parent := none }
 
 /-- Is `h` in the document, i.e. does its parent chain end at a mounted root? -/
 partial def attached (d : Dom) (h : UInt32) (fuel : Nat := 100000) : Bool :=
@@ -120,16 +123,15 @@ def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
     else if op == Op.appendChild then
       let c := word (pc + 8)
       d := d.detach c
-      d := d.put a { d.get a with kids := (d.get a).kids.push c }
-      d := d.put c { d.get c with parent := some a }; pc := pc + 12
+      d := d.upd a fun n => { n with kids := n.kids.push c }
+      d := d.upd c fun n => { n with parent := some a }; pc := pc + 12
     else if op == Op.insertBefore then
       let c := word (pc + 8); let r := word (pc + 12)
       d := d.detach c
-      let pn := d.get a
-      match pn.kids.idxOf? r with
-      | some i => d := d.put a { pn with kids := pn.kids.insertIdxIfInBounds i c }
-      | none => d := (d.err s!"insertBefore: {r} is not a child of {a}").put a { pn with kids := pn.kids.push c }
-      d := d.put c { d.get c with parent := some a }; pc := pc + 16
+      match (d.get a).kids.idxOf? r with
+      | some i => d := d.upd a fun pn => { pn with kids := pn.kids.insertIdxIfInBounds i c }
+      | none => d := (d.err s!"insertBefore: {r} is not a child of {a}").upd a fun pn => { pn with kids := pn.kids.push c }
+      d := d.upd c fun n => { n with parent := some a }; pc := pc + 16
     else if op == Op.remove then
       d := d.detach a; pc := pc + 8
     else if op == Op.replace then
