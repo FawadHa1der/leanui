@@ -1,7 +1,8 @@
 module
 public import LeanUI
+meta import LeanUI.Syntax
 public section
-open LeanUI Attr
+open LeanUI
 
 namespace Counter
 
@@ -14,16 +15,18 @@ def update : Msg → Int → Int × Cmd Msg
   | .reset, _ => (0, .log "reset")
 
 def view (n : Int) : Html Msg :=
-  el "main" #[cls "counter"] #[
-    el "h1" #[] #[text "LeanUI counter"],
-    el "p" #[] #[
-      el "button" #[id "dec", onClick .dec] #[text "−"],
-      el "output" #[id "value", cls (if n < 0 then "neg" else "pos")] #[text (toString n)],
-      el "button" #[id "inc", onClick .inc] #[text "+"]],
-    el "p" #[] #[
-      el "input" #[id "box", Attr.attr "type" "number", value (toString n),
-        onInput fun s => .set (s.toInt?.getD n)] #[],
-      el "button" #[id "reset", onClick .reset] #[text "reset"]]]
+  <main class="counter">
+    <h1>LeanUI counter</h1>
+    <p>
+      <button id="dec" onClick={.dec}>−</button>
+      <output id="value" class={if n < 0 then "neg" else "pos"}>{n}</output>
+      <button id="inc" onClick={.inc}>+</button>
+    </p>
+    <p>
+      <input id="box" type="number" value={toString n} onInput={fun s => .set (s.toInt?.getD n)} />
+      <button id="reset" onClick={.reset}>reset</button>
+    </p>
+  </main>
 
 def program : Program Int Msg := { init := fun _ => (0, .none), update, view }
 
