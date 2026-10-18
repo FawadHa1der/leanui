@@ -10,7 +10,7 @@ open LeanUI LeanUI.Testing
 /-!
 # leanui-props: randomized property tests and fuzzing for the LeanUI engine
 
-    leanui-props [--quick | --long] [--seed N] [--only suite,suite] [--corpus DIR] [--verbose]
+    leanui-props [--quick | --long] [--seed N] [--only suite,suite] [--corpus DIR] [--verbose] [--depth N]
 
 Suites (all deterministic from `--seed`):
   gen       generator coverage (depth, fan-out, keys, namespaces, lazies, listeners)
@@ -27,7 +27,8 @@ Suites (all deterministic from `--seed`):
   keyed     long keyed lists (up to 300 rows) under random reorders: exactly minimal DOM inserts
   known     open issues asserted as they are (XFAIL) and reported when they change (XPASS)
   profile   what a no-change re-render of 10k rows costs, by row shape
-  depth     views nested 1k..100k levels deep (--depth N for one depth, e.g. under `ulimit -s`)
+  depth     views nested 1k..100k levels deep, natively (--depth N for one depth; the wasm limit is
+            measured by tests/browser/depth.mjs on LeanUI/Testing/DepthProbe.lean)
   scale     mount/patch timing for 1k..32k keyed rows, command counts, growth exponents
   corpus    (with --corpus DIR) write sessions for tests/browser/fuzz.mjs
 -/
@@ -225,9 +226,8 @@ def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) (wrap hydrat
     let v0 := appView "" (if wrap then trees[0]!.toHtml'.map ("w:" ++ ·) else trees[0]!.toHtml')
     let some nodes := (Ssr.parse v0.render).toOption | throw (IO.userError "app: the server rendering does not parse")
     let cs := Ssr.claims 0 "" none #[] nodes
-    let (d0, ghosts) := Ssr.hydrateDom "#app" cs #[]
+    let (d0, _) := Ssr.hydrateDom "#app" cs #[]
     if cs.size != countNodes v0 then throw (IO.userError s!"app: {cs.size} parsed nodes, the view has {countNodes v0}")
-    let _ := ghosts
     let dom ← IO.mkRef d0
     let inst ← start p { flush := fun ops strs => dom.modify (·.apply ops strs) } "" "#app" true
     let d ← dom.get
@@ -579,7 +579,6 @@ def lazySuite (_ : Opts) : IO Outcome := do
   let (p, _) ← Session.mount cnt2 (rows ids)
   let (p2, _) ← p.step (rows ids.reverse) "reverse rows"
   notes := notes.push s!"reverse 200 keyed rows: plain {p2.commands - p.commands} commands; lazy-wrapped {lazyRev.1} thunks and {lazyRev.2} commands (keyed reconciliation lost)"
-  let _ := s
   -- 4. stale probe: pinned deps keep the old content and never run the thunk
   let cnt3 ← IO.mkRef 0
   let probe (label : String) : T := .elem .html "div" #[] #[.lazy (some 42) (.elem .html "p" #[] #[.text label])]
@@ -889,13 +888,11 @@ def keyedSuite (o : Opts) : IO Outcome := do
       let ((ks, fr), r') := (nextKeys keys fresh).run' rng
       rng := r'; fresh := fr
       let label := fun (x : String) => if x.length % 3 == k % 3 then s!"{x}*{k}" else x
-      let cmds0 := s.log.size
       let s1 := { s with recording := true, log := #[] }
       let (s', f) ← s1.step (keyedList ks label) s!"keyed case {c} step {k}"
       steps := steps + 1
       maxLen := max maxLen ks.size
       if !f.isEmpty then fails := fails.push (f[0]!); break
-      let _ := cmds0
       -- inserts into the list (moves of reused rows + new rows) must be minimal when keyed
       let unique := uniqueKeysS (ks.map some) && uniqueKeysS (keys.map some)
       if unique && !ks.isEmpty && !keys.isEmpty then
@@ -970,9 +967,8 @@ def knownSuite (_ : Opts) : IO Outcome := do
     let v := table (Array.range n)
     let (_, st) := (do let nd ← mount v; emit (·.mount "#app" nd.handle); pure nd).run ({} : DiffState String)
     let t0 ← IO.monoNanosNow
-    let d ← IO.lazyPure fun _ => ({} : Dom).apply st.buf.ops st.buf.strs
+    let _ ← IO.lazyPure fun _ => ({} : Dom).apply st.buf.ops st.buf.strs
     let t1 ← IO.monoNanosNow
-    let _ := d.nodes.size
     return (t1 - t0).toFloat / 1000000
   let a ← mk 4000; let b ← mk 16000
   let e := Float.log (b / a) / Float.log 4
