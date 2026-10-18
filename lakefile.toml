@@ -2,7 +2,7 @@ name = "leanui"
 version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
-  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests"]
+  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site"]
 
 # The runtime core every app links.
 [[lean_lib]]
@@ -41,7 +41,7 @@ roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness", "LeanUI.Testing.Gen"]
 [[lean_lib]]
 name = "Examples"
 srcDir = "examples"
-roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs"]
+roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp"]
 
 [[lean_exe]]
 name = "leanui-tests"
@@ -80,3 +80,8 @@ root = "tests.Perf"
 [[lean_exe]]
 name = "leanui-todomvc-tests"
 root = "tests.TodoMVC"
+
+[[lean_exe]]
+name = "leanui-site"
+srcDir = "examples"
+root = "SiteServer"
