@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeanUI effects</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --muted: #5d6677; --line: #dde1e8; --accent: #3156d3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171d; --card: #1c2028; --ink: #e6e9ef; --muted: #9aa3b5; --line: #2d333f; --accent: #8aa4ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main.effects { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+  h1 { margin: 0; font-size: 1.6rem; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  h2 { margin: 0 0 8px; font-size: 1.05rem; }
+  p { margin: 6px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav a, .row a { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); text-decoration: none; }
+  nav a.active { background: var(--accent); color: var(--card); border-color: var(--accent); }
+  button { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  input, textarea { font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  output { font-variant-numeric: tabular-nums; color: var(--muted); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 14px; }
+  caption { text-align: left; color: var(--muted); padding-bottom: 4px; }
+  th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); }
+  progress { width: 140px; }
+  .spacer { border-left: 2px dashed var(--line); margin-left: 12px; }
+  #bottom { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="leanui.js"></script>
+<script>
+  // The app's base path is where its files are (so deep links and pushed URLs resolve assets
+  // correctly); it and the current URL reach Lean as JSON flags.
+  const base = new URL(".", document.querySelector('script[src$="leanui.js"]').src).pathname;
+  const flags = JSON.stringify({ base, url: location.pathname + location.search + location.hash });
+  LeanUI.start({ glue: base + "app.js", selector: "#app", flags }).then(
+    (rt) => { window.__leanui = rt; console.log("LeanUI ready in", rt.bootMs.toFixed(1), "ms"); },
+    (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+{"title": "wrong shape", "planets": [
+  {"name": "Mercury", "symbol": "☿", "moons": 0, "radiusKm": 2439.7, "rings": false},
+  {"name": "Venus", "symbol": "♀", "moons": -1, "radiusKm": 6051.8, "rings": false}]}

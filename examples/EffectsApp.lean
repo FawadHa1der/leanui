@@ -1,3 +1,5 @@
 module
 public import Effects
--- wasm entry point: `leanui_app Effects.program` (effects lane)
+public import LeanUI.Host.Wasm
+-- wasm entry point of the effects lab
+leanui_app Effects.program

@@ -1,0 +1,13 @@
+{
+  "title": "The planets — a \"solar system\" catalog",
+  "planets": [
+    { "name": "Mercury", "symbol": "☿", "moons": 0, "radiusKm": 2439.7, "rings": false },
+    { "name": "Venus", "symbol": "♀", "moons": 0, "radiusKm": 6051.8, "rings": false },
+    { "name": "Earth", "symbol": "🜨", "moons": 1, "radiusKm": 6371, "rings": false },
+    { "name": "Mars", "symbol": "♂", "moons": 2, "radiusKm": 3389.5, "rings": false },
+    { "name": "Jupiter", "symbol": "♃", "moons": 95, "radiusKm": 6.9911E4, "rings": true },
+    { "name": "Saturn", "symbol": "♄", "moons": 146, "radiusKm": 58232.0, "rings": true },
+    { "name": "Uranus", "symbol": "⛢", "moons": 28, "radiusKm": 25362, "rings": true, "discovered": 1781 },
+    { "name": "Neptune", "symbol": "♆", "moons": 16, "radiusKm": 24622, "rings": true, "discovered": 1846 }
+  ]
+}
