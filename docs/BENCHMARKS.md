@@ -5,17 +5,137 @@ keyed operations, against a hand-written vanilla JavaScript implementation, in C
 traces), in release Chrome and Firefox, and natively. This page gives the results, the method,
 and what was learned getting there.
 
-All numbers: Apple-silicon Mac (10 performance and 4 efficiency cores), macOS 26, headless
-browsers, medians. Each browser measurement loads a fresh page, does the operation's warm-up clicks,
-and times one click.
+Measured at commit `9a4c9c6` (2026-10-18). All numbers: an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26, headless
+browsers, medians. Each browser measurement loads a fresh page, does the operation's warm-up
+clicks, busy-waits 30 ms (so the click does not land on an efficiency core; see below) and times
+one click.
 
-<!-- SUMMARY -->
+## Summary
 
-<!-- TABLES -->
+- **Against hand-written JavaScript**, LeanUI's keyed-suite CPU time is **1.33×** vanilla's in
+  Chromium (geometric mean over the nine operations, script and rendering), **1.68×** in
+  release Chrome (1.38× without "highlight a row", a 0.8 ms operation that Chrome's 0.1 ms timer
+  steps distort) and **1.66×** in release Firefox (script and layout). Rendering work is the
+  same for both (identical DOM); the difference is script: Lean's update, view and diff in wasm,
+  and applying the command buffer.
+- **Natively**, selecting a row costs Lean 0.12 ms (update, view, diff, encoding), and
+  re-rendering 1,000 unchanged rows 0.06 ms.
+- **Memory**: 16 MB of wasm memory at load,
+  34.13 MB after creating 10,000 rows (wasm memory never shrinks);
+  the JavaScript heap stays within 2.5 MB of vanilla's.
+- **Startup**: ready 25.3 ms after navigation (vanilla
+  4.8 ms), of which 20.2 ms is
+  compiling and instantiating the wasm, initializing Lean and the first render;
+  154.6 KB over the wire with brotli.
+
+## Results
+
+### Chromium 151, traced: CPU time per click (median of 9 fresh loads)
+
+| operation | LeanUI total | script | render | vanilla total | script | render | LeanUI ÷ vanilla |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| create 1,000 rows | 22.61 ms | 7.21 | 15.57 | 17.83 ms | 1.87 | 15.95 | **1.27×** |
+| replace all 1,000 rows | 26.70 ms | 10.59 | 16.02 | 18.79 ms | 3.48 | 15.44 | **1.42×** |
+| update every 10th of 1,000 rows | 3.66 ms | 0.98 | 2.68 | 3.03 ms | 0.10 | 2.93 | **1.21×** |
+| highlight a row (of 1,000) | 1.14 ms | 0.40 | 0.72 | 0.78 ms | 0.03 | 0.75 | **1.46×** |
+| swap 2 of 1,000 rows | 4.16 ms | 0.87 | 3.29 | 3.56 ms | 0.05 | 3.50 | **1.17×** |
+| remove one of 1,000 rows | 4.64 ms | 0.55 | 4.10 | 4.18 ms | 0.05 | 4.13 | **1.11×** |
+| create 10,000 rows | 242.58 ms | 64.52 | 177.91 | 166.83 ms | 17.47 | 149.20 | **1.45×** |
+| append 1,000 rows to 1,000 | 25.42 ms | 8.18 | 17.26 | 18.96 ms | 1.74 | 17.26 | **1.34×** |
+| clear 1,000 rows | 3.24 ms | 2.99 | 0.24 | 1.96 ms | 1.72 | 0.24 | **1.65×** |
+
+Geometric mean of the ratios: **1.33×**.
+
+### Firefox 158 (release, no automation): script and layout per click (median of 9 fresh loads)
+
+| operation | LeanUI layout | script | vanilla layout | script | LeanUI ÷ vanilla |
+|---|--:|--:|--:|--:|--:|
+| create 1,000 rows | 17.00 ms | 8.40 | 11.02 ms | 2.10 | **1.54×** |
+| replace all 1,000 rows | 23.40 ms | 15.52 | 12.36 ms | 4.20 | **1.89×** |
+| update every 10th of 1,000 rows | 3.36 ms | 1.20 | 1.92 ms | 0.12 | **1.75×** |
+| highlight a row (of 1,000) | 0.78 ms | 0.56 | 0.26 ms | 0.06 | **3.00×** |
+| swap 2 of 1,000 rows | 6.18 ms | 1.18 | 4.74 ms | 0.18 | **1.30×** |
+| remove one of 1,000 rows | 5.86 ms | 0.90 | 5.30 ms | 0.16 | **1.11×** |
+| create 10,000 rows | 177.06 ms | 81.56 | 116.12 ms | 24.62 | **1.52×** |
+| append 1,000 rows to 1,000 | 23.42 ms | 11.72 | 12.92 ms | 1.94 | **1.81×** |
+| clear 1,000 rows | 3.94 ms | 3.74 | 2.58 ms | 2.38 | **1.53×** |
+
+Geometric mean: **1.66×**. Ready after navigation: LeanUI 25.44 ms, vanilla 2.76 ms.
+
+### Chrome 155 (release, no automation): script and layout per click (median of 9 fresh loads)
+
+| operation | LeanUI layout | script | vanilla layout | script | LeanUI ÷ vanilla |
+|---|--:|--:|--:|--:|--:|
+| create 1,000 rows | 18.20 ms | 6.30 | 14.20 ms | 1.80 | **1.28×** |
+| replace all 1,000 rows | 21.20 ms | 9.70 | 14.40 ms | 3.30 | **1.47×** |
+| update every 10th of 1,000 rows | 3.00 ms | 1.20 | 2.30 ms | 0.20 | **1.30×** |
+| highlight a row (of 1,000) | 0.80 ms | 0.60 | 0.10 ms | 0.00 | **8.00×** |
+| swap 2 of 1,000 rows | 2.30 ms | 0.70 | 1.70 ms | 0.00 | **1.35×** |
+| remove one of 1,000 rows | 3.00 ms | 0.70 | 2.30 ms | 0.00 | **1.30×** |
+| create 10,000 rows | 172.70 ms | 57.90 | 131.70 ms | 15.90 | **1.31×** |
+| append 1,000 rows to 1,000 | 20.10 ms | 7.10 | 15.00 ms | 1.70 | **1.34×** |
+| clear 1,000 rows | 3.10 ms | 3.10 | 1.80 ms | 1.80 | **1.72×** |
+
+Geometric mean: **1.68×**. Ready after navigation: LeanUI 8.8 ms, vanilla 3.4 ms.
+
+### Memory (Chromium, after a full GC)
+
+| after | LeanUI JS heap | LeanUI wasm memory | vanilla JS heap | DOM nodes |
+|---|--:|--:|--:|--:|
+| load | 1.48 MB | 16 MB | 1.06 MB | 47 |
+| creating 1,000 rows | 1.89 MB | 16 MB | 1.24 MB | 11047 |
+| 5 updates of every 10th row | 1.9 MB | 16 MB | 1.26 MB | 11047 |
+| 5 create/clear cycles | 1.6 MB | 16 MB | 1.11 MB | 47 |
+| creating 10,000 rows | 5.12 MB | 34.13 MB | 2.6 MB | 110047 |
+
+### Startup and size (Chromium)
+
+| | LeanUI | vanilla |
+|---|--:|--:|
+| ready after navigation | 25.3 ms | 4.8 ms |
+| of which wasm instantiation + Lean init + first render | 20.2 ms | |
+| transferred (uncompressed) | 1087.6 KB | 5.94 KB |
+| brotli | 154.6 KB | 2.06 KB |
+
+### Native Lean (update, view, diff, encoding; no DOM)
+
+| operation | lazy rows | eager rows | command words |
+|---|--:|--:|--:|
+| create 1,000 rows | 1.99 ms | 1.97 ms | 122000 |
+| replace all 1,000 rows | 2.63 ms | 2.69 ms | 144999 |
+| update every 10th of 1,000 rows | 0.26 ms | 0.68 ms | 400 |
+| highlight a row (of 1,000) | 0.12 ms | 0.55 ms | 8 |
+| swap 2 of 1,000 rows | 0.32 ms | 0.82 ms | 8 |
+| remove one of 1,000 rows | 0.21 ms | 0.71 ms | 22 |
+| create 10,000 rows | 20.40 ms | 20.05 ms | 1220000 |
+| append 1,000 rows to 1,000 | 2.30 ms | 2.72 ms | 122999 |
+| clear 1,000 rows | 0.49 ms | 0.47 ms | 22000 |
 
 ## Where LeanUI's time goes
 
-<!-- PROFILE -->
+Sampled CPU profiles of the synchronous click in Chromium, on a build with function names
+(`tools/build-app.sh BenchApp bench-prof --debug`, `tests/browser/profile.mjs`):
+
+| | create 1,000 rows (6.7 ms per click) | select a row (0.22 ms per click) |
+|---|--:|--:|
+| Lean, in wasm | 59% | 76% |
+| the browser's DOM work | 25% | 4% |
+| LeanUI's JavaScript runtime (applying commands, events) | 8% | 1.5% |
+| other (engine, GC) | 8% | 18% |
+
+- **Creating rows** costs most in the DOM calls themselves (`appendChild` 9%, `setAttribute` 6%,
+  `createElement` 5%), in `mount` (8.5%), in writing the command buffer a byte at a time
+  (`lean_byte_array_push`, 7.5%), and in the allocator (14%, part of it freeing the previous rows
+  during the setup's clear). The hand-written reference clones a template row instead of
+  creating its ten nodes one by one, which is most of its advantage on this operation.
+- **Small updates** are dominated by allocation: building the new view (one lazy node, its
+  closure, its key and its dependencies per row, about ten objects) and freeing the old one is about a
+  quarter of the time (`malloc`/`free`), followed by `patchNode`, comparing dependencies and the
+  pure check. The DOM work is a few percent.
+- **Next steps** this suggests: writing the command buffer a word at a time (needs a small C
+  helper, also for native builds); cloning static subtrees from templates (the template syntax
+  knows which parts of a view are static); avoiding the per-row view allocation altogether for
+  rows whose model did not change.
 
 ## What made the diff fast
 
@@ -51,7 +171,9 @@ tests and the property suites against an independent reference model.
   scheduled on an efficiency core, and per-click timings become bimodal (0.2 ms or 1.2 ms for the
   same select). Back-to-back clicks stay on performance cores; fresh-page medians are robust.
 - **What Memory64 costs.** The same allocation-heavy C workload built for wasm32 and wasm64
-  ([`bench/wasm64`](../bench/wasm64)): <!-- WASM64 -->
+  ([`bench/wasm64`](../bench/wasm64)) takes 13.5 ms as wasm32 and 14.4 ms as wasm64 in Firefox 158
+  (1.07×), 12.5 and 14.2 ms in Chrome 155 (1.14×). Memory64 is not why wasm64 LeanUI costs what it
+  does; the remaining overhead is Lean's allocation pattern and the DOM calls.
 - **The allocator.** dlmalloc and mimalloc are equally fast here (single-threaded), but mimalloc
   reserves more: wasm memory 26.6 MB at load (dlmalloc: 16 MB, the initial size) and 67 MB after
   10,000 rows (dlmalloc: 34 MB). LeanUI builds with dlmalloc.

@@ -54,7 +54,7 @@ partial def Html.renderInto {Msg : Type} (acc : String) : Html Msg → String
   | .lazy _ _ r => (r ()).renderInto acc
   | .elem _ tag attrs kids =>
     let acc := renderAttrs (acc ++ "<" ++ tag) attrs ++ ">"
-    if voidElements.contains tag then acc
+    if isVoid tag then acc
     else
       -- force each child once (a lazy child's thunk runs one time)
       let kids := kids.map Html.force

@@ -172,6 +172,11 @@ def testSharedSubs : IO Unit := do
   r.check (subsProg.view #["A /x", "B /x", "tickA", "tickB"]) "shared subscriptions"
   IO.println "  shared subscriptions: ok"
 
+def testVoid : IO Unit := do
+  for t in voidElements ++ ["div", "td", "tr", "a", "p", "span", "section", "textarea", "inputs", "b", ""] do
+    unless isVoid t == voidElements.contains t do throw (IO.userError s!"isVoid {t}")
+  IO.println "  void elements: ok"
+
 def main : IO UInt32 := do
   IO.println "leanui tests"
   testRender
@@ -182,5 +187,6 @@ def main : IO UInt32 := do
   testLists .positional 400
   testLists .keyedLazy 400
   testSharedSubs
+  testVoid
   IO.println "all passed"
   return 0

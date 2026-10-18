@@ -182,7 +182,7 @@ def home (m : Model) : Html Msg :=
     </section>
     <section class="features">
       {feature "Pure and typed" "Views are values of type Html Msg. Templates are checked by Lean's elaborator and expand to the constructors you would write by hand, so they cost nothing at run time."}
-      {feature "Fast where it counts" "A keyed, exact-lazy diff that recognises unchanged subtrees without allocating; within 1.06–1.55× of hand-written JavaScript on the standard benchmark."}
+      {feature "Fast where it counts" "A keyed, exact-lazy diff that recognises unchanged subtrees without allocating; about 1.3× the CPU time of hand-written JavaScript on the standard benchmark."}
       {feature "Proved, then tested" "The keyed reconciliation planner is proved correct and optimal in Lean; property tests and browser fuzzing check the rest against a reference model."}
       {feature "Everywhere" "This page was rendered to HTML by a Lean server, then hydrated by wasm. Browsers without Memory64 get the same app driven from the server."}
     </section>

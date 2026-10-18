@@ -267,7 +267,8 @@ partial def sameF (f : Nat) (n : Node Msg) (v : Html Msg) : Nat :=
   | .text _ s, .text t => if s == t then f - 1 else 0
   | .lazy k d _, .lazy k' e _ => if k == k' && d == e then f - 1 else 0
   | .elem _ ns tag _ attrs _ kids _, .elem ns' tag' attrs' kids' =>
-    let kids' := effectiveKids tag kids'
+    -- a void element was mounted without the children its view may name
+    let kids' := if kids.size == kids'.size then kids' else effectiveKids tag kids'
     if ns == ns' && tag == tag' && kids.size == kids'.size && attrs.size == attrs'.size &&
         attrsSame attrs attrs' then
       kidsSameF (f - 1) kids kids' 0
@@ -285,7 +286,7 @@ mutual
 handlers, in the order `patchAttrs` would. Lazy subtrees with equal dependencies keep theirs. -/
 partial def rebind (sl : Array (Option (Handler Msg))) : Node Msg → Html Msg → Array (Option (Handler Msg))
   | .elem _ _ tag _ _ ls kids _, .elem _ _ attrs' kids' =>
-    let kids' := effectiveKids tag kids'
+    let kids' := if kids.size == kids'.size then kids' else effectiveKids tag kids'
     let sl := attrs'.foldl (init := sl) fun sl a => match a with
       | .on ev hn => let s := slotOf ls ev; if s == 0 then sl else sl.set! s.toNat (some hn)
       | _ => sl

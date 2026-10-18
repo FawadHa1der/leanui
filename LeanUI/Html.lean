@@ -142,10 +142,21 @@ instance : Inhabited (Html Msg) := ⟨.text ""⟩
 def voidElements : List String :=
   ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
 
+/-- Is `tag` one of `voidElements`? Dispatches on the length first, so the common tags cost a
+comparison or two. -/
+def isVoid (tag : String) : Bool :=
+  match tag.utf8ByteSize with
+  | 2 => tag == "br" || tag == "hr"
+  | 3 => tag == "col" || tag == "img" || tag == "wbr"
+  | 4 => tag == "area" || tag == "base" || tag == "link" || tag == "meta"
+  | 5 => tag == "embed" || tag == "input" || tag == "track"
+  | 6 => tag == "source"
+  | _ => false
+
 /-- The children an element really gets: none for a void element, whatever the view says, so the
 browser DOM, server rendering and hydration agree. -/
 @[inline] def effectiveKids (tag : String) (kids : Array α) : Array α :=
-  if kids.isEmpty then kids else if voidElements.contains tag then #[] else kids
+  if kids.isEmpty then kids else if isVoid tag then #[] else kids
 
 namespace Html
 

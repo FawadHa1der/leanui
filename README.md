@@ -38,31 +38,38 @@ def program : Program Int Msg where
 | **Server** (`LeanUI.Server`) | a native `Std.Http` server: static files, server-side rendering with hydration, server-driven sessions, the `leanui` command (`serve`, `build`, `new`) |
 | **Proofs** ([docs/PROOFS.md](docs/PROOFS.md)) | the keyed reconciliation planner is machine-checked correct and optimal (fewest moves); TodoMVC's model keeps its list keys unique under every message |
 | **Testing** (`LeanUI.Testing`) | a pure DOM model that applies command buffers exactly as the browser does, property tests and fuzzing against a reference model, a strict protocol checker, SSR parser checks, browser suites in Chromium and Firefox |
-| **Examples** | a counter, [TodoMVC](examples/TodoMVC.lean) (the full spec, proved invariants), the js-framework-benchmark app, an effects lab |
+| **Examples** | a counter, [TodoMVC](examples/TodoMVC.lean) (the full spec, proved invariants), [the LeanUI site](examples/Site.lean) (routed pages, components, fetch, SVG; server-rendered), the js-framework-benchmark app, an effects lab, [the guide's notes app](docs/GUIDE.md) |
 
 ## How it performs
 
 The [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) keyed operations,
 against a hand-written vanilla JavaScript implementation with the same markup, stylesheet and data
-(both build identical tables). CPU time per operation, LeanUI ÷ vanilla, release browsers on an
-Apple-silicon Mac; [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method, every number, memory,
-startup and the profiles.
+(both build identical tables). CPU time per operation, LeanUI ÷ vanilla: Chromium traced (script
+plus the rendering work it causes), release Chrome and Firefox self-timed (script plus layout),
+on an Apple M4 Max; [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method, every number,
+memory, startup and the profiles.
 
 | operation | Chromium 151 (script + render) | Chrome 155 (script + layout) | Firefox 158 (script + layout) |
-|---|---|---|---|
-| create 1,000 rows | 1.39× | 1.55× | 2.02× |
-| replace 1,000 rows | 1.39× | 1.40× | 1.90× |
-| update every 10th row | 1.34× | 1.47× | 1.89× |
-| select a row | 1.41× | 1.33× | 2.33× |
-| swap two rows | 1.23× | 1.03× | 1.22× |
-| remove a row | 1.06× | 1.03× | 1.13× |
-| create 10,000 rows | 1.35× | 1.36× | 1.59× |
-| append 1,000 rows | 1.27× | 1.16× | 1.12× |
-| clear 1,000 rows | 1.55× | 1.36× | 1.60× |
+|---|--:|--:|--:|
+| create 1,000 rows | 1.27× | 1.28× | 1.54× |
+| replace all 1,000 rows | 1.42× | 1.47× | 1.89× |
+| update every 10th of 1,000 rows | 1.21× | 1.30× | 1.75× |
+| highlight a row (of 1,000) | 1.46× | 8.00× | 3.00× |
+| swap 2 of 1,000 rows | 1.17× | 1.35× | 1.30× |
+| remove one of 1,000 rows | 1.11× | 1.30× | 1.11× |
+| create 10,000 rows | 1.45× | 1.31× | 1.52× |
+| append 1,000 rows to 1,000 | 1.34× | 1.34× | 1.81× |
+| clear 1,000 rows | 1.65× | 1.72× | 1.53× |
+| **geometric mean** | **1.33×** | **1.68×** | **1.66×** |
 
-Selecting a row costs Lean 0.11 ms natively (update, view, diff and encoding); a no-op re-render
-of 1,000 rows diffs in 0.06 ms. The app starts in about 12–25 ms; the benchmark app is 160 KB
-brotli (wasm, glue and runtime).
+Chrome's `performance.now()` has 0.1 ms steps on pages without cross-origin isolation, so its
+"highlight a row" cell (LeanUI 0.8 ms, vanilla rounding to 0.1 ms) mostly measures resolution;
+without it Chrome's mean is 1.38×, and the traced Chromium column (microsecond timestamps)
+gives 1.46× for that operation.
+
+Natively, Lean selects a row in 0.12 ms (update, view, diff and encoding) and re-renders 1,000
+unchanged rows in 0.06 ms. The benchmark app is ready about 25 ms after navigation in Chromium
+and weighs 155 KB with brotli (wasm, glue and runtime).
 
 ## Writing apps
 
