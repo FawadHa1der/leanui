@@ -22,6 +22,9 @@ Suites (all deterministic from `--seed`):
   lazy      exact lazy-thunk counts in targeted scenarios
   mutation  drop single commands from real buffers: how many do the invariants catch?
   shrink    the shrinker against mutant engines (it must find tiny repros)
+  keyed     long keyed lists (up to 300 rows) under random reorders: exactly minimal DOM inserts
+  known     open issues asserted as they are (XFAIL) and reported when they change (XPASS)
+  profile   what a no-change re-render of 10k rows costs, by row shape
   scale     mount/patch timing for 1k..32k keyed rows, command counts, growth exponents
   corpus    (with --corpus DIR) write sessions for tests/browser/fuzz.mjs
 -/
@@ -176,12 +179,16 @@ def goHandler : Handler String := { payload := .value, decode := fun p => some (
 def appView (last : String) (tree : Html String) : Html String :=
   el "div" #[] #[el "button" #[.attr "id" "go", .on "click" goHandler] #[], el "pre" #[.attr "id" "last"] #[text last], tree]
 
-def appProgram (c : IO.Ref Nat) (trees : Array T) : Program AppModel String where
+/-- Shows `trees[idx]` under two control nodes. With `wrap`, the tree is a component whose
+messages are mapped (`Html.map`), as a parent view embeds a child's. -/
+def appProgram (c : IO.Ref Nat) (trees : Array T) (wrap : Bool) : Program AppModel String where
   init _ := ({}, .none)
   update m s :=
     if m.startsWith "goto:" then ({ s with idx := ((m.drop 5).toString.toNat?).getD 0 }, .none)
     else ({ s with last := m }, .none)
-  view s := appView s.last ((trees[s.idx]?.getD (.text "")).toHtml c)
+  view s :=
+    let tree := (trees[s.idx]?.getD (.text "")).toHtml c
+    appView s.last (if wrap then tree.map ("w:" ++ ·) else tree)
 
 /-- Every effective listener under `h`, with its DOM handle and slot. -/
 partial def listenersOf (d : Dom) : T → UInt32 → Array (UInt32 × TListener × UInt32)
@@ -201,11 +208,26 @@ partial def textTargets (d : Dom) (inh : Option TListener) : T → UInt32 → Ar
     let inh := match (effListeners attrs).find? (·.event == "click") with | some l => some l | none => inh
     ((kids.zip (d.get h).kids).foldl (fun acc (k, dh) => acc ++ textTargets d inh k dh) #[])
 
-def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) : IO (Array String × Nat) := do
+/-- One program through `LeanUI.start`: mounted with `Testing.run`, or hydrated from its own
+server rendering (`start … hydrate := true` on a DOM model built from the parsed HTML). -/
+def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) (wrap hydrate : Bool) : IO (Array String × Nat) := do
   let c := genCase cfg seed i nEdits
   let trees := c.views
   let cnt ← IO.mkRef 0
-  let r ← Testing.run (appProgram cnt trees)
+  let p := appProgram cnt trees wrap
+  let r ← if !hydrate then Testing.run p else do
+    let v0 := appView "" (if wrap then trees[0]!.toHtml'.map ("w:" ++ ·) else trees[0]!.toHtml')
+    let some nodes := (Ssr.parse v0.render).toOption | throw (IO.userError "app: the server rendering does not parse")
+    let cs := Ssr.claims 0 "" none #[] nodes
+    let (d0, ghosts) := Ssr.hydrateDom "#app" cs #[]
+    if cs.size != countNodes v0 then throw (IO.userError s!"app: {cs.size} parsed nodes, the view has {countNodes v0}")
+    let _ := ghosts
+    let dom ← IO.mkRef d0
+    let inst ← start p { flush := fun ops strs => dom.modify (·.apply ops strs) } "" "#app" true
+    let d ← dom.get
+    unless d.effects.contains s!"hydrate #app 1 {cs.size}" do throw (IO.userError s!"app: no hydrate claim in {d.effects}")
+    pure ({ inst, dom } : Running)
+  let msg (m : String) := if wrap then "w:" ++ m else m
   let mut eff := ((mountS trees[0]!).run 0).1
   let mut last := ""
   let mut fired := 0
@@ -230,7 +252,7 @@ def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) : IO (Array 
         for p in #["", "Enter", "v😀"] do
           r.inst.event sl p
           fired := fired + 1
-          if let some m := l.decode p then last := m
+          if let some m := l.decode p then last := msg m
           let shown ← readLast
           if shown != last then
             return (#[s!"app step {step}: slot {sl} ({l.event} on {hdl}) with {p.quote} shows {shown.quote}, expected {last.quote}"], fired)
@@ -242,7 +264,7 @@ def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) : IO (Array 
         | some l =>
           r.fire hdl "click"
           fired := fired + 1
-          if let some m := l.decode "" then last := m
+          if let some m := l.decode "" then last := msg m
           let shown ← readLast
           if shown != last then return (#[s!"app step {step}: click on text {hdl} shows {shown.quote}, expected {last.quote}"], fired)
         | none =>
@@ -256,12 +278,18 @@ def appSuite (o : Opts) : IO Outcome := do
   let cases := 75 * o.factor
   let mut failed := 0; let mut fired := 0
   for i in [0:cases] do
-    let (f, n) ← appCase {} (o.seed + 5) i 12
+    let wrap := i % 2 == 1
+    let hydrate := i % 4 ≥ 2
+    -- hydrated programs start without properties (they would render as attributes the engine
+    -- does not track; `Running.check` compares attributes exactly)
+    let cfg : Config := if hydrate then { propPct := 0 } else {}
+    let (f, n) ← appCase cfg (o.seed + 5) i 12 wrap hydrate
     fired := fired + n
     if !f.isEmpty then
       failed := failed + 1
-      if failed ≤ 3 then IO.println s!"  FAIL app case {i}: {f[0]!}"
-  return { name := "app", ok := failed == 0, line := s!"{cases} programs × 13 views, {fired} events fired and observed in the DOM; {failed} failing" }
+      if failed ≤ 3 then IO.println s!"  FAIL app case {i}{if wrap then " (Html.map)" else ""}{if hydrate then " (hydrated)" else ""}: {f[0]!}"
+  return { name := "app", ok := failed == 0,
+           line := s!"{cases} programs × 13 views (half through Html.map, half hydrated by start), {fired} events fired and observed in the DOM; {failed} failing" }
 
 /-! ## ssr: the render → parse round trip and the hazard lint -/
 
@@ -590,6 +618,164 @@ def scaleSuite (o : Opts) : IO Outcome := do
   for f in fails do IO.println s!"  FAIL {f}"
   return { name := "scale", ok := fails.isEmpty, line := s!"{results.size} scenarios at 1k/10k rows + growth sweep to 32k (worst exponent {fmt worst 2}); {fails.size} failing" }
 
+/-! ## keyed: long keyed lists, minimal moves -/
+
+/-- The fewest DOM moves that turn the old keyed children into the new ones: every reused child
+outside a longest increasing run of old positions moves, every new child is inserted. Computed
+here by O(n²) dynamic programming, independently of `Keyed.lis`. -/
+def minimalInserts (old new : Array String) : Nat := Id.run do
+  let idx : Std.HashMap String Nat := (old.zipIdx).foldl (fun m (k, i) => m.insert k i) {}
+  let reused := new.filterMap idx.get?
+  let created := new.size - reused.size
+  let mut best : Array Nat := Array.replicate reused.size 1
+  let mut lis := 0
+  for i in [0:reused.size] do
+    for j in [0:i] do
+      if reused[j]! < reused[i]! && best[j]! + 1 > best[i]! then best := best.set! i (best[j]! + 1)
+    lis := max lis best[i]!
+  return reused.size - lis + created
+
+def keyedRow (k : String) (label : String) : T :=
+  .elem .html "li" #[.key k, .attr "class" "row", .on { event := "click", id := label.length }] #[.text label]
+
+def keyedList (keys : Array String) (label : String → String := id) : T :=
+  .elem .html "ul" #[] (keys.map fun k => keyedRow k (label k))
+
+/-- A random next key list: keep a random subset, move some, insert fresh keys, sometimes a
+duplicate (positional fallback) or a whole new list. -/
+def nextKeys (keys : Array String) (fresh : Nat) : G (Array String × Nat) := do
+  let mut ks := keys
+  let mut fresh := fresh
+  let r ← below 100
+  if r < 4 then return (#[], fresh)
+  if r < 8 then
+    let n ← below 300
+    return ((Array.range n).map (s!"z{fresh}-" ++ toString ·), fresh + 1)
+  -- delete some
+  let dels ← below (ks.size / 4 + 2)
+  for _ in [0:dels] do
+    if ks.size > 0 then ks := ks.eraseIdxIfInBounds (← below ks.size)
+  -- move some
+  let moves ← if ← chance 20 then pure ks.size else below 6
+  for _ in [0:moves] do
+    if ks.size > 1 then
+      let i ← below ks.size; let x := ks[i]!; let rest := ks.eraseIdxIfInBounds i
+      ks := rest.insertIdxIfInBounds (← below (rest.size + 1)) x
+  -- insert some
+  let ins ← below 8
+  for _ in [0:ins] do
+    ks := ks.insertIdxIfInBounds (← below (ks.size + 1)) s!"f{fresh}"
+    fresh := fresh + 1
+  if r < 12 && ks.size ≥ 2 then ks := ks.set! (← below ks.size) ks[0]!
+  if r < 20 then ks := ks.reverse
+  return (ks, fresh)
+
+def keyedSuite (o : Opts) : IO Outcome := do
+  let cases := 15 * o.factor
+  let mut fails : Array String := #[]
+  let mut steps := 0; let mut optimal := 0; let mut keyedSteps := 0; let mut maxLen := 0; let mut moved := 0
+  for c in [0:cases] do
+    let mut rng := Rng.ofCase (o.seed + 51) c
+    let ((n0, fresh0), r') := (do let n ← below 200; pure (n, 0)).run' rng
+    rng := r'
+    let mut keys := (Array.range n0).map (s!"k{·}")
+    let mut fresh := fresh0
+    let cnt ← IO.mkRef 0
+    let (s0, f) ← Session.mount cnt (keyedList keys)
+    fails := fails ++ f
+    let mut s := s0
+    for k in [0:20] do
+      let ((ks, fr), r') := (nextKeys keys fresh).run' rng
+      rng := r'; fresh := fr
+      let label := fun (x : String) => if x.length % 3 == k % 3 then s!"{x}*{k}" else x
+      let cmds0 := s.log.size
+      let s1 := { s with recording := true, log := #[] }
+      let (s', f) ← s1.step (keyedList ks label) s!"keyed case {c} step {k}"
+      steps := steps + 1
+      maxLen := max maxLen ks.size
+      if !f.isEmpty then fails := fails.push (f[0]!); break
+      let _ := cmds0
+      -- inserts into the list (moves of reused rows + new rows) must be minimal when keyed
+      let unique := uniqueKeysS (ks.map some) && uniqueKeysS (keys.map some)
+      if unique && !ks.isEmpty && !keys.isEmpty then
+        keyedSteps := keyedSteps + 1
+        let ul := s'.root
+        let mut inserts := 0
+        for b in s'.log do
+          let ops := b.extract 4 (4 + ((b[0]!.toNat) ||| (b[1]!.toNat <<< 8) ||| (b[2]!.toNat <<< 16) ||| (b[3]!.toNat <<< 24)))
+          match Wire.decode ops (b.extract (4 + ops.size) b.size) with
+          | .ok cs => for cm in cs do
+              match cm.op with
+              | .insertBefore p _ _ | .appendChild p _ => if p == ul then inserts := inserts + 1
+              | _ => pure ()
+          | .error e => fails := fails.push e
+        let want := minimalInserts keys ks
+        if inserts == want then optimal := optimal + 1
+        else fails := fails.push s!"keyed case {c} step {k}: {inserts} inserts into the list, the minimum is {want} ({keys.size} → {ks.size} rows)"
+        moved := moved + inserts
+      s := { s' with recording := false, log := #[] }
+      keys := ks
+    if fails.size > 3 then break
+  for f in fails.toList.take 3 do IO.println s!"  FAIL {oneLine f 200}"
+  return { name := "keyed", ok := fails.isEmpty,
+           line := s!"{cases} sessions × 20 random list edits ({steps} patches, lists up to {maxLen} rows): {optimal}/{keyedSteps} keyed patches use exactly the minimal number of DOM inserts ({moved} in all)" }
+
+/-! ## profile: what a no-change re-render of 10k rows costs -/
+
+def profileSuite (_ : Opts) : IO Outcome := do
+  let n := 10000
+  let ids := Array.range n
+  let variants : Array (String × (Nat → Html String)) := #[
+    ("keyed li: class, click listener, text, <b>", fun i => rowH i s!"row {i}" false),
+    ("unkeyed (positional)", fun i => el "li" #[Attr.cls "row", .on "click" { decode := fun _ => some s!"select {i}" }] #[text s!"row {i}", el "b" #[] #[text (toString i)]]),
+    ("keyed, no listener", fun i => el "li" #[.key s!"r{i}", Attr.cls "row"] #[text s!"row {i}", el "b" #[] #[text (toString i)]]),
+    ("keyed, no attributes", fun i => el "li" #[.key s!"r{i}"] #[text s!"row {i}", el "b" #[] #[text (toString i)]]),
+    ("keyed li with one text", fun i => el "li" #[.key s!"r{i}"] #[text s!"row {i}"]),
+    ("lazy rows (deps unchanged)", fun i => lazy (UInt64.ofNat i) fun _ => rowH i s!"row {i}" false)]
+  IO.println s!"  re-rendering {n} unchanged rows (engine only, median of 5):"
+  for (name, mk) in variants do
+    let v := el "ul" #[] (ids.map mk)
+    let m ← measureRows (some v) (el "ul" #[] (ids.map mk)) 5 (model := false)
+    let c ← measureRows none (el "ul" #[] (ids.map mk)) 5 (model := false)
+    IO.println s!"    {pad name 44} patch {lpad (fmt m.engine 2) 6} ms   mount {lpad (fmt c.engine 2) 6} ms   ({fmt (m.engine / c.engine) 2}× mount)"
+  return { name := "profile", ok := true, line := s!"{variants.size} row shapes measured" }
+
+/-! ## known: open issues, asserted as they are today (XFAIL), reported when they change (XPASS) -/
+
+def knownSuite (_ : Opts) : IO Outcome := do
+  let mut lines : Array String := #[]
+  -- K1: lazy rows in a keyed list are diffed positionally (Html.key? cannot see through lazy)
+  let cnt ← IO.mkRef 0
+  let ids := Array.range 100
+  let (s, _) ← Session.mount cnt (lazyRows ids)
+  let c0 := s.commands; let r0 ← cnt.get
+  let (s, f) ← s.step (lazyRows (ids.extract 1 100)) "drop the first lazy row"
+  let k1 := (s.commands - c0, (← cnt.get) - r0)
+  lines := lines.push s!"{if k1.1 > 5 then "XFAIL" else "XPASS"} K1 keyed rows wrapped in `lazy` lose keyed diffing: removing the first of 100 rows sends {k1.1} commands and forces {k1.2} thunks (unwrapped: 5 commands, 0 thunks). Html.key? returns none for `.lazy`, so patchKids falls back to positional. Repro: el \"ul\" #[] (ids.map fun i => lazy i fun _ => el \"li\" #[.key (toString i)] #[...]); drop ids[0]."
+  if !f.isEmpty then lines := lines.push s!"  (unexpected failure: {f[0]!})"
+  -- K2: hydration forces every lazy thunk twice
+  let cnt2 ← IO.mkRef 0
+  let (_, _, extra) ← Session.hydrate cnt2 (lazyRows (Array.range 10))
+  lines := lines.push s!"{if extra > 0 then "XFAIL" else "XPASS"} K2 initState with hydrate = true forces each lazy thunk twice ({10 + extra} for 10 lazy rows): countNodes walks the forced view, then mount forces it again."
+  -- K3: children of void elements: mount creates them, Render drops them, hydration miscounts
+  let v : T := .elem .html "div" #[] #[.elem .html "input" #[] #[.text "x"]]
+  let rep := Ssr.roundTrip v
+  lines := lines.push s!"{if !rep.failures.isEmpty then "XFAIL" else "XPASS"} K3 a void element with children (el \"input\" #[] #[text \"x\"]) mounts the child on the client, Render drops it ({rep.html}), so hydration finds {(rep.claims.size)} of {v.size} nodes. Suggest: reject or warn in a debug build."
+  -- K4: the test DOM model is quadratic in a parent's child count (appendChild/insertBefore copy)
+  let mk (n : Nat) : IO Float := do
+    let v := table (Array.range n)
+    let (_, st) := (do let nd ← mount v; emit (·.mount "#app" nd.handle); pure nd).run ({} : DiffState String)
+    let t0 ← IO.monoNanosNow
+    let d ← IO.lazyPure fun _ => ({} : Dom).apply st.buf.ops st.buf.strs
+    let t1 ← IO.monoNanosNow
+    let _ := d.nodes.size
+    return (t1 - t0).toFloat / 1000000
+  let a ← mk 4000; let b ← mk 16000
+  let e := Float.log (b / a) / Float.log 4
+  lines := lines.push s!"{if e > 1.4 then "XFAIL" else "XPASS"} K4 Testing.Dom.apply (the test model, not the engine) grows like n^{fmt e 2} on one wide parent ({fmt a 1} ms for 4k rows, {fmt b 1} ms for 16k): `put p (get p with kids pushed)` copies the shared kids array on every append."
+  for l in lines do IO.println s!"  {l}"
+  return { name := "known", ok := true, line := s!"{lines.size} open issues tracked ({(lines.filter (·.startsWith "XPASS")).size} now pass)" }
+
 /-! ## corpus: sessions for the browser -/
 
 def corpusSuite (o : Opts) (dir : String) : IO Outcome := do
@@ -646,6 +832,9 @@ def main (args : List String) : IO UInt32 := do
     ("lazy", lazySuite o),
     ("mutation", mutationSuite o),
     ("shrink", shrinkSuite o),
+    ("keyed", keyedSuite o),
+    ("known", knownSuite o),
+    ("profile", profileSuite o),
     ("scale", scaleSuite o)]
   let mut outcomes := #[]
   let total0 ← nowMs

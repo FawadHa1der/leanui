@@ -373,7 +373,7 @@ def genEdit (cfg : Config) (t : T) : G Edit := do
       let k ← if ← chance 50 then pick keyPool else freshKey
       return .setKey p (← below kids.size) (if ← chance 15 then none else some k)
     if r < 87 then return .rotateAttrs p (← between 1 4)
-    if r < 90 && !p.isEmpty then return .replace p (← genSub cfg s.ctx false)
+    if r < 90 && (!p.isEmpty || (← chance 25)) then return .replace p (← genSub cfg s.ctx false)
     if r < 93 then return .wrapLazy p
     if r < 97 && (cfg.dupAttrPct > 0 || cfg.dupOnPct > 0) then
       if ← chance 50 then
