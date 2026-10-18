@@ -35,7 +35,9 @@ await op("#clear");
 await time("create1k", async () => { await op("#clear"); }, "#run");
 await time("replace1k", null, "#run");
 await time("update10th", null, "#update");
-await time("select", null, "#tbody tr:nth-child(5) td:nth-child(2) a");
+{ // select a different row each time (re-selecting the same row is a no-op)
+  const ts = []; for (let i = 0; i < 9; i++) ts.push(await op(`#tbody tr:nth-child(${5 + (i & 1)}) td:nth-child(2) a`));
+  T.select = +median(ts).toFixed(2); }
 await time("swap", null, "#swaprows");
 await time("remove", async () => { if ((await rows()) < 900) await op("#run"); }, "#tbody tr:nth-child(4) td:nth-child(3) a");
 await time("append1k", async () => { await op("#run"); }, "#add", 5);

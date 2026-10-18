@@ -1,7 +1,7 @@
 # LeanUI: design and contracts
 
 LeanUI is a UI framework for Lean 4. An app is a pure Elm-architecture `Program` written in Lean;
-it compiles to **single-threaded wasm64** (Memory64, no `-pthread`, mimalloc) and drives the
+it compiles to **single-threaded wasm64** (Memory64, no `-pthread`, dlmalloc) and drives the
 browser DOM through a binary command protocol, or runs natively on a Lean server that renders
 the same view to HTML and can drive the page remotely. This file is the contract every part of
 the codebase is built against. It was written on 2026-10-18 from the research in

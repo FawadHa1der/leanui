@@ -250,7 +250,7 @@
     /** In-page wasm when the browser supports it, the server otherwise. */
     boot(opts) { return supported() || !opts.session ? LeanUI.start(opts) : Promise.resolve(LeanUI.connect(opts)); },
     // called by the wasm module (runtime/leanui_wasm.c) once per update
-    __flush(heap, ops, opsLen, strs, strsLen) { LeanUI.active.apply(heap, ops, opsLen, strs, strsLen); },
+    __flush(heap, ops, opsLen, strs, strsLen) { const rt = LeanUI.active; rt.stats.heapBytes = heap.byteLength; rt.apply(heap, ops, opsLen, strs, strsLen); },
     Runtime,
   };
   global.LeanUI = LeanUI;

@@ -1,7 +1,14 @@
 #!/bin/bash
 # Build a LeanUI app to dist/<name>/: Lean -> C (native lake), then C -> wasm64 in the emsdk image,
-# linked against the single-threaded archives (toolchain/build-archives.sh) with mimalloc.
+# linked against the single-threaded archives (toolchain/build-archives.sh).
 #   tools/build-app.sh <Module> [name] [--debug]     e.g.  tools/build-app.sh Examples.Counter counter
+# --debug keeps function names (--profiling-funcs) for profilers. Environment:
+#   LEANUI_PAGE            page template (default examples/<name>.html, else a minimal page)
+#   LEANUI_MALLOC          emscripten allocator (default dlmalloc: same speed within noise as
+#                          mimalloc here, half the linear memory; see docs/BENCHMARKS.md)
+#   LEANUI_INITIAL_MEMORY  initial linear memory in bytes (default 16 MiB; it grows on demand)
+#   LEANUI_FS              extra filesystem flag, e.g. -sFILESYSTEM=0 (default: keep the FS layer)
+#   LEANUI_TOOLCHAIN       where the wasm64 archives live (default .toolchain)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MOD="$1"; NAME="${2:-$(echo "$MOD" | tr '.' '-' | tr 'A-Z' 'a-z')}"; MODE="${3:-}"
@@ -41,16 +48,17 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
   rm -f \$W/libleanui.a && emar rcs \$W/libleanui.a \$(cat \$W/fw.objs)
   emcc $OPT $CG $DBG \$W/obj/shim.o \$W/obj/init.o \$(cat \$W/app.objs) \$W/libleanui.a \
     /tc/wasm64/lib/libStd.a /tc/wasm64/lib/libInit.a /tc/wasm64/lib/libleanrt.a /tc/wasm64/lib/libuv.a \
-    -sMALLOC=mimalloc -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16777216 -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
+    -sMALLOC=${LEANUI_MALLOC:-dlmalloc} -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=${LEANUI_INITIAL_MEMORY:-16777216} -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
     -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
     -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=stringToNewUTF8 \
     -o /proj/dist/$NAME/app.js
 " 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
 cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"
-if [ -f "$ROOT/examples/$NAME.html" ]; then cp "$ROOT/examples/$NAME.html" "$OUT/index.html"; else
+PAGE="${LEANUI_PAGE:-$ROOT/examples/$NAME.html}"
+if [ -f "$PAGE" ]; then cp "$PAGE" "$OUT/index.html"; else
 cat > "$OUT/index.html" <<HTML
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$NAME · LeanUI</title></head>
-<body><div id="app"></div><script src="leanui.js"></script><script>LeanUI.start({ glue: "app.js", selector: "#app" }).then((rt) => { window.__leanui = rt; console.log("LeanUI ready in", rt.bootMs.toFixed(1), "ms"); }, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });</script></body></html>
+<body><div id="app"></div><script src="leanui.js"></script><script>LeanUI.start({ glue: "app.js", selector: "#app" }).then((rt) => { window.__leanui = rt; window.__ready = performance.now(); console.log("LeanUI ready in", rt.bootMs.toFixed(1), "ms"); }, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });</script></body></html>
 HTML
 fi
 node -e '

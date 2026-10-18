@@ -104,7 +104,8 @@ private def setOne (h : UInt32) : Attr Msg → DiffM Msg Unit
 attributes are already in the server-rendered HTML, so only properties and listeners are sent. -/
 def mountAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
   let hydrating := (← get).hydrating
-  let mut ls := Array.mkEmpty 2
+  -- most elements have no listener: they share the one empty array
+  let mut ls := #[]
   for a in attrs do
     match a with
     | .on ev hd =>
@@ -315,7 +316,7 @@ partial def mount (v : Html Msg) : DiffM Msg (Node Msg) := do
     let hydrating := (← get).hydrating
     if !hydrating then emit (·.createElement h ns tag)
     let ls ← mountAttrs h attrs
-    let mut ks := Array.mkEmpty kids.size
+    let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
     for k in kids do
       let n ← mount k
       if !hydrating then emit (·.appendChild h n.handle)

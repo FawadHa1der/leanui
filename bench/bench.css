@@ -1,0 +1,19 @@
+/* Shared by every benchmarked implementation, so layout and paint costs are identical.
+   A small stand-in for the Bootstrap 3 rules js-framework-benchmark loads. */
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; margin: 0; padding: 16px; color: #333; background: #fff; }
+.container { max-width: 1170px; margin: 0 auto; }
+.jumbotron { padding: 16px 24px; background: #eee; margin-bottom: 16px; border-radius: 6px; }
+.jumbotron h1 { font-size: 28px; margin: 8px 0; }
+.row { display: flex; flex-wrap: wrap; }
+.col-md-6, .col-sm-6 { flex: 0 0 50%; box-sizing: border-box; }
+.smallpad { padding: 4px; }
+.btn { display: block; width: 100%; padding: 6px 12px; font: inherit; border: 1px solid #2e6da4; background: #337ab7; color: #fff; border-radius: 4px; cursor: pointer; }
+.table { width: 100%; border-collapse: collapse; }
+.table td { padding: 8px; line-height: 1.4; border-top: 1px solid #ddd; vertical-align: top; }
+.table-striped tbody tr:nth-of-type(odd) { background: #f9f9f9; }
+.table-hover tbody tr:hover { background: #f5f5f5; }
+.table tr.danger, .table-striped tbody tr.danger { background: #f2dede; }
+.col-md-1 { width: 8.33%; } .col-md-4 { width: 33.33%; }
+a { color: #337ab7; cursor: pointer; text-decoration: none; }
+.glyphicon-remove::before { content: "\00d7"; }
+.preloadicon { display: none; }
