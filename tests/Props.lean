@@ -17,6 +17,7 @@ Suites (all deterministic from `--seed`):
   diff      random views + random edit sequences through `DiffM`, every invariant after every step
   chaos     the same with duplicate attributes and listeners on one element
   app       end to end through `Testing.Harness`: `start`, events, `stepMsgs`, flush; routing by firing
+  effects   commands and subscriptions: timers == subscriptions, one-shot and persistent callbacks
   ssr       `Html.render` parsed back: node count, kinds, tags, texts, attributes; hazard lint
   hydrate   SSR → DOM model → `initState` with hydrate = true → invariants → random patches
   lazy      exact lazy-thunk counts in targeted scenarios
@@ -25,6 +26,7 @@ Suites (all deterministic from `--seed`):
   keyed     long keyed lists (up to 300 rows) under random reorders: exactly minimal DOM inserts
   known     open issues asserted as they are (XFAIL) and reported when they change (XPASS)
   profile   what a no-change re-render of 10k rows costs, by row shape
+  depth     views nested 1k..100k levels deep (--depth N for one depth, e.g. under `ulimit -s`)
   scale     mount/patch timing for 1k..32k keyed rows, command counts, growth exponents
   corpus    (with --corpus DIR) write sessions for tests/browser/fuzz.mjs
 -/
@@ -36,6 +38,8 @@ structure Opts where
   only : List String := []
   corpus : Option String := none
   verbose : Bool := false
+  /-- `depth` suite: one depth only. -/
+  depth : Option Nat := none
 
 partial def parseArgs : List String → Opts → Opts
   | "--seed" :: s :: rest, o => parseArgs rest { o with seed := (s.toNat?.getD 0).toUInt64 }
@@ -44,6 +48,7 @@ partial def parseArgs : List String → Opts → Opts
   | "--only" :: s :: rest, o => parseArgs rest { o with only := o.only ++ s.splitOn "," }
   | "--corpus" :: d :: rest, o => parseArgs rest { o with corpus := some d, only := o.only }
   | "--verbose" :: rest, o => parseArgs rest { o with verbose := true }
+  | "--depth" :: d :: rest, o => parseArgs rest { o with depth := d.toNat? }
   | _ :: rest, o => parseArgs rest o
   | [], o => o
 
@@ -290,6 +295,146 @@ def appSuite (o : Opts) : IO Outcome := do
       if failed ≤ 3 then IO.println s!"  FAIL app case {i}{if wrap then " (Html.map)" else ""}{if hydrate then " (hydrated)" else ""}: {f[0]!}"
   return { name := "app", ok := failed == 0,
            line := s!"{cases} programs × 13 views (half through Html.map, half hydrated by start), {fired} events fired and observed in the DOM; {failed} failing" }
+
+/-! ## effects: commands and subscriptions (App.execCmd, App.syncSubs) -/
+
+structure EModel where
+  subs : Array Nat := #[]
+  ver : Nat := 0
+  last : String := ""
+  sent : Nat := 0
+
+def csv (s : String) : Array Nat := ((s.splitOn ",").filterMap String.toNat?).toArray
+
+/-- A program whose subscriptions and commands are driven by control messages:
+`subs:<ms,…>` sets the intervals wanted, `after:<ms>` starts a timeout, `send:<n>` sends a chain
+of `n` messages before rendering, `get:<key>` reads storage; anything else is shown. -/
+def effProgram : Program EModel String where
+  init _ := ({}, .none)
+  update m s :=
+    if m.startsWith "subs:" then ({ s with subs := csv (m.drop 5).toString, ver := s.ver + 1 }, .none)
+    else if m.startsWith "after:" then
+      let ms := ((m.drop 6).toString.toNat?).getD 0
+      (s, .after ms s!"fired:{ms}:{s.ver}")
+    else if m.startsWith "send:" then
+      let n := ((m.drop 5).toString.toNat?).getD 0
+      if n == 0 then ({ s with last := s!"chain done after {s.sent}" }, .none)
+      else ({ s with sent := s.sent + 1 }, .send s!"send:{n - 1}")
+    else if m.startsWith "get:" then (s, .storageGet (m.drop 4).toString fun v => s!"got:{v.getD "-"}")
+    else ({ s with last := m }, .none)
+  view s := el "div" #[] #[el "button" #[.attr "id" "go", .on "click" { payload := .value, decode := some }] #[], el "pre" #[.attr "id" "last"] #[text s.last]]
+  subscriptions s := .batch (s.subs.map fun ms => .every ms s!"tick:{ms}:{s.ver}")
+
+/-- The browser's timers after replaying the effect log: interval callback → ms, timeouts. -/
+def timers (d : Dom) : Std.HashMap Nat Nat × Array (Nat × Nat) := Id.run do
+  let mut iv : Std.HashMap Nat Nat := {}
+  let mut tos : Array (Nat × Nat) := #[]
+  for e in d.effects do
+    match e.splitOn " " with
+    | ["interval", cb, ms] => iv := iv.insert (cb.toNat?.getD 0) (ms.toNat?.getD 0)
+    | ["op35", cb] => iv := iv.erase (cb.toNat?.getD 0)
+    | ["timeout", cb, ms] => tos := tos.push (cb.toNat?.getD 0, ms.toNat?.getD 0)
+    | _ => pure ()
+  return (iv, tos)
+
+def effectsSuite (o : Opts) : IO Outcome := do
+  let cases := 25 * o.factor
+  let mut fails : Array String := #[]
+  let mut actions := 0; let mut fired := 0
+  for c in [0:cases] do
+    let r ← Testing.run effProgram
+    let mut rng := Rng.ofCase (o.seed + 61) c
+    let mut wanted : Array Nat := #[]
+    let mut ver := 0
+    let mut last := ""
+    -- timeouts started and not fired yet: callback → expected message
+    let mut seenTimeouts := 0
+    let mut sentTotal := 0
+    let mut pending : Array (Nat × String) := #[]
+    let readLast : IO String := do
+      let d ← r.dom.get
+      let pre := (d.get (← r.root)).kids[1]!
+      return (d.get ((d.get pre).kids[0]!)).text
+    let go (m : String) : IO Unit := do r.fire (← r.find "id" "go") "click" m
+    try
+      for k in [0:30] do
+        let ((act, arg), r') := (do let a ← below 10; let x ← below 6; pure (a, x)).run' rng
+        rng := r'
+        actions := actions + 1
+        if act < 4 then
+          -- a new wanted set: keep some, add some (ms values from a small pool, duplicates allowed)
+          let ((ws, _), r') := (do
+              let n ← below 5
+              let mut ws := #[]
+              for _ in [0:n] do ws := ws.push (100 * (1 + (← below 6)))
+              pure (ws, ())).run' rng
+          rng := r'
+          go s!"subs:{",".intercalate (ws.toList.map toString)}"
+          wanted := ws; ver := ver + 1
+        else if act < 6 then
+          let ms := 10 * (arg + 1)
+          go s!"after:{ms}"
+          let d ← r.dom.get
+          let (_, tos) := timers d
+          if tos.size != seenTimeouts + 1 then fails := fails.push s!"case {c} step {k}: after:{ms} started {tos.size - seenTimeouts} timeouts"
+          seenTimeouts := tos.size
+          if let some (cb, m) := tos.back? then
+            if m != ms then fails := fails.push s!"case {c} step {k}: timeout {cb} for {m} ms, wanted {ms}"
+            pending := pending.push (cb, s!"fired:{ms}:{ver}")
+        else if act < 7 && !pending.isEmpty then
+          -- fire a pending timeout once (its message), then again (nothing: freed)
+          let (cb, msg) := pending[arg % pending.size]!
+          pending := pending.filter (·.1 != cb)
+          r.inst.callback cb.toUInt32 true ""
+          fired := fired + 1
+          last := msg
+          if (← readLast) != last then fails := fails.push s!"case {c} step {k}: timeout {cb} shows {(← readLast).quote}, expected {last.quote}"
+          r.inst.callback cb.toUInt32 true ""
+          if (← readLast) != last then fails := fails.push s!"case {c} step {k}: a fired timeout {cb} fired again"
+        else if act < 8 then
+          -- `send` chains run before one render (and are bounded by the runtime's fuel)
+          let n := arg * 3
+          go s!"send:{n}"
+          sentTotal := sentTotal + n
+          last := s!"chain done after {sentTotal}"
+          let shown ← readLast
+          if shown != last then fails := fails.push s!"case {c} step {k}: send chain of {n} shows {shown.quote}, expected {last.quote}"
+        else
+          -- storage reads answer through a one-shot callback
+          go s!"get:key{arg}"
+          let d ← r.dom.get
+          match d.effects.back? with
+          | some e =>
+            match e.splitOn " " with
+            | ["storageGet", cbs, key] =>
+              let cb := ((cbs.drop 3).toString.toNat?).getD 0
+              if key != s!"key{arg}" then fails := fails.push s!"case {c} step {k}: storageGet for {key}"
+              r.inst.callback cb.toUInt32 (arg % 2 == 0) "v"
+              fired := fired + 1
+              last := if arg % 2 == 0 then "got:v" else "got:-"
+              if (← readLast) != last then fails := fails.push s!"case {c} step {k}: storage callback shows {(← readLast).quote}, expected {last.quote}"
+            | _ => fails := fails.push s!"case {c} step {k}: no storageGet effect ({e})"
+          | none => fails := fails.push s!"case {c} step {k}: no effect"
+        -- the browser's intervals are exactly the wanted set, and each routes to the newest message
+        let d ← r.dom.get
+        let (iv, _) := timers d
+        let active := (iv.toList.map (·.2)).toArray.qsort (· < ·)
+        let want := (wanted.foldl (fun (acc : Array Nat) x => if acc.contains x then acc else acc.push x) #[]).qsort (· < ·)
+        if active != want then fails := fails.push s!"case {c} step {k}: intervals {active}, wanted {want}"
+        for (cb, ms) in iv.toList do
+          if pending.any (·.1 == cb) then fails := fails.push s!"case {c} step {k}: callback {cb} is both an interval and a pending timeout"
+          r.inst.callback cb.toUInt32 true ""
+          fired := fired + 1
+          last := s!"tick:{ms}:{ver}"
+          let shown ← readLast
+          if shown != last then fails := fails.push s!"case {c} step {k}: interval {cb} ({ms} ms) shows {shown.quote}, expected {last.quote}"
+        r.check (effProgram.view { last }) s!"effects case {c} step {k}"
+        if !fails.isEmpty then break
+    catch e => fails := fails.push s!"case {c}: {e}"
+    if !fails.isEmpty then break
+  for f in fails.toList.take 3 do IO.println s!"  FAIL {f}"
+  return { name := "effects", ok := fails.isEmpty,
+           line := s!"{cases} programs × 30 random actions ({actions} in all): intervals == subscriptions after every step, {fired} callbacks fired and routed (timeouts once, intervals to the newest message, storage)" }
 
 /-! ## ssr: the render → parse round trip and the hazard lint -/
 
@@ -776,6 +921,31 @@ def knownSuite (_ : Opts) : IO Outcome := do
   for l in lines do IO.println s!"  {l}"
   return { name := "known", ok := true, line := s!"{lines.size} open issues tracked ({(lines.filter (·.startsWith "XPASS")).size} now pass)" }
 
+/-! ## depth: deeply nested views (every engine pass recurses once per level) -/
+
+/-- `d` nested elements with a text at the bottom; `label` changes only the text. -/
+def chain (d : Nat) (label : String) : Html String := Id.run do
+  let mut v : Html String := text label
+  for i in [0:d] do v := el (if i % 2 == 0 then "div" else "span") #[Attr.cls "c"] #[v]
+  return v
+
+/-- Mount, patch (deepest text changes), SSR render, replace (release) at increasing depths.
+`--depth N` runs one depth only (for probing stack limits with `ulimit -s`). -/
+def depthSuite (o : Opts) : IO Outcome := do
+  let depths := match o.depth with | some d => #[d] | none => #[1000, 10000, 100000]
+  for d in depths do
+    let t0 ← nowMs
+    let (n, st) ← IO.lazyPure fun _ => (do let n ← mount (chain d "a"); emit (·.mount "#app" n.handle); pure n).run ({} : DiffState String)
+    let t1 ← nowMs
+    let (n, st) ← IO.lazyPure fun _ => (patch 0 n (chain d "b")).run { st with buf := st.buf.reset }
+    let t2 ← nowMs
+    let html ← IO.lazyPure fun _ => (chain d "c").render
+    let t3 ← nowMs
+    let (_, st) ← IO.lazyPure fun _ => (patch 0 n (text "gone")).run { st with buf := st.buf.reset }
+    let t4 ← nowMs
+    IO.println s!"  depth {lpad (toString d) 7}: mount {fmt (t1 - t0) 1} ms, patch {fmt (t2 - t1) 1} ms ({st.buf.ops.size / 4} words after release), render {fmt (t3 - t2) 1} ms ({html.utf8ByteSize / 1024} KiB), release {fmt (t4 - t3) 1} ms"
+  return { name := "depth", ok := true, line := s!"nesting up to {depths.back!} levels mounted, patched, rendered and released" }
+
 /-! ## corpus: sessions for the browser -/
 
 def corpusSuite (o : Opts) (dir : String) : IO Outcome := do
@@ -827,6 +997,7 @@ def main (args : List String) : IO UInt32 := do
     ("diff", diffSuite o "diff" {} (250 * o.factor) 25),
     ("chaos", diffSuite o "chaos" Config.chaos (100 * o.factor) 25),
     ("app", appSuite o),
+    ("effects", effectsSuite o),
     ("ssr", ssrSuite o),
     ("hydrate", diffSuite o "hydrate" {} (100 * o.factor) 15 (hydrate := true)),
     ("lazy", lazySuite o),
@@ -835,6 +1006,7 @@ def main (args : List String) : IO UInt32 := do
     ("keyed", keyedSuite o),
     ("known", knownSuite o),
     ("profile", profileSuite o),
+    ("depth", depthSuite o),
     ("scale", scaleSuite o)]
   let mut outcomes := #[]
   let total0 ← nowMs
