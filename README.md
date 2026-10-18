@@ -149,3 +149,7 @@ node tests/browser/bench.mjs              # the benchmark (Chromium traces); sel
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): performance, memory, startup, method
 - [docs/SERVER.md](docs/SERVER.md): the native server, server rendering, server-driven sessions
 - [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md): the wasm64 toolchain
+
+## License
+
+MIT, see [LICENSE](LICENSE).
