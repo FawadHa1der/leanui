@@ -2,6 +2,7 @@ module
 public import LeanUI.Html
 public import LeanUI.Patch
 public import LeanUI.Keyed
+public import Std.Data.HashSet
 /-!
 # Mounting and diffing
 
@@ -46,6 +47,15 @@ def size : Node Msg → Nat
 @[inline] def sizeOf (kids : Array (Node Msg)) : Nat := kids.foldl (fun n k => n + k.size) 1
 end Node
 
+/-- What a template fixes about a subtree (`docs/PROTOCOL.md`, template cloning): namespaces and
+tags, each element's attributes (names and values, in order) and property names (in order), and
+the tree's structure. A text is a text whatever its content; the template's own texts are kept,
+so a clone only re-sends the texts that differ. Listeners and keys are not part of a shape. -/
+inductive TplShape where
+  | text (s : String)
+  | elem (ns : Ns) (tag : String) (attrs : Array (String × String)) (props : Array String) (kids : Array TplShape)
+  deriving Inhabited
+
 structure DiffState (Msg : Type) where
   buf : Buf := {}
   nextNode : UInt32 := 1
@@ -55,6 +65,15 @@ structure DiffState (Msg : Type) where
   freeSlots : Array UInt32 := #[]
   /-- While hydrating, `mount` claims existing DOM nodes in pre-order instead of creating them. -/
   hydrating : Bool := false
+  /-- Create repeated subtrees by cloning a template (`mountShape`). Off: every node is created
+  by its own commands (the tests compare both). -/
+  templates : Bool := true
+  /-- Hashes of shapes seen once (cleared when it reaches `tplSeenLimit`). -/
+  tplSeen : Std.HashSet UInt64 := {}
+  /-- Shape hash → template id. -/
+  tplIds : Std.HashMap UInt64 UInt32 := {}
+  /-- The shape of template `i + 1`. -/
+  tplShapes : Array TplShape := #[]
 
 abbrev DiffM (Msg : Type) := StateM (DiffState Msg)
 
@@ -331,6 +350,204 @@ private def keyIs (n : Node Msg) (v : Html Msg) : Bool :=
 private partial def keysAligned (old : Array (Node Msg)) (new : Array (Html Msg)) (i : Nat) : Bool :=
   if i < old.size && i < new.size then keyIs old[i]! new[i]! && keysAligned old new (i + 1) else true
 
+/-! ## Templates
+
+Most created DOM comes from lists whose rows share one shape. The second time a subtree of a
+shape is mounted, its finished DOM becomes a template (`TEMPLATE`); later subtrees of that shape
+are created with one `CLONE` (one `cloneNode(true)` in the browser) plus what differs from a
+fresh mount: the texts that differ from the template's, every property and every listener.
+Hashing and matching walk the view without allocating; a stored `TplShape` is compared exactly, so
+a hash collision never clones the wrong thing.
+
+Policy: element subtrees of `tplMin`..`tplMax` DOM nodes, without `lazy` nodes (mounting would
+force them) and without properties on elements that have children (mount sets properties before
+the children exist, a clone after: `select.value`, `textContent`), never while hydrating, at most
+`tplLimit` templates per session. Candidates are the children `patchKids` mounts and the
+children of elements with at least two (a chain of single children is never hashed, so mounting
+a deep chain stays linear). -/
+
+def tplMin : Nat := 4
+def tplMax : Nat := 64
+def tplLimit : Nat := 256
+def tplSeenLimit : Nat := 4096
+
+mutual
+/-- Fuel left after counting the DOM nodes of `v` (void elements get no children); 0 when that
+takes more than `f`, or when `v` holds a lazy node. -/
+partial def shapeFuel (f : Nat) (v : Html Msg) : Nat :=
+  if f == 0 then 0 else
+  match v with
+  | .text _ => f - 1
+  | .elem _ tag _ kids => kidsFuel (f - 1) (effectiveKids tag kids) 0
+  | .lazy .. => 0
+
+partial def kidsFuel (f : Nat) (ks : Array (Html Msg)) (i : Nat) : Nat :=
+  if f == 0 then 0 else if h : i < ks.size then kidsFuel (shapeFuel f ks[i]) ks (i + 1) else f
+end
+
+@[inline] private def mixStr (h : UInt64) (s : String) : UInt64 := mixHash h (hash s)
+
+private def attrsHash (h : UInt64) (attrs : Array (Attr Msg)) (i : Nat := 0) : UInt64 :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .attr n v => attrsHash (mixStr (mixStr (mixHash h 3) n) v) attrs (i + 1)
+    | .prop n _ => attrsHash (mixStr (mixHash h 5) n) attrs (i + 1)
+    | _ => attrsHash h attrs (i + 1)
+  else h
+termination_by attrs.size - i
+
+private def hasProp (attrs : Array (Attr Msg)) (i : Nat := 0) : Bool :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .prop .. => true
+    | _ => hasProp attrs (i + 1)
+  else false
+termination_by attrs.size - i
+
+mutual
+/-- The shape hash of a view (no allocation); 0: not templatable (a lazy node, or a property on an
+element with children). -/
+partial def shapeHash (h : UInt64) (v : Html Msg) : UInt64 :=
+  match v with
+  | .text _ => mixHash h 1
+  | .elem ns tag attrs kids =>
+    let kids := effectiveKids tag kids
+    if !kids.isEmpty && hasProp attrs then 0
+    else kidsHash (mixHash (attrsHash (mixStr (mixHash h (2 + ns.code.toUInt64)) tag) attrs) kids.size.toUInt64) kids 0
+  | .lazy .. => 0
+
+partial def kidsHash (h : UInt64) (ks : Array (Html Msg)) (i : Nat) : UInt64 :=
+  if h == 0 then 0 else if hi : i < ks.size then kidsHash (shapeHash h ks[i]) ks (i + 1) else h
+end
+
+/-- Do the attributes of a view element match a shape's attribute pairs and property names (in
+order; listeners and keys are skipped)? No allocation. -/
+private def attrsMatch (as : Array (String × String)) (ps : Array String) (attrs : Array (Attr Msg))
+    (i ai pi : Nat) : Bool :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .attr n v =>
+      if ha : ai < as.size then as[ai].1 == n && as[ai].2 == v && attrsMatch as ps attrs (i + 1) (ai + 1) pi
+      else false
+    | .prop n _ =>
+      if hp : pi < ps.size then ps[pi] == n && attrsMatch as ps attrs (i + 1) ai (pi + 1) else false
+    | _ => attrsMatch as ps attrs (i + 1) ai pi
+  else ai == as.size && pi == ps.size
+termination_by attrs.size - i
+
+mutual
+/-- Does view `v` have shape `sh` (texts aside)? Exact, without allocating. -/
+partial def TplShape.matches (sh : TplShape) (v : Html Msg) : Bool :=
+  match sh, v with
+  | .text _, .text _ => true
+  | .elem ns tag as ps ks, .elem ns' tag' attrs kids =>
+    ns == ns' && tag == tag' && attrsMatch as ps attrs 0 0 0 &&
+      (let kids := effectiveKids tag kids; ks.size == kids.size && TplShape.kidsMatch ks kids 0)
+  | _, _ => false
+
+partial def TplShape.kidsMatch (ks : Array TplShape) (vs : Array (Html Msg)) (i : Nat) : Bool :=
+  if i < ks.size then ks[i]!.matches vs[i]! && TplShape.kidsMatch ks vs (i + 1) else true
+end
+
+/-- The shape of a (templatable, so lazy-free) view. -/
+partial def TplShape.ofHtml : Html Msg → TplShape
+  | .text s => .text s
+  | .elem ns tag attrs kids =>
+    .elem ns tag (attrs.filterMap fun | .attr n v => some (n, v) | _ => none)
+      (attrs.filterMap fun | .prop n _ => some n | _ => none) ((effectiveKids tag kids).map TplShape.ofHtml)
+  | .lazy .. => .text ""
+
+/-- The handles of a mounted subtree in pre-order. -/
+partial def Node.handlesInto (acc : Array UInt32) : Node Msg → Array UInt32
+  | .text h _ => acc.push h
+  | .elem h _ _ _ _ _ kids _ => kids.foldl Node.handlesInto (acc.push h)
+  | .lazy _ _ n => n.handlesInto acc
+
+/-- What `mountShape` does with a templatable subtree: `0` mount it, `tplMake` mount it and keep
+it as a template, any other value: clone that template. -/
+def tplMake : UInt32 := 0xFFFFFFFF
+
+private def tplAction (h : UInt64) (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
+  let tid := s.tplIds.getD h 0
+  if tid != 0 then (if s.tplShapes[tid.toNat - 1]!.matches v then tid else 0, s)
+  else if s.tplSeen.contains h then (if s.tplShapes.size < tplLimit then tplMake else 0, s)
+  else
+    let seen := if s.tplSeen.size ≥ tplSeenLimit then {} else s.tplSeen
+    (0, { s with tplSeen := seen.insert h })
+
+private def addTemplate (h : UInt64) (sh : TplShape) : DiffM Msg UInt32 := modifyGet fun s =>
+  let tid := (s.tplShapes.size + 1).toUInt32
+  (tid, { s with tplShapes := s.tplShapes.push sh, tplIds := s.tplIds.insert h tid, tplSeen := s.tplSeen.erase h })
+
+@[inline] private def templatesOn : DiffM Msg Bool := modifyGet fun s => (s.templates && !s.hydrating, s)
+
+private def allocLoop (s : DiffState Msg) (hs : Array UInt32) : Nat → Array UInt32 × DiffState Msg
+  | 0 => (hs, s)
+  | n + 1 =>
+    -- read the handle before the update, so the free list is popped in place (not copied)
+    if s.freeNodes.isEmpty then
+      let h := s.nextNode
+      allocLoop { s with nextNode := h + 1 } (hs.push h) n
+    else
+      let h := s.freeNodes.back!
+      allocLoop { s with freeNodes := s.freeNodes.pop } (hs.push h) n
+
+/-- `n` handles, in the order `n` calls of `allocNode` would return them (never while hydrating). -/
+def allocNodes (n : Nat) : DiffM Msg (Array UInt32) := modifyGet fun s => allocLoop s (Array.mkEmpty n) n
+
+/-- The commands a cloned element still needs: every property (a fresh mount sets them all),
+every listener (listeners are never cloned), and the attributes that follow a property in the
+view (re-sent: a property can reflect onto an attribute, and mount sets them in view order). -/
+def cloneAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
+  let mut ls := #[]
+  let mut afterProp := false
+  for a in attrs do
+    match a with
+    | .on ev hd =>
+      match ls.find? (·.1 == ev) with
+      | some (_, sl) =>
+        setSlot sl hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+      | none =>
+        let sl ← allocSlot hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+        ls := ls.push (ev, sl)
+    | .attr n v => if afterProp then emit (·.setAttr h n v)
+    | .prop n v => afterProp := true; emit (·.setProp h n v)
+    | .key _ => pure ()
+  return ls
+
+/-- Finish a clone of a template with shape `sh`: node `i` of the clone (pre-order) is `hs[i]`.
+Returns the mounted node `mount` would have built, with the same handles and slots. -/
+partial def cloneWalk (hs : Array UInt32) (sh : TplShape) (v : Html Msg) (i : Nat) : DiffM Msg (Node Msg) := do
+  let h := hs[i]!
+  match v, sh with
+  | .text s, .text t =>
+    if s != t then emit (·.setText h s)
+    return .text h s
+  | .elem ns tag attrs kids, .elem _ _ _ _ sks =>
+    let kids := effectiveKids tag kids
+    let ls ← cloneAttrs h attrs
+    let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
+    let mut j := i + 1
+    for k in [0:kids.size] do
+      let n ← cloneWalk hs sks[k]! kids[k]! j
+      j := j + n.size
+      ks := ks.push n
+    return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
+  | _, _ => return .text h ""  -- unreachable: `v` matches `sh`
+
+/-- Insert the mounted nodes `ns[lo:hi]`, in order, into `parent` before `ref` (0: append), with
+one command. -/
+def insertRun (parent ref : UInt32) (ns : Array (Node Msg)) (lo hi : Nat) : DiffM Msg Unit :=
+  if hi ≤ lo then pure ()
+  else if hi == lo + 1 then
+    let c := ns[lo]!.handle
+    emit fun b => if ref == 0 then b.appendChild parent c else b.insertBefore parent c ref
+  else
+    let hs := (ns.extract lo hi).map (·.handle)
+    emit (·.insertMany parent ref hs 0 hs.size)
+
 /-! ## Trees -/
 
 /-- True if every node has a key and the keys are pairwise distinct. -/
@@ -345,26 +562,60 @@ private def uniqueKeys (ks : Array (Option String)) : Bool := Id.run do
 mutual
 
 /-- Build a view: allocate handles in pre-order, emit the commands (none while hydrating, where
-the nodes already exist), and return the mounted node. -/
-partial def mount (v : Html Msg) : DiffM Msg (Node Msg) := do
+the nodes already exist), and return the mounted node. With `tpl`, an element subtree may be
+created from a template (`mountShape`); the result is the same either way. -/
+partial def mount (v : Html Msg) (tpl : Bool := false) : DiffM Msg (Node Msg) := do
   match v with
   | .text s =>
     let h ← allocNode
     if !(← get).hydrating then emit (·.createText h s)
     return .text h s
   | .elem ns tag attrs kids =>
-    let kids := effectiveKids tag kids
-    let h ← allocNode
-    let hydrating := (← get).hydrating
-    if !hydrating then emit (·.createElement h ns tag)
-    let ls ← mountAttrs h attrs
-    let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
-    for k in kids do
-      let n ← mount k
-      if !hydrating then emit (·.appendChild h n.handle)
-      ks := ks.push n
-    return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
-  | .lazy k deps r => return .lazy k deps (← mount (r ()))
+    if tpl && (← templatesOn) then
+      let left := shapeFuel (tplMax + 1) v
+      if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
+    mountElem ns tag attrs kids true
+  | .lazy k deps r => return .lazy k deps (← mount (r ()) tpl)
+
+/-- Mount an element node by node. With `tplKids`, the children of an element with at least two
+are template candidates. -/
+partial def mountElem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids : Array (Html Msg))
+    (tplKids : Bool) : DiffM Msg (Node Msg) := do
+  let kids := effectiveKids tag kids
+  let h ← allocNode
+  let hydrating := (← get).hydrating
+  if !hydrating then emit (·.createElement h ns tag)
+  let ls ← mountAttrs h attrs
+  let tk := tplKids && kids.size ≥ 2
+  let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
+  for k in kids do
+    let n ← mount k tk
+    if !hydrating then emit (·.appendChild h n.handle)
+    ks := ks.push n
+  return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
+
+/-- Mount an element subtree of `size` (`tplMin`..`tplMax`) nodes: clone its shape's template if
+there is one, make it the template the second time its shape is seen (`TEMPLATE` right after the
+subtree is complete, before its parent takes it), else mount it node by node. Inside a
+candidate, children are not candidates themselves. -/
+partial def mountShape (v : Html Msg) (size : Nat) : DiffM Msg (Node Msg) := do
+  match v with
+  | .elem ns tag attrs kids =>
+    let h := shapeHash 7 v
+    if h == 0 then return ← mountElem ns tag attrs kids true
+    let act ← tplAction h v
+    if act == 0 then mountElem ns tag attrs kids false
+    else if act == tplMake then
+      let n ← mountElem ns tag attrs kids false
+      let tid ← addTemplate h (TplShape.ofHtml v)
+      emit (·.template tid (n.handlesInto #[]))
+      return n
+    else
+      let hs ← allocNodes size
+      emit (·.clone act hs)
+      let sh ← modifyGet fun s => (s.tplShapes[act.toNat - 1]!, s)
+      cloneWalk hs sh v 0
+  | _ => mount v
 
 /-- Update `old` (a child of `parent`) to show `new`; returns the updated mounted node. -/
 partial def patch (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) :=
@@ -401,7 +652,7 @@ partial def patchNode (parent : UInt32) (old : Node Msg) (new : Html Msg) : Diff
   | _, _ => return (← replaceNode old new, true)
 
 partial def replaceNode (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) := do
-  let n ← mount new
+  let n ← mount new true
   emit (·.replace old.handle n.handle)
   release old
   return n
@@ -449,18 +700,29 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
     for j in p.removed do
       emit (·.remove oldMid[j]!.handle)
       release oldMid[j]!
-    -- right to left, so the anchor (the node after i) is already final
+    -- right to left, so the anchor (the node after a child) is already final. Consecutive
+    -- children that move (or are new) go before one anchor: each run is inserted with one
+    -- command, once its leftmost child is known: `out[pre + i, pre + runEnd)`.
     let mut i := newMid.size
+    let mut runEnd := 0
+    let mut inRun := false
     while i > 0 do
       i := i - 1
       let n ← match p.src[i]! with
         | some j => patch parent oldMid[j]! newMid[i]!
-        | none => mount newMid[i]!
+        | none => mount newMid[i]! true
       out := out.set! (pre + i) n
       if p.move[i]! then
-        let nxt := pre + i + 1
-        if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
-        else emit (·.appendChild parent n.handle)
+        if !inRun then
+          inRun := true
+          runEnd := i + 1
+      else if inRun then
+        inRun := false
+        let nxt := pre + runEnd
+        insertRun parent (if nxt < new.size then out[nxt]!.handle else 0) out (pre + i + 1) nxt
+    if inRun then
+      let nxt := pre + runEnd
+      insertRun parent (if nxt < new.size then out[nxt]!.handle else 0) out pre nxt
     return (out, true)
   if old.size == new.size then return (← patchSame parent old new)
   -- positional, different lengths
@@ -469,9 +731,8 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
   for i in [0:common] do
     out := out.push (← patch parent old[i]! new[i]!)
   for i in [common:new.size] do
-    let n ← mount new[i]!
-    emit (·.appendChild parent n.handle)
-    out := out.push n
+    out := out.push (← mount new[i]! true)
+  insertRun parent 0 out common new.size
   for i in [common:old.size] do
     emit (·.remove old[i]!.handle)
     release old[i]!

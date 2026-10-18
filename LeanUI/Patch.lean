@@ -141,3 +141,37 @@ def encode (b : Buf) : ByteArray := pushU32 ByteArray.empty b.ops.size.toUInt32 
 
 end Buf
 end LeanUI
+
+/-! ## Template cloning and batched insertion (opcodes 20–22)
+
+Commands with a variable number of operands: a count, then that many node handles. -/
+
+namespace LeanUI.Op
+def template      : UInt32 := 20  -- tid, count, h1..hcount  (snapshot the subtree h1 roots; hs = its nodes in pre-order)
+def clone         : UInt32 := 21  -- tid, count, h1..hcount  (a copy of template tid; its nodes become hs in pre-order)
+def insertMany    : UInt32 := 22  -- parent, ref (0 = append), count, h1..hcount  (one DocumentFragment insertion)
+end LeanUI.Op
+
+namespace LeanUI.Buf
+
+/-- Write `count` then the handles `hs[lo:hi]` (only through `w`, whatever `ops` is). -/
+def handles (b : Buf) (hs : Array UInt32) (lo hi : Nat) : Buf := Id.run do
+  let mut b := b.w (hi - lo).toUInt32
+  for i in [lo:hi] do b := b.w hs[i]!
+  return b
+
+/-- `TEMPLATE tid count hs`: remember a copy of the subtree rooted at `hs[0]`, whose nodes are
+`hs` in pre-order. -/
+def template (b : Buf) (tid : UInt32) (hs : Array UInt32) : Buf :=
+  (b.w Op.template |>.w tid).handles hs 0 hs.size
+
+/-- `CLONE tid count hs`: copy template `tid`; its nodes, in pre-order, become `hs`. -/
+def clone (b : Buf) (tid : UInt32) (hs : Array UInt32) : Buf :=
+  (b.w Op.clone |>.w tid).handles hs 0 hs.size
+
+/-- `INSERT_MANY parent ref count hs[lo:hi]`: insert those nodes, in order, before `ref` (a child
+of `parent`), or append them when `ref` is 0. -/
+def insertMany (b : Buf) (parent ref : UInt32) (hs : Array UInt32) (lo hi : Nat) : Buf :=
+  (b.w Op.insertMany |>.w parent |>.w ref).handles hs lo hi
+
+end LeanUI.Buf

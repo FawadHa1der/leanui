@@ -5,6 +5,7 @@ import LeanUI.Testing.Spec
 import LeanUI.Testing.Ssr
 import LeanUI.Testing.Shrink
 import LeanUI.Testing.Corpus
+import LeanUI.Testing.Pool
 open LeanUI LeanUI.Testing
 
 /-!
@@ -25,6 +26,8 @@ Suites (all deterministic from `--seed`):
   mutation  drop single commands from real buffers: how many do the invariants catch?
   shrink    the shrinker against mutant engines (it must find tiny repros)
   keyed     long keyed lists (up to 300 rows) under random reorders: exactly minimal DOM inserts
+  templates rows drawn from a small pool of shapes (template cloning): every invariant, and the same
+            DOM, handles and slots as the engine without templates
   known     open issues asserted as they are (XFAIL) and reported when they change (XPASS)
   profile   what a no-change re-render of 10k rows costs, by row shape
   depth     views nested 1k..100k levels deep, natively (--depth N for one depth; the wasm limit is
@@ -734,6 +737,7 @@ def measureRows (before : Option (Html String)) (after : Html String) (runs : Na
           match c.op with
           | .insertBefore .. => moves := moves + 1
           | .appendChild p _ => if p == 1 && creates == 0 then moves := moves + 1
+          | .insertMany _ _ hs => moves := moves + hs.size
           | .createElement .. | .createText .. => creates := creates + 1
           | .free _ => frees := frees + 1
           | _ => pure ()
@@ -772,7 +776,9 @@ def scaleSuite (o : Opts) : IO Outcome := do
         | "update every 10th row" => some (n / 10)
         | "select a row" => some 1
         | "remove one row" => some 5
-        | "append 1000 rows" => some 10000
+        -- each new row is a clone of the row template (CLONE, two texts, the listener), and
+        -- the rows go in with one INSERT_MANY
+        | "append 1000 rows" => some 4001
         | _ => none
       if let some e := expect then
         if m.commands != e then fails := fails.push s!"{name} ({n} rows): {m.commands} commands, expected {e}"
@@ -905,6 +911,7 @@ def keyedSuite (o : Opts) : IO Outcome := do
           | .ok cs => for cm in cs do
               match cm.op with
               | .insertBefore p _ _ | .appendChild p _ => if p == ul then inserts := inserts + 1
+              | .insertMany p _ hs => if p == ul then inserts := inserts + hs.size
               | _ => pure ()
           | .error e => fails := fails.push e
         let want := minimalInserts keys ks
@@ -917,6 +924,121 @@ def keyedSuite (o : Opts) : IO Outcome := do
   for f in fails.toList.take 3 do IO.println s!"  FAIL {oneLine f 200}"
   return { name := "keyed", ok := fails.isEmpty,
            line := s!"{cases} sessions × 20 random list edits ({steps} patches, lists up to {maxLen} rows): {optimal}/{keyedSteps} keyed patches use exactly the minimal number of DOM inserts ({moved} in all)" }
+
+/-! ## templates: rows that repeat a few shapes -/
+
+/-- What two runs of the engine on the same views must agree on: the DOM with listener slots,
+the handles in pre-order, the free lists. -/
+def engineState (s : Session) : String :=
+  let root := s.root
+  s!"{strictDom s.dom root (slots := true)}\n{(s.dom.preorderOf root).toList}\n{s.diff.nextNode} {s.diff.freeNodes.toList}\n{s.diff.freeSlots.toList} {s.diff.slots.size}"
+
+/-- Run the views through the engine with templates and without: every invariant after every
+step for both, and the same engine state. Returns the failures and the templated session. -/
+def runPool (views : Array T) (hydrate : Bool) : IO (Array String × Session) := do
+  let c1 ← IO.mkRef 0; let c2 ← IO.mkRef 0
+  let t0 := views[0]!
+  let (a, f1) ← if hydrate then do let (s, f, _) ← Session.hydrate c1 t0; pure (s, f)
+    else do let (s, f) ← Session.mount c1 t0; pure (s, f ++ s.check "mount")
+  -- hydration never uses templates, so the plain run may switch them off afterwards
+  let (b, f2) ← if hydrate then do
+      let (s, f, _) ← Session.hydrate c2 t0
+      pure ({ s with diff := { s.diff with templates := false } }, f)
+    else do let (s, f) ← Session.mount c2 t0 (templates := false); pure (s, f ++ s.check "mount (no templates)")
+  if !f1.isEmpty || !f2.isEmpty then return (f1 ++ f2, a)
+  if engineState a != engineState b then return (#["mount: the engine state differs with templates"], a)
+  let mut a := a; let mut b := b
+  for h : k in [1:views.size] do
+    let (a', fa) ← a.step views[k] s!"step {k}"
+    let (b', fb) ← b.step views[k] s!"step {k} (no templates)"
+    a := a'; b := b'
+    if !fa.isEmpty || !fb.isEmpty then return (fa ++ fb, a)
+    let (ea, eb) := (engineState a, engineState b)
+    if ea != eb then
+      let i := (ea.toList.zip eb.toList).findIdx (fun (x, y) => x != y)
+      return (#[s!"step {k}: the engine state differs with templates at char {i}\n  with: {(ea.drop (i - min i 60)).take 160}\n  without: {(eb.drop (i - min i 60)).take 160}"], a)
+  return (#[], a)
+
+/-- The views of templates case `i`; every fourth case is flow-only and starts hydrated. -/
+def poolViews (o : Opts) (i : Nat) (steps : Nat) : Array T × Bool :=
+  let hydrate := i % 4 == 3
+  (((Pool.session steps (flowOnly := hydrate)).run' (Rng.ofCase (o.seed + 61) i)).1, hydrate)
+
+/-- Mutation testing for the clone path: delete single TEMPLATE, CLONE and INSERT_MANY commands
+and the fix-ups after each CLONE from real buffers (at most 40 per buffer); the invariants must
+notice every deletion. Returns (deletions, caught, kinds). -/
+def poolMutations (o : Opts) : IO (Nat × Nat × Std.HashMap String (Nat × Nat)) := do
+  let mut total := 0; let mut killed := 0
+  let mut byKind : Std.HashMap String (Nat × Nat) := {}
+  for i in [0:8 * o.factor] do
+    let (views, _) := poolViews o (4 * i) 10
+    let cnt ← IO.mkRef 0
+    let (s0, _) ← Session.mount cnt views[0]!
+    let mut s := s0
+    for h : k in [1:views.size] do
+      let t := views[k]
+      let (node, diff) := (patch 0 s.node t.toHtml').run s.diff
+      let (eff, _) := (patchS s.eff t).run 0
+      let b := diff.buf
+      if let .ok cmds := Wire.decode b.ops b.strs then
+        -- the commands to delete: the new ones, and what follows a CLONE up to the next of them,
+        -- except what nothing can observe natively: a listener set twice in the buffer (a
+        -- repeated event: the last one wins, and both may be identical) and an attribute a clone
+        -- re-sends after a property (it matters only in a browser, where a property can reflect
+        -- onto it)
+        let twice (j : Nat) (h ev : UInt32) : Bool :=
+          (cmds.extract 0 j ++ cmds.extract (j + 1) cmds.size).any fun c => match c.op with
+            | .setListener h' ev' .. => h' == h && ev' == ev | _ => false
+        let mut picks : Array Nat := #[]
+        let mut afterClone := false
+        for h : j in [0:cmds.size] do
+          match cmds[j].op with
+          | .template .. | .insertMany .. => picks := picks.push j; afterClone := false
+          | .clone .. => picks := picks.push j; afterClone := true
+          | .intern .. | .setAttr .. => pure ()
+          | .setListener nd ev .. => if afterClone && !twice j nd ev then picks := picks.push j
+          | _ => if afterClone then picks := picks.push j
+        let stride := picks.size / 40 + 1
+        for h : q in [0:picks.size] do
+          if q % stride != 0 then continue
+          let j := picks[q]
+          let kd := cmds[j]!.op.name
+          let m : Session := { s with node, eff, diff := { diff with buf := { b with ops := Wire.reencode b.ops cmds (· != j) } } }
+          let caught := !((m.flush "mutant").check "mutant").isEmpty
+          total := total + 1
+          if caught then killed := killed + 1
+          let (x, y) := byKind.getD kd (0, 0)
+          byKind := byKind.insert kd (x + 1, y + (if caught then 1 else 0))
+      s := { s with node, eff, diff }.flush "step"
+  return (total, killed, byKind)
+
+def templatesSuite (o : Opts) : IO Outcome := do
+  let cases := 40 * o.factor
+  let mut failed := 0; let mut steps := 0; let mut nodes := 0
+  let mut counts : Std.HashMap String Nat := {}
+  for i in [0:cases] do
+    let (views, hydrate) := poolViews o i 30
+    let (f, s) ← runPool views hydrate
+    steps := steps + s.steps
+    nodes := nodes + views.foldl (fun n v => n + v.size) 0
+    for (k, v) in s.shadow.counts.toList do counts := counts.insert k (counts.getD k 0 + v)
+    if !f.isEmpty then
+      failed := failed + 1
+      if failed ≤ 2 then
+        IO.println s!"  FAIL templates case {i}{if hydrate then " (hydrated)" else ""}: {f[0]!}"
+        let c : Case := { t0 := views[0]!, edits := (views.extract 1 views.size).map (Edit.replace #[] ·) }
+        let m ← minimize (fun c => do return !(← runPool c.views hydrate).1.isEmpty) c
+        let (f', _) ← runPool m.views hydrate
+        IO.println s!"  minimized to {m.edits.size} steps / {m.t0.size} nodes: {f'[0]?.getD "(passes after shrinking?)"}"
+        for l in (m.toLean.splitOn "\n") do IO.println s!"    {l}"
+  let n (k : String) := counts.getD k 0
+  IO.println s!"  {n "template"} TEMPLATE, {n "clone"} CLONE, {n "insertMany"} INSERT_MANY; {n "createElement" + n "createText"} nodes created one at a time; {n "setText"} setText, {n "setListener"} setListener"
+  let (total, killed, byKind) ← poolMutations o
+  let rows := (byKind.toList.toArray.qsort (fun a b => a.2.1 > b.2.1)).toList.map fun (k, (a, z)) => s!"{k} {z}/{a}"
+  IO.println s!"  mutations (single deletions, caught/made): {", ".intercalate rows}"
+  let ok := failed == 0 && n "template" > 0 && n "clone" > 10 * n "template" && n "insertMany" > 0 && killed == total && total > 0
+  return { name := "templates", ok,
+           line := s!"{cases} sessions ({cases / 4} hydrated), {steps} patches of views with {nodes / (max steps 1)} nodes on average, compared with the engine without templates; {failed} failing; {killed}/{total} command deletions caught" }
 
 /-! ## profile: what a no-change re-render of 10k rows costs -/
 
@@ -1028,6 +1150,23 @@ def corpusSuite (o : Opts) (dir : String) : IO Outcome := do
     steps := steps + entries.size
     let html := if hyd then Corpus.json (Ssr.roundTrip c.t0).html else "null"
     lines := lines.push s!"\{\"case\":{i},\"chaos\":{i % 5 == 4},\"html\":{html},\"steps\":{Corpus.jsonArr entries}}"
+  -- rows that repeat a few shapes: TEMPLATE, CLONE and INSERT_MANY in the browser
+  for i in [0:20 * o.factor] do
+    let (views, hyd) := poolViews o i 12
+    let cnt ← IO.mkRef 0
+    let (s0, f0) ← if hyd then do let (s, f, _) ← Session.hydrate cnt views[0]! true; pure (s, f)
+      else Session.mount cnt views[0]! true
+    if !f0.isEmpty then continue
+    let mut s := s0
+    let mut entries := #[Corpus.stepJson s.dom s.log.back!]
+    for h : k in [1:views.size] do
+      let n := s.log.size
+      let (s', _) ← s.step views[k] "corpus"
+      s := s'
+      if s.log.size > n then entries := entries.push (Corpus.stepJson s.dom s.log.back!)
+    steps := steps + entries.size
+    let html := if hyd then Corpus.json (Ssr.roundTrip views[0]!).html else "null"
+    lines := lines.push s!"\{\"case\":{1000 + i},\"chaos\":false,\"html\":{html},\"steps\":{Corpus.jsonArr entries}}"
   -- parse checks: the browser's HTML parser against the parser model and the hazard lint
   let mut parses := 0
   for i in [0:400 * o.factor] do
@@ -1060,6 +1199,7 @@ def main (args : List String) : IO UInt32 := do
     ("mutation", mutationSuite o),
     ("shrink", shrinkSuite o),
     ("keyed", keyedSuite o),
+    ("templates", templatesSuite o),
     ("known", knownSuite o),
     ("profile", profileSuite o),
     ("depth", depthSuite o),

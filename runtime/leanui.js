@@ -22,6 +22,7 @@
       this.busy = false;
       this.queue = [];
       this.after = [];
+      this.tpl = [];
       this.stats = { flushes: 0, ops: 0, bytes: 0 };
     }
 
@@ -106,6 +107,9 @@
           case 17: names[w[i + 1]] = S(i + 2); i += 4; break;
           case 18: { this.setContainer(S(i + 1)); this.container.replaceChildren(N[w[i + 3]]); i += 4; break; }
           case 19: { this.setContainer(S(i + 1)); this.hydrate(w[i + 3], w[i + 4]); i += 5; break; }
+          case 20: i = this.template(w, i); break;
+          case 21: i = this.clone(w, i); break;
+          case 22: i = this.insertMany(w, i); break;
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
           case 33: { const cb = w[i + 1]; setTimeout(() => this.callback(cb, true, ""), w[i + 2]); i += 3; break; }
           case 34: { const sub = w[i + 1]; this.timers.set(sub, setInterval(() => this.callback(sub, true, ""), w[i + 2])); i += 3; break; }
@@ -152,6 +156,54 @@
       };
       walk(this.container);
       if (h - first !== count) throw new Error("LeanUI: hydration found " + (h - first) + " nodes, expected " + count + "; the server and client views differ");
+    }
+
+    // TEMPLATE tid count h1..hcount: keep a copy of the subtree rooted at h1 as mount built it,
+    // whose nodes are h1..hcount in pre-order.
+    template(w, i) {
+      const N = this.nodes, end = i + 3 + w[i + 2], root = N[w[i + 3]], snap = root.cloneNode(true);
+      // keep only the nodes Lean knows (a property such as innerHTML can add others)
+      const prune = (o, s, k) => {
+        for (let oc = o.firstChild, sc = s.firstChild; oc !== null; ) {
+          const on = oc.nextSibling, sn = sc.nextSibling;
+          if (k < end && oc === N[w[k]]) k = prune(oc, sc, k + 1); else sc.remove();
+          oc = on; sc = sn;
+        }
+        return k;
+      };
+      if (prune(root, snap, i + 4) !== end) throw new Error("LeanUI: TEMPLATE " + w[i + 1] + " does not name its subtree");
+      // cloneNode copies the value and checkedness of form controls (dirty flags included), which
+      // a fresh mount does not have: give the copy fresh controls with the same attributes
+      for (const el of snap.querySelectorAll("input, textarea")) {
+        if (el.namespaceURI !== "http://www.w3.org/1999/xhtml") continue;
+        const f = document.createElement(el.localName);
+        for (const a of el.attributes) f.setAttributeNode(a.cloneNode());
+        while (el.firstChild !== null) f.appendChild(el.firstChild);
+        el.replaceWith(f);
+      }
+      this.tpl[w[i + 1]] = snap;
+      return end;
+    }
+    // CLONE tid count h1..hcount: a copy of template tid, whose nodes become h1..hcount in pre-order
+    // (the order mount allocates handles in).
+    clone(w, i) {
+      const N = this.nodes, end = i + 3 + w[i + 2];
+      let n = this.tpl[w[i + 1]].cloneNode(true), k = i + 3;
+      N[w[k++]] = n;
+      while (k < end) {
+        if (n.firstChild !== null) n = n.firstChild;
+        else { while (n.nextSibling === null) n = n.parentNode; n = n.nextSibling; }
+        N[w[k++]] = n;
+      }
+      return end;
+    }
+    // INSERT_MANY parent ref count h1..hcount: insert the nodes, in order, before ref (0: append),
+    // with one DocumentFragment.
+    insertMany(w, i) {
+      const N = this.nodes, end = i + 4 + w[i + 3], f = document.createDocumentFragment();
+      for (let k = i + 4; k < end; k++) f.appendChild(N[w[k]]);
+      N[w[i + 1]].insertBefore(f, w[i + 2] === 0 ? null : N[w[i + 2]]);
+      return end;
     }
 
     fetch(cb, method, url, body, headerLines) {

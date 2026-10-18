@@ -41,7 +41,8 @@ private def tickS : SpecM Unit := modify (· + 1)
 
 partial def mountS : T → SpecM T
   | .text s => pure (.text s)
-  | .elem ns tag attrs kids => return .elem ns tag attrs (← kids.mapM mountS)
+  -- a void element gets no children, whatever the view names
+  | .elem ns tag attrs kids => return .elem ns tag attrs (← (effectiveKids tag kids).mapM mountS)
   | .lazy pin b => do tickS; return .lazy (some (T.deps pin b)) (← mountS b)
 
 def uniqueKeysS (ks : Array (Option String)) : Bool := Id.run do
@@ -66,7 +67,7 @@ partial def patchS (old new : T) : SpecM T :=
   | .text _, .text t => pure (.text t)
   | .elem ns tag _ kids, .elem ns' tag' attrs' kids' =>
     if ns == ns' && tag == tag' && old.keyOld == new.keyNew then
-      return .elem ns tag attrs' (← patchKidsS kids kids')
+      return .elem ns tag attrs' (← patchKidsS kids (effectiveKids tag kids'))
     else mountS new
   | _, n => mountS n
 
@@ -148,6 +149,7 @@ def flush (s : Session) (what : String) : Session :=
         let nm := shadow.names.getD n "?"
         g.modify h (·.filter (· != nm))
       | .free h | .createElement h .. => g.erase h
+      | .clone _ hs => hs.foldl (·.erase ·) g
       | _ => g
   { s with shadow, dom, ghosts, diff := { s.diff with buf := b0.reset },
            log := if s.recording then s.log.push b.encode else s.log,
@@ -157,14 +159,19 @@ def flush (s : Session) (what : String) : Session :=
 def root (s : Session) : UInt32 := (s.dom.rootOf "#app").getD 0
 
 /-- Start a session by mounting `t` (`App.initState`, hydrate = false). Returns the session and
-the failures of the mount step. -/
-def mount (c : IO.Ref Nat) (t : T) (recording := false) (mutant : Option (ByteArray → ByteArray → ByteArray) := none) :
-    IO (Session × Array String) := do
+the failures of the mount step. `templates := false` runs the engine without template cloning
+(mounting as `initState` does, with that flag off). -/
+def mount (c : IO.Ref Nat) (t : T) (recording := false) (mutant : Option (ByteArray → ByteArray → ByteArray) := none)
+    (templates := true) : IO (Session × Array String) := do
   let r0 ← c.get
-  let st ← IO.lazyPure fun _ => initState (staticProgram c t) "" "#app" false
+  let (tree, diff) ← if templates then do
+      let st ← IO.lazyPure fun _ => initState (staticProgram c t) "" "#app" false
+      pure (st.tree, st.diff)
+    else IO.lazyPure fun _ =>
+      (do let n ← LeanUI.mount (t.toHtml c); emit (·.mount "#app" n.handle); pure n).run ({ templates := false } : DiffState String)
   let r1 ← c.get
   let (eff, want) := (mountS t).run 0
-  let s : Session := { diff := st.diff, node := st.tree, dom := {}, shadow := {}, eff, renders := c, recording, mutant }
+  let s : Session := { diff, node := tree, dom := {}, shadow := {}, eff, renders := c, recording, mutant }
   let s := s.flush "mount"
   let fails := if r1 - r0 != want then #[s!"mount: forced {r1 - r0} lazy thunks, the model says {want}"] else #[]
   return (s, fails)
@@ -172,6 +179,15 @@ def mount (c : IO.Ref Nat) (t : T) (recording := false) (mutant : Option (ByteAr
 end Session
 
 /-! ## Invariants -/
+
+/-- Does a template the browser holds (the model's snapshot) show the engine's shape: the same
+namespaces, tags, effective attributes (in DOM order) and texts? -/
+partial def snapMatches : Snap → TplShape → Bool
+  | .text a, .text b => a == b
+  | .elem ns tag attrs kids, .elem ns' tag' as _ ks =>
+    ns == ns'.code && tag == tag' && attrs == as.foldl (fun acc (k, v) => Dom.setKV acc k v) #[] &&
+      kids.size == ks.size && (kids.zip ks).all fun (k, sh) => snapMatches k sh
+  | _, _ => false
 
 namespace Session
 
@@ -243,6 +259,14 @@ def check (s : Session) (what : String) : Array String := Id.run do
   let d := s.dom
   for e in d.errors do out := out.push s!"{what}: Dom.apply: {e}"
   for e in s.shadow.errors do out := out.push s!"{what}: wire: {e}"
+  -- the browser holds exactly the engine's templates (a lost TEMPLATE breaks a later CLONE)
+  let shapes := s.diff.tplShapes
+  if d.templates.size != shapes.size then
+    out := out.push s!"{what}: the engine has {shapes.size} templates, the DOM {d.templates.size}"
+  for h : i in [0:shapes.size] do
+    match d.templates.get? (i + 1).toUInt32 with
+    | none => out := out.push s!"{what}: template {i + 1} is missing in the DOM"
+    | some t => if !snapMatches t shapes[i] then out := out.push s!"{what}: template {i + 1} differs from its shape"
   let some root := d.rootOf "#app" | return out.push s!"{what}: nothing mounted"
   -- the DOM shows the effective view
   let skip := fun h n => (s.ghosts.getD h #[]).contains n

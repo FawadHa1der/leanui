@@ -417,7 +417,8 @@ def hydrate (c : IO.Ref Nat) (t : T) (recording := false) : IO (Session × Array
     | _ => fails := fails.push "hydrate: the buffer does not start with HYDRATE"
     for c in cmds do
       match c.op with
-      | .createElement .. | .createText .. | .appendChild .. | .insertBefore .. | .setAttr .. | .mount .. =>
+      | .createElement .. | .createText .. | .appendChild .. | .insertBefore .. | .setAttr .. | .mount ..
+      | .template .. | .clone .. | .insertMany .. =>
         fails := fails.push s!"hydrate: {c.op.name} while hydrating (the nodes exist already)"; break
       | _ => pure ()
   | .error e => fails := fails.push s!"hydrate: {e}"
