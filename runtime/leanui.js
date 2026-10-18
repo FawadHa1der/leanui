@@ -14,8 +14,10 @@
     constructor(transport) {
       this.transport = transport;
       this.nodes = [null];
-      // per handle: 0 an HTML element, 1/2 an SVG/MathML element, 3 a text node (SET_ATTR uses
-      // `className` for "class" on HTML elements only: SVGElement's className is read-only)
+      // per handle: 0 an HTML element, 1/2 an SVG/MathML element, 3 a text node or a freed
+      // handle (SET_ATTR uses `className` for "class" on HTML elements only: SVGElement's
+      // className is read-only). Every command that binds a handle records its kind; FREE
+      // resets it, so a handle bound without one falls back to setAttribute.
       this.kinds = [3];
       this.names = [null];
       // per name id: true if the name is "class"
@@ -125,7 +127,7 @@
             let last = el, next = el.nextSibling;
             while (i < n) {
               const op = w[i];
-              if (op === 14) { N[w[i + 1]] = undefined; i += 2; }
+              if (op === 14) { N[w[i + 1]] = undefined; K[w[i + 1]] = 3; i += 2; }
               else if (op === 12 && next !== null && N[w[i + 1]] === next) { last = next; next = next.nextSibling; i += 2; }
               else break;
             }
@@ -134,7 +136,7 @@
             break;
           }
           case 13: N[w[i + 1]].replaceWith(N[w[i + 2]]); i += 3; break;
-          case 14: N[w[i + 1]] = undefined; i += 2; break;
+          case 14: N[w[i + 1]] = undefined; K[w[i + 1]] = 3; i += 2; break;
           case 15: { const el = N[w[i + 1]], ev = names[w[i + 2]]; (el.__lui || (el.__lui = {}))[ev] = [w[i + 3], w[i + 4], w[i + 5]]; this.delegate(ev); i += 6; break; }
           case 16: { const el = N[w[i + 1]]; if (el.__lui) delete el.__lui[names[w[i + 2]]]; i += 3; break; }
           case 17: { const s = S(i + 2); names[w[i + 1]] = s; isClass[w[i + 1]] = s === "class"; i += 4; break; }
