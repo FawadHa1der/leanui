@@ -22,6 +22,7 @@ if (!bin || !["firefox", "chromium"].includes(kind)) { console.error("usage: sel
 const argv = process.argv.slice(4);
 const opt = (n, d) => { const i = argv.indexOf("--" + n); return i >= 0 ? argv[i + 1] : d; };
 const RUNS = opt("runs", "7"), ONLY = opt("only", ""), IMPLS = opt("impls", "leanui,vanilla"), JSON_OUT = opt("json", null);
+const SPIN = opt("spin", "30");   // ms of busy-waiting before each measured click (efficiency cores)
 const LEANUI_DIR = opt("leanui-dir", "dist/bench").replace(/\/?$/, "/");
 const MOUNTS = [["/leanui/", LEANUI_DIR], ["/vanilla/", "bench/vanilla/"], ["/", "bench/"]];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".css": "text/css" };
@@ -45,7 +46,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(404); res.end();
 });
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
-const page = `http://127.0.0.1:${server.address().port}/runner.html?runs=${RUNS}&impls=${IMPLS}${ONLY ? "&only=" + ONLY : ""}`;
+const page = `http://127.0.0.1:${server.address().port}/runner.html?runs=${RUNS}&impls=${IMPLS}&spin=${SPIN}${ONLY ? "&only=" + ONLY : ""}`;
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), "leanui-selfbench-"));
 let args;
 if (kind === "firefox") {
@@ -82,3 +83,5 @@ lines.push("", "| startup | " + impls.join(" | ") + " |", "|---|" + impls.map(()
   "| ready (ms after navigation) | " + impls.map((i) => R.startup[i]?.readyMs ?? "–").join(" | ") + " |");
 console.log(lines.join("\n"));
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify(R, null, 1));
+server.closeAllConnections?.();   // keep-alive sockets would keep the process alive
+process.exit(0);

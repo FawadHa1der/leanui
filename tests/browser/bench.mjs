@@ -39,6 +39,9 @@ const ONLY = opt("only", null);
 // another LeanUI build to measure in place of dist/bench (e.g. an allocator variant)
 const LEANUI_DIR = opt("leanui-dir", "dist/bench").replace(/\/?$/, "/");
 const SKIP_CPU = argv.includes("--no-cpu");
+// ms of busy-waiting in the page before each measured click: an idle renderer is often moved to an
+// efficiency core, which makes single-click timings bimodal; spinning first applies to both alike
+const SPIN = +opt("spin", "30");
 
 // ---------- a static server for dist/bench (LeanUI), bench/vanilla and bench/bench.css ----------
 const MOUNTS = [["/leanui/", LEANUI_DIR], ["/vanilla/", "bench/vanilla/"], ["/", "bench/"]];
@@ -94,6 +97,7 @@ async function tracedClick(page, cdp, sel) {
     transferMode: "ReportEvents",
     traceConfig: { recordMode: "recordAsMuchAsPossible", includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline"] },
   });
+  await page.evaluate((ms) => { for (const end = performance.now() + ms; performance.now() < end; ); }, SPIN);
   await page.click(sel, { timeout: 10000 });
   await settle(page);
   const done = new Promise((r) => cdp.once("Tracing.tracingComplete", r));

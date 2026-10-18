@@ -64,6 +64,39 @@ Selecting a row costs Lean 0.11 ms natively (update, view, diff and encoding); a
 of 1,000 rows diffs in 0.06 ms. The app starts in about 12–25 ms; the benchmark app is 160 KB
 brotli (wasm, glue and runtime).
 
+## Writing apps
+
+A few idioms cover most of what an app needs; `examples/` has each of them in a real program.
+
+- **Effects** are values: `update` returns a `Cmd` (`.fetch`, `.after`, `.storageSet`,
+  `.storageGet`, `.pushUrl`, `.focus`, `.title`, …) whose results come back as messages, and
+  `subscriptions` returns the event sources wanted right now (`.every ms`, `.urlChanges`). In a
+  module that does `open LeanUI`, write the subscription type as `LeanUI.Sub` (Lean's own `Sub`
+  is the subtraction class).
+- **Big lists**: give rows keys and make them lazy, so unchanged rows are neither rendered nor
+  diffed: `keyed (toString r.id) (lazy (r.id, r.label, selected) fun _ => row r)`. Dependencies
+  are compared exactly (any `ToDep` value: numbers, strings, booleans, options, tuples, lists).
+- **Components** are programs: embed one with `Html.map`, `Cmd.map` and `Sub.map`
+  (`examples/Site.lean` embeds the counter and TodoMVC this way).
+- **Routing**: `LeanUI.Router` routes are bidirectional, so a link and the parser cannot drift
+  apart; `router.link page attrs kids` navigates without a page load.
+- **JSON**: `deriving ToJson, FromJson` (with `meta import LeanUI.Json.Derive`), then
+  `Json.encode` / `Json.decode`.
+- **Server rendering**: `LeanUI.Server` renders any page of a program to HTML and lets the wasm
+  build hydrate it, or drives it from the server (`docs/SERVER.md`).
+
+## The LeanUI site
+
+`examples/Site.lean` is a real multi-page app: a home page with a live counter, the examples
+(the counter and TodoMVC as embedded components) and the benchmark results (fetched as JSON and
+drawn as SVG). A native Lean server renders each page, then the wasm build hydrates it, or, in a
+browser without Memory64, the server runs the program and drives the page.
+
+```bash
+tools/build-app.sh SiteApp site
+./.lake/build/bin/leanui-site               # http://127.0.0.1:5360/  (?mode=wasm|server|ssr)
+```
+
 ## Browsers
 
 LeanUI's wasm needs WebAssembly **Memory64** and exception handling: Chrome and Edge 133+, Firefox
@@ -93,7 +126,8 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-kit-tests        # JSON, URLs, routes, effects
 ./.lake/build/bin/leanui-server-tests     # server, sessions, CLI
 ./.lake/build/bin/leanui-todomvc-tests    # TodoMVC against the DOM model
-node tests/browser/todomvc.mjs            # real browsers (Playwright); also counter, effects, keyed-dom, server
+node tests/browser/todomvc.mjs            # real browsers (Playwright); also site, counter, effects,
+                                          # keyed-dom, fuzz, depth, server
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers
 ```
 
@@ -106,4 +140,5 @@ node tests/browser/bench.mjs              # the benchmark (Chromium traces); sel
 - [docs/SYNTAX.md](docs/SYNTAX.md): templates
 - [docs/PROOFS.md](docs/PROOFS.md): what is proved, tested and assumed
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): performance, memory, startup, method
+- [docs/SERVER.md](docs/SERVER.md): the native server, server rendering, server-driven sessions
 - [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md): the wasm64 toolchain

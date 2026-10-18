@@ -9,7 +9,55 @@ All numbers: Apple-silicon Mac (10 performance and 4 efficiency cores), macOS 26
 browsers, medians. Each browser measurement loads a fresh page, does the operation's warm-up clicks,
 and times one click.
 
-<!-- RESULTS -->
+<!-- SUMMARY -->
+
+<!-- TABLES -->
+
+## Where LeanUI's time goes
+
+<!-- PROFILE -->
+
+## What made the diff fast
+
+The first working diff spent 1.65 ms re-rendering 1,000 unchanged rows natively, almost all of it
+allocating and freeing. Five changes took it to 0.06 ms; each is tested by the randomized list
+tests and the property suites against an independent reference model.
+
+1. **Change tracking.** `patch` reports whether a node changed. An unchanged node is returned as
+   the *same* object, so unchanged parents are not rebuilt either.
+2. **A pure check before any monadic work.** Every monadic step in Lean's state monad returns a
+   freshly allocated pair. `sameF` decides, without allocating, that a subtree needs no command;
+   the subtree then only has its listener slots re-pointed, with one state update for a whole run
+   of unchanged siblings. Subtree sizes are cached in the mounted nodes so the check only runs on
+   subtrees within its budget, which keeps the total work linear at any depth (patching a
+   100,000-level chain went from 294 ms to 21 ms, the cost of mounting it).
+3. **Exact lazy rows.** Freeing the discarded view was the largest remaining cost (about 27
+   objects per benchmark row). `lazy` with exact dependencies (`Dep`, compared structurally,
+   never hashed) and its own key skips both building and diffing a row: selecting a row went from
+   0.47 ms (eager rows, with the pure check) to 0.12 ms.
+4. **No hidden copies.** The diff state is taken out of the runtime state before diffing, so its
+   slot table is updated in place instead of being copied on every update; elements without
+   listeners or children share one empty array.
+5. **Cheap strings.** The UTF-16 length of an ASCII string is read from the string object
+   (byte size equals length) instead of walking it.
+
+## Findings about measuring
+
+- **Playwright's Firefox is not Firefox.** The Firefox build Playwright drives (Nightly 153 here)
+  runs wasm about 8× slower than release Firefox 158, for any wasm (a plain wasm32 C program
+  too) and whether or not automation is attached. Firefox numbers in this file come from the
+  release browser via the self-driving runner.
+- **Efficiency cores.** On Apple silicon, a renderer that is mostly idle between clicks is often
+  scheduled on an efficiency core, and per-click timings become bimodal (0.2 ms or 1.2 ms for the
+  same select). Back-to-back clicks stay on performance cores; fresh-page medians are robust.
+- **What Memory64 costs.** The same allocation-heavy C workload built for wasm32 and wasm64
+  ([`bench/wasm64`](../bench/wasm64)): <!-- WASM64 -->
+- **The allocator.** dlmalloc and mimalloc are equally fast here (single-threaded), but mimalloc
+  reserves more: wasm memory 26.6 MB at load (dlmalloc: 16 MB, the initial size) and 67 MB after
+  10,000 rows (dlmalloc: 34 MB). LeanUI builds with dlmalloc.
+- **Fresh loads, not warm pages.** Chrome's optimizing tier changes nothing measurable for
+  LeanUI after the first second (a 12-second warm-up probe stays flat once the core scheduling
+  effect is removed).
 
 ## Method
 

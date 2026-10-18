@@ -32,3 +32,5 @@ await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
 server.close();
 try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}
 console.log(`${r.userAgent}\n  wasm32 ${r.wasm32.toFixed(2)} ms   wasm64 ${r.wasm64.toFixed(2)} ms   wasm64/wasm32 ${(r.wasm64 / r.wasm32).toFixed(2)}x`);
+server.closeAllConnections?.();   // keep-alive sockets would keep the process alive
+process.exit(0);

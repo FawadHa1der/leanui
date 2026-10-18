@@ -11,6 +11,9 @@ const q = new URLSearchParams(location.search);
 const impls = (q.get("impls") || "leanui,vanilla").split(",");
 const runs = +(q.get("runs") || 7);
 const only = q.get("only");
+// Busy-wait before each measured click (both implementations alike): a renderer that idles between
+// clicks is often scheduled on an efficiency core, which makes single-click timings bimodal.
+const spinMs = +(q.get("spin") ?? 30);
 const frame = document.getElementById("f");
 const logEl = document.getElementById("log");
 const log = (s) => { logEl.textContent += s + "\n"; };
@@ -44,6 +47,7 @@ try {
         const w = await load(impl);
         for (const sel of op.warm) { click(w, sel); await settle(w); }
         const e = w.document.querySelector(op.click);
+        for (const end = w.performance.now() + spinMs; w.performance.now() < end; );
         const t0 = w.performance.now(); e.click(); const t1 = w.performance.now();
         w.document.body.offsetHeight; const t2 = w.performance.now();
         script.push(t1 - t0); layout.push(t2 - t0);

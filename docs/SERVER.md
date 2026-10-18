@@ -112,13 +112,14 @@ safe inside `<script>` (`<`, `>`, `&`, U+2028/9 as `\uXXXX`).
 
 The response is `Buf.encode` of the update (`[u32 opsBytes][ops][strs]`, empty if nothing
 changed) with `Server-Timing: actor;dur=<ms>`. Errors use HTTP statuses **and** carry a valid
-buffer holding one `log` command with the reason, because the runtime applies any body it gets:
+buffer holding one `log` command with the reason; the runtime logs the status and applies the
+body:
 
 | status | when |
 |---|---|
 | 400 | malformed body (not UTF-8, unknown kind, bad slot or callback id) |
 | 409 | out of order: an event before `h`, a second `h` |
-| 410 | unknown, expired or evicted session (the browser logs "reload the page") |
+| 410 | unknown, expired or evicted session (the runtime reloads the page once to get a new session) |
 | 500 | the session is stuck (see the watchdog) |
 
 ### Sessions are actors

@@ -78,18 +78,21 @@ are never reused.
 
 Listeners are **delegated**: the runtime registers one real listener per event type on the
 container (capture phase for events that do not bubble: `focus`, `blur`, `mouseenter`,
-`mouseleave`, `load`, `error`, `scroll`, `pointerenter`, `pointerleave`). An event walks from its
-target up to the container; every node with a listener for its type reports, in order, unless a
-listener's flags stop propagation.
+`mouseleave`, `load`, `error`, `scroll`, `pointerenter`, `pointerleave`). An event that bubbles
+walks from its target up to the container; every node with a listener for its type reports, in
+order, unless a listener's flags stop propagation. An event that does not bubble reports only the
+listener of its target, as it would without delegation.
 
 - **payload** says what the browser extracts from the node that registered the listener:
   0 nothing, 1 `value`, 2 `checked` (`"true"`/`"false"`), 3 `KeyboardEvent.key`,
-  4 the form's fields as `name=value` lines.
+  4 the fields of the node's form (the node itself if it is a `form`, else the form a control
+  belongs to) as `name=value` lines, a file field as its file name; empty without a form.
 - **flags**: bit 0 `preventDefault`, bit 1 `stopPropagation`.
 
 The runtime reports `event(slot, payload)` to Lean. Reports are serialised: an event that fires
 while a buffer is being applied (for example `focusin` caused by a `FOCUS`) is queued and
-delivered after the current call into Lean returns.
+delivered after the current call into Lean returns. In the wasm host a payload crosses as UTF-8
+bytes with an explicit length, so it may contain any character, U+0000 included.
 
 ## 5. Mount and hydration
 
