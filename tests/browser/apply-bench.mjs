@@ -8,8 +8,10 @@
 //    copied (LeanUI.__flush is wrapped), from boot through the operation's warm-up clicks to the
 //    measured click (the operations and warm-ups of bench/ops.mjs, as tests/browser/bench.mjs).
 // 2. Replay, in a page with the benchmark's stylesheet and container, of each runtime variant
-//    (default: runtime/leanui.js against <app>/leanui.js; put the reference first, the report
-//    divides by it). Each sample applies the recorded prefix to a fresh container and runtime,
+//    (default: <app>/leanui.js, the runtime the app was built with, then runtime/leanui.js; the
+//    reference goes first, the report divides by it; a build copies runtime/leanui.js into <app>,
+//    so compare against a baseline copy, e.g. --variants dist/bench-base/leanui.js,runtime/leanui.js).
+//    Each sample applies the recorded prefix to a fresh container and runtime,
 //    forcing a layout after every buffer (as the frame after a real click would), then times
 //    `Runtime.apply` on the measured buffer ("apply") and the forced layout after it ("layout").
 //    --mode fresh (default): every sample is a new page holding one variant, so the engine's JIT
@@ -39,7 +41,7 @@ const pw = require("playwright");
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const i = argv.indexOf("--" + n); return i >= 0 ? argv[i + 1] : d; };
 const APP = path.resolve(ROOT, opt("app", "dist/bench"));
-const VARIANTS = opt("variants", `runtime/leanui.js,${path.relative(ROOT, APP)}/leanui.js`).split(",");
+const VARIANTS = opt("variants", `${path.relative(ROOT, APP)}/leanui.js,runtime/leanui.js`).split(",");
 const REPS = +opt("reps", "25");
 const MODE = opt("mode", "fresh");
 const ENGINES = opt("engines", "chromium").split(",");
@@ -61,6 +63,11 @@ const sources = VARIANTS.map((v, i) => {
   if (k < 0) throw new Error("unexpected runtime shape (no IIFE tail): " + v);
   return `(window.__variants = window.__variants || {})[${i}] = {};\n` + src.slice(0, k) + `})(window.__variants[${i}]);\n`;
 });
+// a variant identical to an earlier one measures only noise: say so
+{
+  const raw = VARIANTS.map((v) => fs.readFileSync(path.resolve(ROOT, v), "utf8"));
+  raw.forEach((r, i) => { const j = raw.indexOf(r); if (j < i) console.warn(`note: variant ${names[i]} is byte-identical to variant ${names[j]}`); });
+}
 const recordings = new Map();   // op name -> JSON text
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".css": "text/css", ".json": "application/json" };
 const server = http.createServer((req, res) => {
@@ -225,7 +232,9 @@ for (const engine of ENGINES) {
     if (PROFILE && engine === "firefox") for (const v of vIdx) E.profiles[`${op.name} ${names[v]}`] = await geckoProfile(op, v);
     // every variant must build the same DOM
     if (!UNCHECKED) for (const v of vIdx) if (res[v].html !== res[0].html) throw new Error(`${names[v]} ${op.name}: the DOM differs from ${names[0]}'s`);
-    E.ops[op.name] = Object.fromEntries(vIdx.map((v) => [names[v], { apply: r3(median(res[v].apply)), applyQ1: r3(q1(res[v].apply)), applyMin: r3(Math.min(...res[v].apply)), layout: r3(median(res[v].layout)) }]));
+    E.ops[op.name] = Object.fromEntries(vIdx.map((v) => [names[v], { apply: r3(median(res[v].apply)), applyQ1: r3(q1(res[v].apply)), applyMin: r3(Math.min(...res[v].apply)), layout: r3(median(res[v].layout)),
+      // every sample, in the order taken (the fresh-page JIT state can make them bimodal)
+      applySamples: res[v].apply.map(r3) }]));
     process.stderr.write(`${engine} ${op.name.padEnd(10)} ${names.map((n) => `${n} ${E.ops[op.name][n].apply.toFixed(3)}`).join(" | ")}\n`);
   }
   await browser.close();
