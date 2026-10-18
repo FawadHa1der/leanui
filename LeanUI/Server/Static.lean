@@ -153,9 +153,12 @@ def serve (s : Static) (req : Req) : IO (Option Res) := do
   let target := segs.foldl (· / ·) s.root
   if ← target.isDir then
     if s.confine && !(← confined s.root target) then return none
-    if !req.trailingSlash && !segs.isEmpty then
+    -- `/dir` → `/dir/`, and the mount point itself (`/assets` → `/assets/`), so relative URLs in
+    -- the index resolve inside the directory
+    if !req.trailingSlash && (!segs.isEmpty || req.consumed > 0) then
+      let here := req.base ++ req.path
       let q := req.rawQuery
-      return some (Res.redirect (req.base ++ req.path ++ "/" ++ (if q.isEmpty then "" else "?" ++ q)) 301)
+      return some (Res.redirect ((if here.endsWith "/" then here else here ++ "/") ++ (if q.isEmpty then "" else "?" ++ q)) 301)
     let idx := target / s.index
     if ← idx.pathExists then return some (← serveFile s req idx s.index)
     if s.listing then return some (← listingPage s req target)

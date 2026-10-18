@@ -257,6 +257,9 @@ def testStatic : IO Unit := do
     expectEq (res.header? "location") (some "/s/sub/?x=1") "redirect keeps the query"
     let res ← get "/s/sub/"
     expectEq res.bodyText "<p>sub</p>" "index of a directory"
+    let res ← get "/s"
+    expectEq (res.status, res.header? "location") (301, some "/s/") "the mount point redirects to its directory"
+    expectEq (← run st.route (Req.get "/")).bodyText "<p>root</p>" "a root mount serves / directly"
     let res ← get "/s/sub/a%20b.txt"
     expectEq (res.status, res.bodyText) (200, "spaced") "percent-decoded file name"
     for t in ["/s/.secret", "/s/sub/../.secret", "/s/%2e%2e/x", "/s/empty/", "/s/missing.js", "/s/link/leak.txt"] do
