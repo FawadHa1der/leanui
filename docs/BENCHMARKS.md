@@ -132,6 +132,17 @@ Sampled CPU profiles of the synchronous click in Chromium, on a build with funct
   closure, its key and its dependencies per row, about ten objects) and freeing the old one is about a
   quarter of the time (`malloc`/`free`), followed by `patchNode`, comparing dependencies and the
   pure check. The DOM work is a few percent.
+- **The runtime alone** ([`tests/browser/apply-bench.mjs`](../tests/browser/apply-bench.mjs)
+  replays the app's recorded buffers through `Runtime.apply`, with no Lean): applying the
+  create-1,000-rows buffer (30,000 commands) costs about 2.4 ms in Chromium 151 and 3.4 ms in
+  Playwright's Firefox (2.85 and 3.7 ms before the two changes below), three quarters of it in
+  the DOM calls themselves (Chromium: `appendChild` about a third, the class writes a fifth,
+  `createElement` a sixth); the dispatch loop runs at 2–5 ns per command once optimized.
+  Writing `class` through `className` saved 7–9% of the apply, folding a list's removals into one
+  `replaceChildren()` 4–5% of a clear's; the create-1,000-rows click went from 7.1 to 6.6 ms of
+  script in traced Chromium, release Firefox within noise. Caching attribute strings, cloning
+  elements from a per-tag prototype (within noise in Chromium, 2–4% in Firefox), building rows in
+  a `DocumentFragment` and skipping repeated `delegate` calls did not pay.
 - **Next steps** this suggests: writing the command buffer a word at a time (needs a small C
   helper, also for native builds); cloning static subtrees from templates (the template syntax
   knows which parts of a view are static); avoiding the per-row view allocation altogether for
@@ -177,6 +188,13 @@ tests and the property suites against an independent reference model.
 - **The allocator.** dlmalloc and mimalloc are equally fast here (single-threaded), but mimalloc
   reserves more: wasm memory 26.6 MB at load (dlmalloc: 16 MB, the initial size) and 67 MB after
   10,000 rows (dlmalloc: 34 MB). LeanUI builds with dlmalloc.
+- **The JIT state of a fresh page.** Each measured click comes after a few warm-up clicks on a
+  fresh page, so `Runtime.apply` runs in whatever tier the engine has reached by then. The same
+  runtime costs 2.85 ms for the create-1,000-rows buffer replayed on fresh pages and 2.43 ms in a
+  hot page (Chromium), and small code changes move the fresh number by several percent, so
+  `apply-bench` measures on fresh pages by default (`--mode hot` for the steady state). A forced
+  GC (`gc()`) right before a measurement deoptimized the apply loop once in Chromium (18 ns per
+  command instead of 2): measure after the warm-up, not right after a GC.
 - **Fresh loads, not warm pages.** Chrome's optimizing tier changes nothing measurable for
   LeanUI after the first second (a 12-second warm-up probe stays flat once the core scheduling
   effect is removed).
@@ -227,6 +245,9 @@ node tests/browser/selfbench.mjs "/Applications/Google Chrome.app/Contents/MacOS
 ./.lake/build/bin/leanui-perf                           # native, lazy and eager rows
 LEANUI_PAGE=examples/bench.html tools/build-app.sh BenchApp bench-prof --debug
 node tests/browser/profile.mjs dist/bench-prof --op create1k   # where the script time goes
+node tests/browser/apply-bench.mjs --variants runtime/leanui.js,dist/bench/leanui.js --engines chromium,firefox
+                                                        # the JS runtime alone, two runtimes A/B
+node tests/browser/bench.mjs --impls leanui --leanui-dir dist/<build> --cpu-only   # A/B of builds
 bench/wasm64/build.sh && node tests/browser/wasm64.mjs <browser-binary> <firefox|chromium>
 ```
 

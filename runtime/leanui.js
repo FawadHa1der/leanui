@@ -5,6 +5,7 @@
 (function (global) {
   "use strict";
   const NS = [null, "http://www.w3.org/2000/svg", "http://www.w3.org/1998/Math/MathML"];
+  const HTML = "http://www.w3.org/1999/xhtml";
   // events that do not bubble are delegated in the capture phase
   const CAPTURE = new Set(["focus", "blur", "mouseenter", "mouseleave", "load", "error", "scroll", "pointerenter", "pointerleave"]);
   const decoder = new TextDecoder();
@@ -13,7 +14,12 @@
     constructor(transport) {
       this.transport = transport;
       this.nodes = [null];
+      // per handle: 0 an HTML element, 1/2 an SVG/MathML element, 3 a text node (SET_ATTR uses
+      // `className` for "class" on HTML elements only: SVGElement's className is read-only)
+      this.kinds = [3];
       this.names = [null];
+      // per name id: true if the name is "class"
+      this.isClass = [false];
       this.container = null;
       this.delegated = new Set();
       this.wanted = new Set();
@@ -80,16 +86,24 @@
         ? new Uint32Array(bytes.buffer, bytes.byteOffset + opsOff, opsLen >>> 2)
         : new Uint32Array(bytes.slice(opsOff, opsOff + opsLen).buffer);
       const text = strsLen ? decoder.decode(bytes.subarray(strsOff, strsOff + strsLen)) : "";
-      const N = this.nodes, names = this.names;
+      const N = this.nodes, K = this.kinds, names = this.names, isClass = this.isClass;
+      // the string operand at word i
       const S = (i) => text.substr(w[i], w[i + 1]);
       this.stats.flushes++; this.stats.ops += w.length; this.stats.bytes += opsLen + strsLen;
       let i = 0;
       const n = w.length;
       while (i < n) {
         switch (w[i]) {
-          case 1: N[w[i + 1]] = w[i + 2] ? document.createElementNS(NS[w[i + 2]], names[w[i + 3]]) : document.createElement(names[w[i + 3]]); i += 4; break;
-          case 2: N[w[i + 1]] = document.createTextNode(S(i + 2)); i += 4; break;
-          case 3: N[w[i + 1]].setAttribute(names[w[i + 2]], S(i + 3)); i += 5; break;
+          case 1: { const h = w[i + 1], ns = w[i + 2]; N[h] = ns ? document.createElementNS(NS[ns], names[w[i + 3]]) : document.createElement(names[w[i + 3]]); K[h] = ns; i += 4; break; }
+          case 2: { const h = w[i + 1]; N[h] = document.createTextNode(S(i + 2)); K[h] = 3; i += 4; break; }
+          case 3: {
+            // On an HTML element, `className = v` is the same attribute write as
+            // setAttribute("class", v), and cheaper (no name to look up): 7-9% of applying a
+            // create-1,000-rows buffer (tests/browser/apply-bench.mjs)
+            const h = w[i + 1], nm = w[i + 2], v = S(i + 3);
+            if (isClass[nm] === true && K[h] === 0) N[h].className = v; else N[h].setAttribute(names[nm], v);
+            i += 5; break;
+          }
           case 4: N[w[i + 1]].removeAttribute(names[w[i + 2]]); i += 3; break;
           case 5: { const el = N[w[i + 1]], k = names[w[i + 2]], v = S(i + 3); if (el[k] !== v) el[k] = v; i += 5; break; }
           case 6: N[w[i + 1]][names[w[i + 2]]] = w[i + 3] === 1; i += 4; break;
@@ -98,12 +112,32 @@
           case 9: N[w[i + 1]].nodeValue = S(i + 2); i += 4; break;
           case 10: N[w[i + 1]].appendChild(N[w[i + 2]]); i += 3; break;
           case 11: N[w[i + 1]].insertBefore(N[w[i + 2]], N[w[i + 3]]); i += 4; break;
-          case 12: N[w[i + 1]].remove(); i += 2; break;
+          case 12: {
+            // A run of REMOVE (and FREE) commands that detaches every child of one parent, first
+            // to last in order (clearing or replacing a list), becomes one replaceChildren():
+            // the same DOM, without a removal per child (4-5% of applying a clear). Handles are
+            // freed in order as the run is read and no other command runs in between, so no
+            // command can tell; a MutationObserver sees one record instead of one per child.
+            const el = N[w[i + 1]];
+            i += 2;
+            const p = el.parentNode;
+            if (p === null || (w[i] !== 12 && w[i] !== 14) || el !== p.firstChild) { el.remove(); break; }
+            let last = el, next = el.nextSibling;
+            while (i < n) {
+              const op = w[i];
+              if (op === 14) { N[w[i + 1]] = undefined; i += 2; }
+              else if (op === 12 && next !== null && N[w[i + 1]] === next) { last = next; next = next.nextSibling; i += 2; }
+              else break;
+            }
+            if (next === null) p.replaceChildren();
+            else for (let x = el; ; ) { const nx = x.nextSibling; x.remove(); if (x === last) break; x = nx; }
+            break;
+          }
           case 13: N[w[i + 1]].replaceWith(N[w[i + 2]]); i += 3; break;
           case 14: N[w[i + 1]] = undefined; i += 2; break;
           case 15: { const el = N[w[i + 1]], ev = names[w[i + 2]]; (el.__lui || (el.__lui = {}))[ev] = [w[i + 3], w[i + 4], w[i + 5]]; this.delegate(ev); i += 6; break; }
           case 16: { const el = N[w[i + 1]]; if (el.__lui) delete el.__lui[names[w[i + 2]]]; i += 3; break; }
-          case 17: names[w[i + 1]] = S(i + 2); i += 4; break;
+          case 17: { const s = S(i + 2); names[w[i + 1]] = s; isClass[w[i + 1]] = s === "class"; i += 4; break; }
           case 18: { this.setContainer(S(i + 1)); this.container.replaceChildren(N[w[i + 3]]); i += 4; break; }
           case 19: { this.setContainer(S(i + 1)); this.hydrate(w[i + 3], w[i + 4]); i += 5; break; }
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
@@ -142,8 +176,9 @@
         for (let c = parent.firstChild; c; ) {
           const next = c.nextSibling;
           if (c.nodeType === 8) {
-            if (c.data === "t") { const t = document.createTextNode(""); c.replaceWith(t); this.nodes[h++] = t; }
+            if (c.data === "t") { const t = document.createTextNode(""); c.replaceWith(t); this.kinds[h] = 3; this.nodes[h++] = t; }
           } else if (c.nodeType === 1 || c.nodeType === 3) {
+            this.kinds[h] = c.nodeType === 3 ? 3 : c.namespaceURI === HTML ? 0 : 1;
             this.nodes[h++] = c;
             if (c.nodeType === 1) walk(c);
           }
