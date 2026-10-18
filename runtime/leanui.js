@@ -181,21 +181,31 @@
         while (el.firstChild !== null) f.appendChild(el.firstChild);
         el.replaceWith(f);
       }
-      this.tpl[w[i + 1]] = snap;
+      // the pre-order walk, as moves from each node to the next: 0 to the first child, u > 0 up
+      // u - 1 levels, then to the next sibling (a clone is walked without probing for children)
+      const moves = new Uint8Array(w[i + 2] - 1);
+      for (let n = snap, k = 0; k < moves.length; k++) {
+        if (n.firstChild !== null) { n = n.firstChild; continue; }
+        let u = 1;
+        while (n.nextSibling === null) { n = n.parentNode; u++; }
+        n = n.nextSibling; moves[k] = u;
+      }
+      this.tpl[w[i + 1]] = { snap, moves };
       return end;
     }
     // CLONE tid count h1..hcount: a copy of template tid, whose nodes become h1..hcount in pre-order
     // (the order mount allocates handles in).
     clone(w, i) {
-      const N = this.nodes, end = i + 3 + w[i + 2];
-      let n = this.tpl[w[i + 1]].cloneNode(true), k = i + 3;
+      const N = this.nodes, t = this.tpl[w[i + 1]], moves = t.moves, m = moves.length;
+      let n = t.snap.cloneNode(true), k = i + 3;
       N[w[k++]] = n;
-      while (k < end) {
-        if (n.firstChild !== null) n = n.firstChild;
-        else { while (n.nextSibling === null) n = n.parentNode; n = n.nextSibling; }
+      for (let j = 0; j < m; j++) {
+        const u = moves[j];
+        if (u === 0) n = n.firstChild;
+        else { for (let q = 1; q < u; q++) n = n.parentNode; n = n.nextSibling; }
         N[w[k++]] = n;
       }
-      return end;
+      return k;
     }
     // INSERT_MANY parent ref count h1..hcount: insert the nodes, in order, before ref (0: append),
     // with one DocumentFragment.

@@ -72,8 +72,12 @@ structure DiffState (Msg : Type) where
   tplSeen : Std.HashSet UInt64 := {}
   /-- Shape hash → template id. -/
   tplIds : Std.HashMap UInt64 UInt32 := {}
-  /-- The shape of template `i + 1`. -/
+  /-- The shape of template `i + 1`, and its number of nodes. -/
   tplShapes : Array TplShape := #[]
+  tplSizes : Array Nat := #[]
+  /-- The template made or cloned last (0: none): the first one tried, so the rows of a list
+  that share a shape cost one comparison each instead of counting and hashing. -/
+  tplLast : UInt32 := 0
 
 abbrev DiffM (Msg : Type) := StateM (DiffState Msg)
 
@@ -442,7 +446,8 @@ partial def TplShape.matches (sh : TplShape) (v : Html Msg) : Bool :=
   | .text _, .text _ => true
   | .elem ns tag as ps ks, .elem ns' tag' attrs kids =>
     ns == ns' && tag == tag' && attrsMatch as ps attrs 0 0 0 &&
-      (let kids := effectiveKids tag kids; ks.size == kids.size && TplShape.kidsMatch ks kids 0)
+      (let kids := if kids.size == ks.size then kids else effectiveKids tag kids
+       ks.size == kids.size && TplShape.kidsMatch ks kids 0)
   | _, _ => false
 
 partial def TplShape.kidsMatch (ks : Array TplShape) (vs : Array (Html Msg)) (i : Nat) : Bool :=
@@ -475,9 +480,15 @@ private def tplAction (h : UInt64) (v : Html Msg) : DiffM Msg UInt32 := modifyGe
     let seen := if s.tplSeen.size ≥ tplSeenLimit then {} else s.tplSeen
     (0, { s with tplSeen := seen.insert h })
 
-private def addTemplate (h : UInt64) (sh : TplShape) : DiffM Msg UInt32 := modifyGet fun s =>
+private def addTemplate (h : UInt64) (sh : TplShape) (size : Nat) : DiffM Msg UInt32 := modifyGet fun s =>
   let tid := (s.tplShapes.size + 1).toUInt32
-  (tid, { s with tplShapes := s.tplShapes.push sh, tplIds := s.tplIds.insert h tid, tplSeen := s.tplSeen.erase h })
+  (tid, { s with tplShapes := s.tplShapes.push sh, tplSizes := s.tplSizes.push size, tplIds := s.tplIds.insert h tid,
+                 tplSeen := s.tplSeen.erase h, tplLast := tid })
+
+/-- The last template, if `v` has its shape (else 0). -/
+private def lastTemplate (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
+  let t := s.tplLast
+  (if t != 0 && s.templates && !s.hydrating && s.tplShapes[t.toNat - 1]!.matches v then t else 0, s)
 
 @[inline] private def templatesOn : DiffM Msg Bool := modifyGet fun s => (s.templates && !s.hydrating, s)
 
@@ -497,26 +508,33 @@ def allocNodes (n : Nat) : DiffM Msg (Array UInt32) := modifyGet fun s => allocL
 
 /-- The commands a cloned element still needs: every property (a fresh mount sets them all),
 every listener (listeners are never cloned), and the attributes that follow a property in the
-view (re-sent: a property can reflect onto an attribute, and mount sets them in view order). -/
-def cloneAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
-  let mut ls := #[]
-  let mut afterProp := false
-  for a in attrs do
-    match a with
-    | .on ev hd =>
-      match ls.find? (·.1 == ev) with
-      | some (_, sl) =>
+view (re-sent: a property can reflect onto an attribute, and mount sets them in view order).
+Returns the listener table, as `mountAttrs` builds it. -/
+partial def cloneAttrs (h : UInt32) (attrs : Array (Attr Msg)) (i : Nat := 0) (afterProp := false)
+    (ls : Array (String × UInt32) := #[]) : DiffM Msg (Array (String × UInt32)) :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .on ev hd => do
+      let sl := slotOf ls ev
+      if sl != 0 then
+        -- a repeated event: the last handler wins, in the same slot
         setSlot sl hd
         emit (·.setListener h ev sl hd.payload hd.flags)
-      | none =>
+        cloneAttrs h attrs (i + 1) afterProp ls
+      else
         let sl ← allocSlot hd
         emit (·.setListener h ev sl hd.payload hd.flags)
-        ls := ls.push (ev, sl)
-    | .attr n v => if afterProp then emit (·.setAttr h n v)
-    | .prop n v => afterProp := true; emit (·.setProp h n v)
-    | .key _ => pure ()
-  return ls
+        cloneAttrs h attrs (i + 1) afterProp (ls.push (ev, sl))
+    | .attr n v => do
+      if afterProp then emit (·.setAttr h n v)
+      cloneAttrs h attrs (i + 1) afterProp ls
+    | .prop n v => do
+      emit (·.setProp h n v)
+      cloneAttrs h attrs (i + 1) true ls
+    | .key _ => cloneAttrs h attrs (i + 1) afterProp ls
+  else pure ls
 
+mutual
 /-- Finish a clone of a template with shape `sh`: node `i` of the clone (pre-order) is `hs[i]`.
 Returns the mounted node `mount` would have built, with the same handles and slots. -/
 partial def cloneWalk (hs : Array UInt32) (sh : TplShape) (v : Html Msg) (i : Nat) : DiffM Msg (Node Msg) := do
@@ -526,16 +544,22 @@ partial def cloneWalk (hs : Array UInt32) (sh : TplShape) (v : Html Msg) (i : Na
     if s != t then emit (·.setText h s)
     return .text h s
   | .elem ns tag attrs kids, .elem _ _ _ _ sks =>
-    let kids := effectiveKids tag kids
+    -- a void element's view may name children it never gets
+    let kids := if kids.size == sks.size then kids else effectiveKids tag kids
     let ls ← cloneAttrs h attrs
-    let mut ks := if kids.isEmpty then #[] else Array.mkEmpty kids.size
-    let mut j := i + 1
-    for k in [0:kids.size] do
-      let n ← cloneWalk hs sks[k]! kids[k]! j
-      j := j + n.size
-      ks := ks.push n
-    return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
+    if kids.isEmpty then return .elem h ns tag (attrsKey attrs) attrs ls #[] 1
+    let (ks, j) ← cloneKids hs sks kids 0 (i + 1) (Array.mkEmpty kids.size)
+    return .elem h ns tag (attrsKey attrs) attrs ls ks (j - i)
   | _, _ => return .text h ""  -- unreachable: `v` matches `sh`
+
+/-- Children `k..` of a clone, the first of them node `j`; returns them and the next node. -/
+partial def cloneKids (hs : Array UInt32) (sks : Array TplShape) (kids : Array (Html Msg)) (k j : Nat)
+    (acc : Array (Node Msg)) : DiffM Msg (Array (Node Msg) × Nat) := do
+  if k < kids.size then
+    let n ← cloneWalk hs sks[k]! kids[k]! j
+    cloneKids hs sks kids (k + 1) (j + n.size) (acc.push n)
+  else return (acc, j)
+end
 
 /-- Insert the mounted nodes `ns[lo:hi]`, in order, into `parent` before `ref` (0: append), with
 one command. -/
@@ -571,9 +595,12 @@ partial def mount (v : Html Msg) (tpl : Bool := false) : DiffM Msg (Node Msg) :=
     if !(← get).hydrating then emit (·.createText h s)
     return .text h s
   | .elem ns tag attrs kids =>
-    if tpl && (← templatesOn) then
-      let left := shapeFuel (tplMax + 1) v
-      if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
+    if tpl then
+      let last ← lastTemplate v
+      if last != 0 then return ← cloneOf last v
+      if ← templatesOn then
+        let left := shapeFuel (tplMax + 1) v
+        if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
     mountElem ns tag attrs kids true
   | .lazy k deps r => return .lazy k deps (← mount (r ()) tpl)
 
@@ -607,15 +634,18 @@ partial def mountShape (v : Html Msg) (size : Nat) : DiffM Msg (Node Msg) := do
     if act == 0 then mountElem ns tag attrs kids false
     else if act == tplMake then
       let n ← mountElem ns tag attrs kids false
-      let tid ← addTemplate h (TplShape.ofHtml v)
+      let tid ← addTemplate h (TplShape.ofHtml v) size
       emit (·.template tid (n.handlesInto #[]))
       return n
-    else
-      let hs ← allocNodes size
-      emit (·.clone act hs)
-      let sh ← modifyGet fun s => (s.tplShapes[act.toNat - 1]!, s)
-      cloneWalk hs sh v 0
+    else cloneOf act v
   | _ => mount v
+
+/-- Create `v` as a clone of template `tid` (`v` has its shape). -/
+partial def cloneOf (tid : UInt32) (v : Html Msg) : DiffM Msg (Node Msg) := do
+  let (sh, size) ← modifyGet fun s => ((s.tplShapes[tid.toNat - 1]!, s.tplSizes[tid.toNat - 1]!), { s with tplLast := tid })
+  let hs ← allocNodes size
+  emit (·.clone tid hs)
+  cloneWalk hs sh v 0
 
 /-- Update `old` (a child of `parent`) to show `new`; returns the updated mounted node. -/
 partial def patch (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) :=
