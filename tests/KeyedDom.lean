@@ -8,10 +8,11 @@ show afterwards. `tests/browser/keyed-dom.mjs` applies the buffers with `runtime
 Chromium and Firefox and checks the real DOM: order, node identity, and that the number of
 insertions is the minimum (`docs/PROOFS.md`, "what is tested").
 
-    .lake/build/bin/leanui-keyed-dom [steps] [seed]
+    lake build LeanUI:shared
+    lake env lean --load-dynlib=.lake/build/lib/libleanui_LeanUI.dylib --run tests/KeyedDom.lean [steps] [seed]
 
-(A compiled executable: the command buffer's primitives are inline C, which `lean --run` cannot
-interpret.)
+(`.so` instead of `.dylib` on Linux. The library must be loaded because the command buffer's byte
+primitives are inline C, which the interpreter can only call compiled; see `LeanUI.Patch`.)
 -/
 open LeanUI Attr
 

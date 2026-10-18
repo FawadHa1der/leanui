@@ -105,9 +105,12 @@ built against. It was first written on 2026-10-18 from the research in
 - Lean binaries by absolute path: `~/.elan/toolchains/leanprover--lean4---v4.34.0/bin/{lake,lean,leanc}`
   (a bare `lean`/`lake` outside a `lean-toolchain` folder makes elan download a toolchain).
 - The command buffer's byte primitives (`pushU32`, `appendUtf8` in `LeanUI.Patch`) are
-  `@[extern c inline]` (2026-10-18): code that writes a `Buf` (mount, diff, `LeanUI.Testing`) runs
-  compiled only, in executables and wasm, never under `#eval` or `lean --run`. Views and
-  `Html.render` stay interpretable.
+  `@[extern c inline]` (2026-10-18): code that writes a `Buf` (mount, diff, `LeanUI.Testing`)
+  needs the compiled LeanUI library. Executables and wasm link it; `#eval` and `lean --run` need
+  it loaded (`lake build LeanUI:shared`, then
+  `lake env lean --load-dynlib=.lake/build/lib/libleanui_LeanUI.dylib …`, `.so` on Linux), and a
+  downstream library with `precompileModules = true` loads it by itself, in `lake build` and in
+  the editor. Views and `Html.render` stay interpretable without it.
 - Archives: `LEANUI_TOOLCHAIN` (default `<repo>/.toolchain`).
 - Commits end with the session's `Co-Authored-By` line. Never `git push`. Never `npm install`.
   Kill processes by PID only.

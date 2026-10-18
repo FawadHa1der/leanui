@@ -74,10 +74,17 @@ grows the array. Byte stores keep the layout little-endian on any host (the C co
 into one store). The snippets are GNU statement expressions (`({ … })`), which clang (`leanc`,
 `emcc`) and GCC accept.
 
-The interpreter cannot run an inline C extern, so code that writes a `Buf` (mounting, diffing,
-`LeanUI.Testing`) runs compiled only: in executables and in wasm, not under `#eval` or
-`lean --run` (which is why `tests/KeyedDom.lean` is an executable). Views and `Html.render` do
-not touch a `Buf` and stay interpretable. -/
+The interpreter has no code of its own for an inline C extern, so code that writes a `Buf`
+(mounting, diffing, `LeanUI.Testing`) needs the compiled LeanUI library. Executables and wasm
+link it. Under `#eval` or `lean --run` it fails ("Could not find native implementation of
+external declaration 'LeanUI.pushU32'") unless the library is loaded:
+
+    lake build LeanUI:shared
+    lake env lean --load-dynlib=.lake/build/lib/libleanui_LeanUI.dylib File.lean   # .so on Linux
+
+(`tests/browser/keyed-dom.mjs` runs `tests/KeyedDom.lean` this way). A downstream library with
+`precompileModules = true` gets it loaded automatically, in `lake build` and in the editor.
+Views and `Html.render` do not touch a `Buf` and stay interpretable without it. -/
 
 /-- Append a little-endian `u32`. -/
 @[extern c inline "({ lean_object *a_ = #1; uint32_t x_ = #2; size_t n_ = lean_sarray_size(a_); \

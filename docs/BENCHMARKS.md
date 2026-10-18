@@ -172,9 +172,11 @@ protocol:
    the specification but compile, through `@[extern c inline]`, to a statement expression pasted
    at each call site: when the array is exclusive and has room, store the bytes and bump the size;
    otherwise run the original runtime calls. There is no C file and no build step, natively or in
-   wasm. The cost: the interpreter cannot run an inline C extern, so code that writes a buffer
-   runs compiled only (not under `#eval` or `lean --run`; `tests/KeyedDom.lean` became the
-   `leanui-keyed-dom` executable).
+   wasm. The cost: the interpreter has no code of its own for an inline C extern, so code that
+   writes a buffer needs the compiled LeanUI library. Executables and wasm link it; `#eval` and
+   `lean --run` work once it is loaded (`lake build LeanUI:shared`, then
+   `lean --load-dynlib=.lake/build/lib/libleanui_LeanUI.dylib`, as `tests/browser/keyed-dom.mjs`
+   does), and so does the editor in a downstream library with `precompileModules = true`.
 2. **No buffer per command.** Interning returned an `(id, buffer)` pair and looked names up with
    `HashMap.get?`; the compiler took the buffer apart around the pair and allocated a new one for
    every command that names something, plus an `Option` per lookup. Now `named` passes the
