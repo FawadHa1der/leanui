@@ -27,13 +27,25 @@
 
     // ---- input: events and effect results go to Lean one at a time ----
     send(kind, a, b, c) {
+      if (this.crashed) return;
       if (this.busy) { this.queue.push([kind, a, b, c]); return; }
       this.busy = true;
       try {
         if (kind === 0) this.transport.event(a, b); else this.transport.callback(a, b, c);
-      } catch (e) { console.error("LeanUI:", e); }
+      } catch (e) { this.crash(e); }
       finally { this.busy = false; }
       if (this.queue.length) { const [k, x, y, z] = this.queue.shift(); this.send(k, x, y, z); }
+    }
+    // An update that throws (in wasm: the native stack overflowed on a view nested about a
+    // thousand levels deep, or memory ran out) leaves the app without its state: say so once,
+    // stop calling it, and tell the page (a "leanui:error" event on the container).
+    crash(e) {
+      if (this.transport instanceof WasmTransport) {
+        this.crashed = e;
+        this.queue.length = 0;
+        console.error("LeanUI: the app stopped after an error in an update; reload the page to restart it.", e);
+        if (this.container) this.container.dispatchEvent(new CustomEvent("leanui:error", { bubbles: true, detail: e }));
+      } else console.error("LeanUI:", e);
     }
     callback(cb, ok, payload) { this.send(1, cb, ok, payload); }
 
@@ -47,6 +59,8 @@
     }
     onEvent(e) {
       const type = e.type;
+      // events that do not bubble (delegated in the capture phase) reach only their target
+      const bubbles = !CAPTURE.has(type);
       for (let n = e.target; n; n = n.parentNode) {
         const hs = n.__lui;
         const h = hs && hs[type];
@@ -56,7 +70,7 @@
           this.send(0, slot, extract(payload, n, e));
           if (flags & 2) { e.stopPropagation(); return; }
         }
-        if (n === this.container) return;
+        if (!bubbles || n === this.container) return;
       }
     }
 
@@ -170,20 +184,30 @@
       case 1: return String(el.value ?? "");
       case 2: return el.checked ? "true" : "false";
       case 3: return e.key || "";
-      case 4: { const out = []; for (const [k, v] of new FormData(el)) out.push(k + "=" + v); return out.join("\n"); }
+      case 4: {
+        const form = el instanceof HTMLFormElement ? el : el.form;
+        if (!form) return "";
+        const out = []; for (const [k, v] of new FormData(form)) out.push(k + "=" + (typeof v === "string" ? v : v.name)); return out.join("\n");
+      }
       default: return "";
     }
   }
 
   // ---- transports ----
-  // wasm64 exports take pointers as 64-bit integers (BigInt); stringToNewUTF8 returns a Number
+  // wasm64 exports take pointers and sizes as 64-bit integers (BigInt); malloc returns a Number
   const ptr = (p) => (typeof p === "bigint" ? p : BigInt(p));
+  // A string as malloc'd UTF-8 bytes and their length: the length travels separately, so a
+  // payload may contain U+0000 (a C string would end there). C frees the bytes.
+  function utf8(mod, s) {
+    const n = mod.lengthBytesUTF8(s), p = mod._malloc(ptr(n + 1));
+    mod.stringToUTF8(s, Number(p), n + 1);
+    return [ptr(p), ptr(n)];
+  }
 
   class WasmTransport {
     constructor(mod) { this.mod = mod; }
-    str(s) { return ptr(this.mod.stringToNewUTF8(s)); }
-    event(slot, payload) { this.mod._leanui_event(slot, this.str(payload)); }
-    callback(cb, ok, payload) { this.mod._leanui_callback(cb, ok ? 1 : 0, this.str(payload)); }
+    event(slot, payload) { this.mod._leanui_event(slot, ...utf8(this.mod, payload)); }
+    callback(cb, ok, payload) { this.mod._leanui_callback(cb, ok ? 1 : 0, ...utf8(this.mod, payload)); }
   }
 
   // Server-driven: Lean runs natively on the server; every event is a POST whose response is the
@@ -192,9 +216,25 @@
     constructor(endpoint, session, runtime) { this.endpoint = endpoint; this.session = session; this.rt = runtime; this.chain = Promise.resolve(); }
     post(body) {
       this.chain = this.chain.then(() => fetch(this.endpoint + "/" + this.session, { method: "POST", body, headers: { "content-type": "text/plain" } }))
-        .then((r) => r.arrayBuffer())
-        .then((buf) => { if (buf.byteLength) applyEncoded(this.rt, new Uint8Array(buf)); })
+        .then(async (r) => {
+          const buf = await r.arrayBuffer();
+          if (r.status === 410) { this.expired(); return; }
+          // a LeanUI server answers errors with a buffer that logs the reason: apply it either way
+          if (!r.ok) console.error("LeanUI remote: HTTP " + r.status);
+          if (buf.byteLength) applyEncoded(this.rt, new Uint8Array(buf));
+        })
         .catch((e) => console.error("LeanUI remote:", e));
+    }
+    // The server forgot this session (it expired): reload once for a fresh one, never in a loop.
+    expired() {
+      const key = "leanui.reloadedAt";
+      let last = 0;
+      try { last = +sessionStorage.getItem(key) || 0; } catch (e) {}
+      if (Date.now() - last > 10000) {
+        try { sessionStorage.setItem(key, String(Date.now())); } catch (e) {}
+        console.warn("LeanUI remote: the session expired; reloading");
+        location.reload();
+      } else console.error("LeanUI remote: the session expired again right after a reload; not reloading");
     }
     event(slot, payload) { this.post("e\n" + slot + "\n" + payload); }
     callback(cb, ok, payload) { this.post("c\n" + cb + "\n" + (ok ? 1 : 0) + "\n" + payload); }
@@ -231,7 +271,7 @@
       LeanUI.active = rt;
       rt.busy = true;
       let ok;
-      try { ok = mod._leanui_boot(ptr(mod.stringToNewUTF8(flags)), ptr(mod.stringToNewUTF8(selector)), hydrate ? 1 : 0); }
+      try { ok = mod._leanui_boot(...utf8(mod, flags), ...utf8(mod, selector), hydrate ? 1 : 0); }
       finally { rt.busy = false; }
       if (!ok) throw new Error("LeanUI: the app failed to start (see the console)");
       if (rt.queue.length) { const [k, a, b, c] = rt.queue.shift(); rt.send(k, a, b, c); }

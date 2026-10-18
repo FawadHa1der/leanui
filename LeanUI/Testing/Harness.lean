@@ -30,13 +30,19 @@ def find (r : Running) (name value : String) : IO UInt32 := do
   | some h => return h
   | none => throw (IO.userError s!"no node with {name}={value}")
 
-/-- Fire `event` on a node, as the browser's delegated listener would (bubbling to ancestors). -/
+/-- Events that do not bubble: the runtime delegates them in the capture phase and delivers them
+to their target only (`CAPTURE` in runtime/leanui.js). -/
+def nonBubbling : List String :=
+  ["focus", "blur", "mouseenter", "mouseleave", "load", "error", "scroll", "pointerenter", "pointerleave"]
+
+/-- Fire `event` on a node, as the browser's delegated listener would (bubbling to ancestors,
+except for events that do not bubble). -/
 partial def fire (r : Running) (h : UInt32) (event : String) (payload := "") : IO Unit := do
   let d ← r.dom.get
   match (d.get h).listeners.find? (·.1 == event) with
   | some (_, slot, _, _) => r.inst.event slot payload
   | none => match (d.get h).parent with
-    | some p => r.fire p event payload
+    | some p => if nonBubbling.contains event then throw (IO.userError s!"no {event} listener on node {h} ({event} does not bubble)") else r.fire p event payload
     | none => throw (IO.userError s!"no {event} listener on node {h} or its ancestors")
 
 def click (r : Running) (name value : String) : IO Unit := do r.fire (← r.find name value) "click"

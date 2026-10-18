@@ -1,5 +1,6 @@
 module
 public import LeanUI.Testing.Spec
+public import LeanUI.Testing.Harness
 /-!
 # A replay corpus for the browser runtime
 
@@ -47,8 +48,9 @@ def jsonArr (xs : Array String) : String := "[" ++ ",".intercalate xs.toList ++ 
 partial def preorder (d : Dom) (h : UInt32) (acc : Array UInt32 := #[]) : Array UInt32 :=
   (d.get h).kids.foldl (fun acc k => preorder d k acc) (acc.push h)
 
-/-- The payload `runtime/leanui.js` extracts for a synthetic event of type `ev` on node `h`
-(`none` = the extraction throws: `new FormData` of a non-form element). -/
+/-- The payload `runtime/leanui.js` extracts for a synthetic event of type `ev` on node `h`.
+`formData` reads the element's form (itself, or the form a control belongs to; nothing for other
+elements); the generated views name no form fields, so it is always empty. -/
 def expectedPayload (d : Dom) (h : UInt32) (ev : String) (code : UInt32) : Option String :=
   let n := d.get h
   let prop (k : String) := (n.props.find? (·.1 == k)).map (·.2)
@@ -56,11 +58,12 @@ def expectedPayload (d : Dom) (h : UInt32) (ev : String) (code : UInt32) : Optio
     some (if n.tag == "li" then "0" else (prop "value").getD "")
   else if code == Payload.checked.code then some (if prop "checked" == some "true" then "true" else "false")
   else if code == Payload.key.code then some (if ev == "keydown" then "Enter" else "")
-  else if code == Payload.formData.code then (if n.tag == "form" then some "" else none)
+  else if code == Payload.formData.code then some ""
   else some ""
 
 /-- The listeners an event of type `ev` dispatched on `h` reaches, in order: the node and its
-ancestors with a listener for `ev`, up to the first that stops propagation. -/
+ancestors with a listener for `ev`, up to the first that stops propagation. An event that does not
+bubble reaches the node only. -/
 partial def chain (d : Dom) (root : UInt32) (h : UInt32) (ev : String) (acc : Array String := #[]) : Array String :=
   let n := d.get h
   let (acc, stop) := match n.listeners.find? (·.1 == ev) with
@@ -68,7 +71,7 @@ partial def chain (d : Dom) (root : UInt32) (h : UInt32) (ev : String) (acc : Ar
       let p := match expectedPayload d h ev pl with | some s => json s | none => "null"
       (acc.push s!"[{sl},{p},{fl}]", fl &&& 2 != 0)
     | none => (acc, false)
-  if stop || h == root then acc
+  if stop || h == root || LeanUI.Testing.Running.nonBubbling.contains ev then acc
   else match n.parent with
     | some p => chain d root p ev acc
     | none => acc

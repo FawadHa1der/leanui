@@ -1,7 +1,8 @@
 // LeanUI's C shim for the browser (Emscripten, single-threaded wasm64).
 // Boots the Lean runtime and the app, keeps the running Instance, and moves data across the
 // boundary: command buffers out (zero-copy views of Lean ByteArrays), events and effect results
-// in (UTF-8 strings the JavaScript runtime allocates with malloc; freed here).
+// in (UTF-8 bytes the JavaScript runtime allocates with malloc, passed with their length so a
+// payload may contain U+0000; freed here).
 #include <lean/lean.h>
 #include <emscripten.h>
 #include <stdlib.h>
@@ -27,19 +28,19 @@ static int ok_or_report(lean_object *r) {
   return 1;
 }
 
-static lean_object *take_string(char *s) {
-  lean_object *o = lean_mk_string(s ? s : "");
+static lean_object *take_string(char *s, size_t len) {
+  lean_object *o = s ? lean_mk_string_from_bytes(s, len) : lean_mk_string("");
   free(s);
   return o;
 }
 
-// flags and selector are malloc'd UTF-8 strings (ownership passes to C).
-EMSCRIPTEN_KEEPALIVE int leanui_boot(char *flags, char *selector, int hydrate) {
+// flags and selector are malloc'd UTF-8 bytes (ownership passes to C).
+EMSCRIPTEN_KEEPALIVE int leanui_boot(char *flags, size_t flags_len, char *selector, size_t selector_len, int hydrate) {
   lean_object *r = leanui_initialize_app();
   if (!ok_or_report(r)) return 0;
   lean_dec_ref(r);
   lean_io_mark_end_initialization();
-  r = leanui_app_start(take_string(flags), take_string(selector), (uint8_t)hydrate);
+  r = leanui_app_start(take_string(flags, flags_len), take_string(selector, selector_len), (uint8_t)hydrate);
   if (!ok_or_report(r)) return 0;
   g_inst = lean_io_result_get_value(r);
   lean_inc(g_inst);
@@ -47,16 +48,16 @@ EMSCRIPTEN_KEEPALIVE int leanui_boot(char *flags, char *selector, int hydrate) {
   return 1;
 }
 
-EMSCRIPTEN_KEEPALIVE void leanui_event(uint32_t slot, char *payload) {
+EMSCRIPTEN_KEEPALIVE void leanui_event(uint32_t slot, char *payload, size_t len) {
   if (!g_inst) { free(payload); return; }
   lean_inc(g_inst);
-  lean_object *r = leanui_instance_event(g_inst, slot, take_string(payload));
+  lean_object *r = leanui_instance_event(g_inst, slot, take_string(payload, len));
   if (ok_or_report(r)) lean_dec_ref(r);
 }
 
-EMSCRIPTEN_KEEPALIVE void leanui_callback(uint32_t cb, int ok, char *payload) {
+EMSCRIPTEN_KEEPALIVE void leanui_callback(uint32_t cb, int ok, char *payload, size_t len) {
   if (!g_inst) { free(payload); return; }
   lean_inc(g_inst);
-  lean_object *r = leanui_instance_callback(g_inst, cb, (uint8_t)ok, take_string(payload));
+  lean_object *r = leanui_instance_callback(g_inst, cb, (uint8_t)ok, take_string(payload, len));
   if (ok_or_report(r)) lean_dec_ref(r);
 }

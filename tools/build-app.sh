@@ -50,7 +50,7 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
     /tc/wasm64/lib/libStd.a /tc/wasm64/lib/libInit.a /tc/wasm64/lib/libleanrt.a /tc/wasm64/lib/libuv.a \
     -sMALLOC=${LEANUI_MALLOC:-dlmalloc} -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=${LEANUI_INITIAL_MEMORY:-16777216} -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
     -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
-    -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=stringToNewUTF8 \
+    -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=lengthBytesUTF8,stringToUTF8 \
     -o /proj/dist/$NAME/app.js
 " 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
 cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"

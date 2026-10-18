@@ -1,9 +1,27 @@
 // Correctness + rough timing of dist/bench (js-framework-benchmark keyed operations).
-// node tests/browser/bench-smoke.mjs <url> [chromium|firefox]   (under the host browser lock)
+// node tests/browser/bench-smoke.mjs [chromium|firefox] [url]   (under the host browser lock)
+// Without a url it serves dist/bench (and bench/bench.css) itself.
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
 const pw = require("playwright");
-const url = process.argv[2], engine = process.argv[3] || "chromium";
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const engine = process.argv[2] || "chromium";
+let url = process.argv[3], server = null;
+if (!url) {
+  const TYPES = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".css": "text/css" };
+  server = http.createServer((req, res) => {
+    const u = new URL(req.url, "http://x").pathname;
+    const f = u === "/bench.css" ? path.join(ROOT, "bench/bench.css") : path.join(ROOT, "dist/bench", u.replace(/^\/leanui\//, "") || "index.html");
+    if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { "content-type": TYPES[path.extname(f)] || "application/octet-stream" }); res.end(fs.readFileSync(f));
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  url = `http://127.0.0.1:${server.address().port}/leanui/index.html`;
+}
 const browser = await pw[engine].launch({ headless: true });
 const page = await browser.newPage();
 const errors = [];
@@ -46,6 +64,7 @@ await time("create10k", async () => { await op("#clear"); }, "#runlots", 3);
 out.checks = checks; out.ms = T; out.errors = errors;
 out.wasmPages = await page.evaluate(() => performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + " MB JS heap" : null);
 await browser.close();
+if (server) server.close();
 console.log(JSON.stringify(out, null, 1));
 const ok = checks.every(([, v]) => v) && errors.length === 0;
 console.log(ok ? "PASS" : "FAIL");

@@ -159,8 +159,8 @@ for (const engine of engines) {
   }
   if (modelWrong.length) console.log(`  where the parser model differs from this browser (all flagged by the lint): ${Object.entries(unmodeled).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(", ")}`);
   const entered = sum("bubbledEnter");
-  if (entered) console.log(`  semantics note: ${entered} mouseenter events also reached an ancestor's mouseenter listener (delegation walks up for non-bubbling events)`);
-  if (throws) console.log(`  runtime issue: ${throws} events reached a payload: formData listener on an element that is not a <form>; extract() throws (new FormData(el)) and the rest of the chain is lost`);
+  if (entered) console.log(`  semantics issue: ${entered} mouseenter events also reached an ancestor's mouseenter listener (non-bubbling events must reach their target only)`);
+  if (throws) console.log(`  runtime issue: ${throws} formData extractions threw`);
   for (const f of failed.slice(0, 8)) console.log(`  FAIL case ${f.case}${f.hydrate ? " (hydrated)" : ""} step ${f.fail.step}: ${f.fail.what}${f.fail.got !== undefined ? `\n     got ${f.fail.got}\n    want ${f.fail.want}` : ""}`);
   if (failed.length || (strict && throws)) allOk = false;
 }
