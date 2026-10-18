@@ -8,7 +8,8 @@ public import LeanUI.Testing.Dom
 
 `decode` turns a command buffer into typed commands (with their word ranges, so a buffer can be
 re-encoded with commands dropped: mutation testing). `Shadow` is an independent model of what
-the browser holds (live handles, parents, listener slots, interned names) that rejects every
+the browser holds (live handles, parents and child order, listener slots, interned names) that
+rejects every
 command the browser could not apply as intended, even those `Dom.apply` tolerates:
 
 * creating a handle that is still live (reuse without `free`), or using a handle that is not;
@@ -19,9 +20,9 @@ command the browser could not apply as intended, even those `Dom.apply` tolerate
   child), and live nodes that are no longer reachable at the end of a buffer (leaks);
 * a listener slot bound to two (node, event) pairs at once (ambiguous routing), slot 0;
 * names used before `INTERN`, an id interned twice;
-* a `TEMPLATE` that does not name a live subtree completely (every node of the root's subtree,
-  each after its parent), or redefines an id; a `CLONE` of an unknown template, with a count that
-  is not the template's size, or onto handles that are live or repeated;
+* a `TEMPLATE` whose handles are not exactly the nodes of a live subtree in pre-order, or that
+  redefines an id; a `CLONE` of an unknown template, with a count that is not the template's
+  size, or onto handles that are live or repeated;
 * string slices outside the string area, truncated operands, unknown opcodes.
 
 It also counts redundancies (a `remove` of a node that has no parent, a `removeListener` with
@@ -166,6 +167,8 @@ structure Shadow where
   inc : Std.HashMap UInt32 Nat := {}
   nextInc : Nat := 1
   parent : Std.HashMap UInt32 UInt32 := {}
+  /-- Children in DOM order (kept with `parent`). -/
+  kids : Std.HashMap UInt32 (Array UInt32) := {}
   roots : Array (String × UInt32) := #[]
   names : Std.HashMap UInt32 String := {}
   nameIds : Std.HashMap String UInt32 := {}
@@ -203,7 +206,25 @@ partial def attached (s : Shadow) (h : UInt32) (fuel : Nat := 1000000) : Bool :=
     | _, none => false
     | f + 1, some p => s.attached p f
 
-def detach (s : Shadow) (c : UInt32) : Shadow := { s with parent := s.parent.erase c }
+/-- Take `c` out of its parent. -/
+def detach (s : Shadow) (c : UInt32) : Shadow :=
+  match s.parent.get? c with
+  | some p => { s with parent := s.parent.erase c, kids := s.kids.modify p (·.filter (· != c)) }
+  | none => s
+
+/-- Put `c` (detached) into `p`, before `r` if it is a child of `p`, else last. -/
+def attach (s : Shadow) (p c : UInt32) (r : Option UInt32 := none) : Shadow :=
+  let ks := s.kids.getD p #[]
+  let ks := match r.bind ks.idxOf? with
+    | some i => ks.insertIdxIfInBounds i c
+    | none => ks.push c
+  { s with parent := s.parent.insert c p, kids := s.kids.insert p ks }
+
+/-- The handles of the subtree of `h` in pre-order (at most `limit`, so a cycle the checks
+reported cannot hang it). -/
+partial def preorder (s : Shadow) (h : UInt32) (limit : Nat) (acc : Array UInt32 := #[]) : Array UInt32 :=
+  if acc.size > limit then acc
+  else (s.kids.getD h #[]).foldl (fun acc k => s.preorder k limit acc) (acc.push h)
 
 def needLive (s : Shadow) (what : String) (h : UInt32) : Shadow :=
   if s.live h then s else s.err s!"{what}: handle {h} is not live"
@@ -223,7 +244,8 @@ def dropListeners (s : Shadow) (h : UInt32) : Shadow :=
   { s with slotAt, listeners := s.listeners.erase h }
 
 def created (s : Shadow) (h : UInt32) (k : Kind) : Shadow :=
-  { s with kind := s.kind.insert h k, parent := s.parent.erase h, inc := s.inc.insert h s.nextInc, nextInc := s.nextInc + 1 }
+  let s := s.detach h
+  { s with kind := s.kind.insert h k, kids := s.kids.erase h, inc := s.inc.insert h s.nextInc, nextInc := s.nextInc + 1 }
 
 /-- Check and apply one command. `ghosts` collects (freed node, its parent, the parent's
 incarnation) for nodes freed while still inside a parent. -/
@@ -249,13 +271,14 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
   | .appendChild p ch =>
     let s := (s.needElem "appendChild" p).needLive "appendChild" ch
     let s := if s.ancestor ch p then s.err s!"appendChild: {ch} is an ancestor of {p} (cycle)" else s
-    ({ s with parent := s.parent.insert ch p }, ghosts)
+    ((s.detach ch).attach p ch, ghosts)
   | .insertBefore p ch r =>
     let s := ((s.needElem "insertBefore" p).needLive "insertBefore" ch).needLive "insertBefore" r
     let s := if s.ancestor ch p then s.err s!"insertBefore: {ch} is an ancestor of {p} (cycle)" else s
     let s := if r == ch then s.warn s!"insertBefore: {ch} before itself"
       else if s.parent.get? r != some p then s.err s!"insertBefore: reference {r} is not a child of {p}" else s
-    ({ s with parent := s.parent.insert ch p }, ghosts)
+    -- inserting a node before itself leaves it where it is
+    if r == ch then (s, ghosts) else ((s.detach ch).attach p ch (some r), ghosts)
   | .remove h =>
     let s := s.needLive "remove" h
     let s := if s.parent.contains h then s else s.warn s!"remove: {h} has no parent (no-op)"
@@ -265,7 +288,8 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
     let s := if s.ancestor n o then s.err s!"replace: {n} contains {o} (cycle)" else s
     match s.parent.get? o with
     | some p =>
-      ({ s with parent := (s.parent.erase o).insert n p }, ghosts)
+      let s := s.detach n
+      ({ s with parent := (s.parent.erase o).insert n p, kids := s.kids.modify p (·.map fun x => if x == o then n else x) }, ghosts)
     | none =>
       if s.isRoot o then ({ s.detach n with roots := s.roots.map fun (sel, r) => if r == o then (sel, n) else (sel, r) }, ghosts)
       else (s.err s!"replace: {o} has no parent and is not a root (the browser ignores it)", ghosts)
@@ -277,7 +301,8 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
         | some p => if s.live p then ghosts.push (h, p, s.inc.getD p 0) else ghosts
         | none => ghosts
       let s := s.dropListeners h
-      ({ s with kind := s.kind.erase h, parent := s.parent.erase h, roots := s.roots.filter (·.2 != h) }, ghosts)
+      let s := s.detach h
+      ({ s with kind := s.kind.erase h, kids := s.kids.erase h, roots := s.roots.filter (·.2 != h) }, ghosts)
   | .setListener h ev slot _ _ =>
     let s := (s.needElem "setListener" h).needName "setListener" ev
     let s := if slot == 0 then s.err "setListener: slot 0" else s
@@ -307,23 +332,15 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
     let mut s := s
     if tid == 0 then s := s.err "template: id 0"
     if s.templates.contains tid then s := s.err s!"template: id {tid} defined twice"
-    if hs.isEmpty then return (s.err s!"template {tid}: no nodes", ghosts)
-    -- every node live, listed after its parent; the root's whole subtree listed
-    let mut pos : Std.HashMap UInt32 Nat := {}
-    let mut shape : Array (Kind × Option Nat) := #[]
-    for h : k in [0:hs.size] do
-      let x := hs[k]
-      match s.kind.get? x with
-      | none => s := s.err s!"template {tid}: handle {x} is not live"
-      | some kd =>
-        if pos.contains x then s := s.err s!"template {tid}: handle {x} listed twice"
-        let par := if k == 0 then none else (s.parent.get? x).bind pos.get?
-        if k > 0 && par.isNone then s := s.err s!"template {tid}: handle {x} is not inside the subtree of {hs[0]!} (or comes before its parent)"
-        shape := shape.push (kd, par)
-      pos := pos.insert x k
-    for (c, p) in s.parent.toList do
-      if pos.contains p && !pos.contains c && s.live c then
-        s := s.err s!"template {tid}: {c} is in the subtree of {hs[0]!} but not listed"
+    let some root := hs[0]? | return (s.err s!"template {tid}: no nodes", ghosts)
+    if !s.live root then return (s.err s!"template {tid}: handle {root} is not live", ghosts)
+    -- exactly the nodes of the root's subtree, in pre-order
+    let pre := s.preorder root hs.size
+    if pre != hs then
+      return (s.err s!"template {tid}: the handles are not the subtree of {root} in pre-order (it has {if pre.size > hs.size then "more" else toString pre.size} nodes)", ghosts)
+    -- per node: its kind and the index of its parent
+    let pos : Std.HashMap UInt32 Nat := (hs.zipIdx).foldl (fun m (x, k) => m.insert x k) {}
+    let shape := hs.mapIdx fun k x => (s.kind.getD x .elem, if k == 0 then none else (s.parent.get? x).bind pos.get?)
     return ({ s with templates := s.templates.insert tid shape }, ghosts)
   | .clone tid hs => Id.run do
     let mut s := s
@@ -338,7 +355,8 @@ def step (s : Shadow) (ghosts : Array (UInt32 × UInt32 × Nat)) (c : WOp) : Sha
     for h : k in [0:hs.size] do
       let (kd, par) := shape[k]!
       s := s.created hs[k] kd
-      if let some p := par then s := { s with parent := s.parent.insert hs[k] hs[p]! }
+      -- in pre-order, so each node is appended after its earlier siblings
+      if let some p := par then s := s.attach hs[p]! hs[k]
     return (s, ghosts)
   | .effect _ => (s, ghosts)
 
@@ -386,6 +404,7 @@ def ofDom (d : Dom) : Shadow := Id.run do
   for (h, n) in d.nodes.toList do
     s := s.created h (if n.isText then .text else .elem)
     if let some p := n.parent then s := { s with parent := s.parent.insert h p }
+    s := { s with kids := s.kids.insert h n.kids }
   return s
 
 end Shadow
