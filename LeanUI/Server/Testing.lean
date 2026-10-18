@@ -65,8 +65,12 @@ private def addAttr (as : Array (String × String)) (k v : String) : Array (Stri
 
 private def rawText : List String := ["script", "style", "textarea", "title"]
 
-/-- Parse an HTML document or fragment. -/
+/-- Parse an HTML document or fragment. Applies the HTML parser's rules that make a page differ
+from the markup it was given, because hydration meets the *parsed* nodes: newlines are normalised
+(`\r\n` and `\r` become `\n`; `&#13;` still yields `\r`), a newline right after `<pre>`,
+`<listing>` or `<textarea>` is dropped, and of duplicate attributes the first is kept. -/
 partial def parseHtml (src : String) : Except String (Array PNode) := do
+  let src := (src.replace "\r\n" "\n").replace "\r" "\n"
   let cs := src.toList.toArray
   let n := cs.size
   let at? (i : Nat) (lit : String) : Bool :=
@@ -143,12 +147,14 @@ partial def parseHtml (src : String) : Except String (Array PNode) := do
     else if rawText.contains tag then
       let some e := find i ("</" ++ tag) | throw s!"unterminated <{tag}>"
       let body := str i e
+      let body := if tag == "textarea" && body.startsWith "\n" then (body.drop 1).toString else body
       let kids : Array PNode := if body.isEmpty then #[] else #[.text (if tag == "script" || tag == "style" then body else decodeEntities body)]
       stack := push stack (.elem tag attrs kids)
       let some e2 := find e ">" | throw s!"unterminated </{tag}"
       i := e2 + 1
     else
       stack := stack.push (tag, attrs, #[])
+      if (tag == "pre" || tag == "listing") && i < n && cs[i]! == '\n' then i := i + 1
     textStart := i
   if textStart < n then stack := push stack (.text (decodeEntities (str textStart n)))
   while stack.size > 1 do

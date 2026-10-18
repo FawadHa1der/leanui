@@ -121,9 +121,10 @@ def testJson : IO Unit := do
 /-- A view generator for the SSR ⇄ hydration contract: adjacent and empty texts, characters that
 need escaping, astral characters (two UTF-16 units), void elements and properties. -/
 partial def genView (r : Rng) (depth : Nat) : Rng × Html Unit := Id.run do
-  let texts := #["", "a", "x<y", "&amp;", "\"q\" 'q'", "é", "😀 smile", " ", "a  b", "<!--", "-->", "|", "t"]
-  let attrs : Array (Attr Unit) := #[cls "c\"1", .attr "title" "<&>", .attr "data-x" "😀", .attr "data-e" "",
-    id "n1", .attr "aria-label" "a&b", .prop "hidden" (.bool false)]
+  let texts := #["", "a", "x<y", "&amp;", "\"q\" 'q'", "é", "😀 smile", " ", "a  b", "<!--", "-->", "|", "t",
+    "\n", "\nlead", "a\r\nb", "\r"]
+  let attrs : Array (Attr Unit) := #[cls "c\"1", cls "other", .attr "title" "<&>", .attr "data-x" "😀", .attr "data-e" "",
+    id "n1", .attr "aria-label" "a&b\r\nc", .prop "hidden" (.bool false)]
   let mut r := r
   let (r1, kind) := r.below 10; r := r1
   if depth == 0 || kind < 3 then
@@ -133,15 +134,16 @@ partial def genView (r : Rng) (depth : Nat) : Rng × Html Unit := Id.run do
     let (r2, v) := r.pick texts; r := r2
     return (r, el "input" #[value v, .prop "checked" (.bool (v.length % 2 == 0))] #[])
   if kind == 4 then return (r, el "br" #[] #[])
-  let (r2, tag) := r.pick #["div", "span", "b", "em", "section", "ul", "li"]; r := r2
+  let (r2, tag) := r.pick #["div", "span", "b", "em", "section", "ul", "li", "pre", "textarea"]; r := r2
   let (r3, na) := r.below 3; r := r3
   let mut as : Array (Attr Unit) := #[]
-  let mut used : Array String := #[]
   for _ in [0:na] do
     let (r4, a) := r.pick attrs; r := r4
-    let name := match a with | .attr n _ => n | .prop n _ => n | _ => ""
-    -- duplicate names are a known Render limitation (the HTML parser keeps the first), see the report
-    if !used.contains name then as := as.push a; used := used.push name
+    as := as.push a
+  -- a textarea's content is text (RCDATA): one non-empty text at most, no markers possible
+  if tag == "textarea" then
+    let (r5, t) := r.pick texts; r := r5
+    return (r, el tag as (if t.isEmpty then #[] else #[text t]))
   let (r5, nk) := r.below 5; r := r5
   let mut kids := #[]
   for _ in [0:nk] do
@@ -175,6 +177,13 @@ def testHydrationContract (iters : Nat) : IO Unit := do
   hydrateNatively (el "p" #[] #[text "a", text "", text "", text "b", el "br" #[] #[], text "", text "c"])
   hydrateNatively (el "p" #[] #[text ""])
   hydrateNatively (el "p" #[] #[])
+  -- regressions (LeanUI.Render): the parser drops a newline after <pre>/<textarea>, normalises
+  -- carriage returns, and keeps the first of duplicate attributes
+  hydrateNatively (el "pre" #[] #[text "\n"])
+  hydrateNatively (el "pre" #[] #[text "\n\nindented\n"])
+  hydrateNatively (el "textarea" #[] #[text "\nfirst line"])
+  hydrateNatively (el "p" #[.attr "title" "a\r\nb"] #[text "c\rd\r\n"])
+  hydrateNatively (el "div" #[cls "a", id "x", cls "b"] #[])
   IO.println s!"  SSR ⇄ hydration contract, {iters} random views (parse, claim, hydrate, compare): ok"
 
 def testPage : IO Unit := do
@@ -357,6 +366,13 @@ def testTickerSession : IO Unit := withSite {} fun _ site => do
   expect ((← c.effects).contains "op44 ticker 108") "title effect"
   IO.println "  server-driven ticker (c: subscriptions, fetch results; title effect; flags): ok"
 
+def testContractSession : IO Unit := withSite {} fun _ site => do
+  let c ← Client.open site "/contract/server"
+  c.check (Demo.Contract.view 0) "hydrated"
+  discard <| c.click "id" "go"
+  c.check (Demo.Contract.view 1) "updated through the claimed handles"
+  IO.println "  server-driven SSR contract page (pre/textarea newlines, CR, duplicates): ok"
+
 def testProtocolErrors : IO Unit := withSite {} fun _ site => do
   let post (sid body : String) := run site (Req.post s!"/leanui/{sid}" body)
   let page ← run site (Req.get "/counter/server")
@@ -433,22 +449,31 @@ def spin : Nat → UInt64 → UInt64
   | 0, a => a
   | n + 1, a => spin n (a * 6364136223846793005 + 1442695040888963407)
 
-/-- A session that does not answer in time gets `500` instead of holding the connection. -/
+/-- A session that does not answer in time gets `500` (from the reaper's watchdog) instead of
+holding the connection; so do the requests queued behind it; then the session is gone. -/
 def testReplyTimeout : IO Unit := do
-  let sessions ← Sessions.new { replyTimeoutMs := 150 }
+  let sessions ← Sessions.new { replyTimeoutMs := 150, sweepMs := 100 }
+  let stopReaper ← sessions.startReaper
   try
     let slow : Program UInt64 Unit := {
-      init := fun _ => (0, .none), update := fun _ m => (spin 400000000 m, .none)
+      init := fun _ => (0, .none), update := fun _ m => (spin 800000000 m, .none)
       view := fun m => el "p" #[onClick ()] #[text (toString (m % 10))] }
     let site := Route.under "/slow" (program "slow" slow {} sessions) ++ sessions.route "/leanui"
     let c ← Client.open site "/slow/server"
+    let slot := ((← c.dom.get).get (← c.root)).listeners[0]!.2.1
     let t0 ← IO.monoMsNow
-    let st ← c.fire (← c.root) "click"
+    let first ← IO.asTask (Client.request site (Req.post s!"/leanui/{c.session}" s!"e\n{slot}\n"))
+    IO.sleep 20
+    let queued ← Client.request site (Req.post s!"/leanui/{c.session}" s!"e\n{slot}\n")
+    let first ← IO.ofExcept (← IO.wait first)
     let dt := (← IO.monoMsNow) - t0
-    expectEq st 500 "a stuck session answers 500"
-    expect (dt < 1000) s!"after the timeout ({dt} ms)"
-  finally sessions.closeAll
-  IO.println "  reply timeout (a stuck update answers 500 after replyTimeoutMs): ok"
+    expectEq (first.status, queued.status) (500, 500) "a stuck session and the request queued behind it answer 500"
+    expect (dt < 1500) s!"answered by the watchdog ({dt} ms)"
+    expectEq (← c.fire (← c.root) "click") 410 "then the session is gone"
+  finally
+    stopReaper
+    sessions.closeAll
+  IO.println "  stuck sessions (the reaper's watchdog answers 500 after replyTimeoutMs, no timer per request): ok"
 
 /-- Many sessions driven at once, each from its own task, plus one session hammered by several
 tasks: actors keep every session's state separate and its requests serialised. -/
@@ -675,6 +700,7 @@ def main (args : List String) : IO UInt32 := do
     testStatic
     testCounterSession
     testTickerSession
+    testContractSession
     testProtocolErrors
     testLifecycle
     testConcurrency

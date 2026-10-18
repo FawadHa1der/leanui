@@ -21,8 +21,8 @@ the reason, because the runtime applies whatever body it receives.
 ## Sessions are actors
 
 Each session runs on its own dedicated thread (`IO.asTask (prio := .dedicated)`), which *creates*
-the running program (`LeanUI.start`) and then serves the requests that arrive on its inbox, a
-`Std.CloseableChannel`, replying through an `IO.Promise`. The HTTP handler only forwards. This
+the running program (`LeanUI.start`) and then serves the requests that arrive in its mailbox
+(a queue with its own condition variable, see `Mailbox`), replying through an `IO.Promise`. The HTTP handler only forwards. This
 matters for speed, not just for ordering: Lean marks every object reachable from a value that
 crosses threads (a task closure, a shared `IO.Ref` or `Mutex`) as *multi-threaded*, and a
 multi-threaded object is never updated in place, so if session state lived in a shared table that
@@ -121,6 +121,53 @@ def toRes (r : Reply) (session : String) : Res :=
 
 end Reply
 
+/-! ## Mailboxes -/
+
+/-- A queue that one thread blocks on, with its own condition variable.
+
+Why not `Std.CloseableChannel` and `IO.wait`: a thread blocked in `IO.wait` (any `Task.get`)
+waits on the Lean task manager's *single* condition variable, which is notified on every task
+completion in the process, so `n` idle sessions blocked that way are all woken by every task the
+HTTP server finishes. Measured with the demo server: the latency of a trivial request grew from
+0.3 ms with no sessions to 0.9 ms with 8 idle sessions, 2.0 ms with 40 and 3.7 ms with 168. An
+actor blocked on its own condition variable is woken only by its own mail. -/
+structure Mailbox (α : Type) where
+  /-- Queued messages (oldest first) and whether the mailbox is closed. -/
+  state : Std.Mutex (Array α × Bool)
+  cv : Std.Condvar
+
+namespace Mailbox
+
+def new : BaseIO (Mailbox α) := return { state := ← Std.Mutex.new (#[], false), cv := ← Std.Condvar.new }
+
+/-- Queue a message; `false` if the mailbox is closed. -/
+def send (m : Mailbox α) (x : α) : BaseIO Bool := do
+  let ok ← m.state.atomically do
+    let (q, closed) ← get
+    if closed then return false
+    set (q.push x, closed); return true
+  if ok then m.cv.notifyOne
+  return ok
+
+/-- The next message, blocking while there is none; `none` once the mailbox is closed and empty. -/
+def recv (m : Mailbox α) : BaseIO (Option α) :=
+  m.state.atomicallyOnce m.cv (do let (q, closed) ← get; return !q.isEmpty || closed) do
+    let (q, closed) ← get
+    match q[0]? with
+    | some x => set (q.extract 1 q.size, closed); return some x
+    | none => return none
+
+/-- Refuse further messages and wake the receiver; queued messages can still be received. -/
+def close (m : Mailbox α) : BaseIO Unit := do
+  m.state.atomically do let (q, _) ← get; set (q, true)
+  m.cv.notifyAll
+
+/-- Take every queued message without blocking. -/
+def drain (m : Mailbox α) : BaseIO (Array α) :=
+  m.state.atomically do let (q, closed) ← get; set ((#[] : Array α), closed); return q
+
+end Mailbox
+
 /-! ## Actors -/
 
 /-- A request and where its reply goes. -/
@@ -128,9 +175,12 @@ structure Envelope where
   msg : Remote.Msg
   reply : IO.Promise Reply
 
-/-- A running session: its inbox and its thread. -/
+/-- A running session: its mailbox and its thread. -/
 structure Actor where
-  inbox : Std.CloseableChannel Envelope
+  inbox : Mailbox Envelope
+  /-- The request being processed, and since when (`IO.monoMsNow`): what the watchdog in
+  `Sessions.sweep` looks at, so a stuck program costs no timer per request. -/
+  busy : IO.Ref (Option (Nat × IO.Promise Reply))
   /-- Resolves when the actor has stopped. -/
   done : Task (Except IO.Error Unit)
 
@@ -145,14 +195,16 @@ private def takeFlush (out : IO.Ref (Array ByteArray)) : IO Reply := do
 /-- The actor's body. Runs on its own thread and owns the program: the instance and the output
 buffer are created here, so they stay single-threaded (see the module docs). -/
 def actorMain {Model Msg : Type} (p : Program Model Msg) (flags selector : String)
-    (inbox : Std.CloseableChannel Envelope) : IO Unit := do
+    (inbox : Mailbox Envelope) (busy : IO.Ref (Option (Nat × IO.Promise Reply))) : IO Unit := do
   let out ← IO.mkRef (#[] : Array ByteArray)
   let host : Host := { flush := fun ops strs => out.modify (·.push (encodeFlush ops strs)) }
   -- the page already shows the view of `init flags`; hydration claims it
   let inst ← start p host flags selector (hydrate := true)
   let mut hydrated := false
   try
-    for env in inbox.sync do
+    repeat
+      let some env ← inbox.recv | break
+      busy.set (some (← IO.monoMsNow, env.reply))
       let reply ← match env.msg with
         | .hydrate =>
           if hydrated then pure (.conflict "this session is already hydrated")
@@ -164,32 +216,30 @@ def actorMain {Model Msg : Type} (p : Program Model Msg) (flags selector : Strin
           if !hydrated then pure (.conflict "callback before hydration")
           else do inst.callback cb ok payload; takeFlush out
       env.reply.resolve reply
+      busy.set none
   finally
     -- stop accepting, and answer whatever is still queued
-    discard <| (inbox.close).toBaseIO
-    let mut more := true
-    while more do
-      match ← inbox.tryRecv with
-      | some env => env.reply.resolve .gone
-      | none => more := false
+    inbox.close
+    for env in ← inbox.drain do env.reply.resolve .gone
 
 namespace Actor
 
 /-- Start a session actor on a dedicated thread. -/
 def spawn {Model Msg : Type} (p : Program Model Msg) (flags selector : String) : BaseIO Actor := do
-  let inbox ← Std.CloseableChannel.new
-  let done ← IO.asTask (prio := .dedicated) (actorMain p flags selector inbox)
-  return { inbox, done }
+  let inbox ← Mailbox.new
+  let busy ← IO.mkRef none
+  let done ← IO.asTask (prio := .dedicated) (actorMain p flags selector inbox busy)
+  return { inbox, busy, done }
 
 /-- Send a message; the task resolves with the reply (`gone` if the actor has stopped). -/
 def ask (a : Actor) (m : Remote.Msg) : BaseIO (Task Reply) := do
   let reply ← IO.Promise.new
-  if ← a.inbox.trySend { msg := m, reply } then
+  if ← a.inbox.send { msg := m, reply } then
     return reply.result?.map (·.getD .gone)
   else return .pure .gone
 
 /-- Stop accepting requests; queued ones are still answered, then the thread ends. -/
-def stop (a : Actor) : BaseIO Unit := discard <| (a.inbox.close).toBaseIO
+def stop (a : Actor) : BaseIO Unit := a.inbox.close
 
 def finished (a : Actor) : BaseIO Bool := return (← IO.getTaskState a.done) == .finished
 
@@ -208,8 +258,10 @@ structure SessionConfig where
   pendingMs : Nat := 5 * 60 * 1000
   /-- How often the reaper looks for expired sessions. -/
   sweepMs : Nat := 5000
-  /-- A request whose session has not answered after this long gets `500` (the program is
-  stuck, e.g. an `update` that loops), so connections do not pile up; `0` waits forever. -/
+  /-- A session busy with one request for longer than this is stuck (an `update` that loops, say):
+  the next sweep answers its pending requests with `500` and removes it, so connections do not
+  pile up. Checked every `sweepMs` by the reaper, so it costs nothing per request; `0` disables
+  it. (The thread itself cannot be stopped; it ends when the update returns.) -/
   replyTimeoutMs : Nat := 30000
   /-- The container every session's program is mounted in. -/
   selector : String := "#app"
@@ -343,10 +395,22 @@ def sweep (s : Sessions) (now : Nat) : IO Nat := do
       let seen ← e.lastSeen.get
       let limit := if e.actor.isSome then s.cfg.idleMs else s.cfg.pendingMs
       let stopped ← match e.actor with | some a => a.finished | none => pure false
-      if now > seen + limit || stopped then dead := dead.push (id, e.actor)
+      let stuck ← match e.actor with
+        | some a => do
+          match ← a.busy.get with
+          | some (t0, _) => pure (s.cfg.replyTimeoutMs > 0 && now > t0 + s.cfg.replyTimeoutMs)
+          | none => pure false
+        | none => pure false
+      if now > seen + limit || stopped || stuck then dead := dead.push (id, e.actor)
     set (dead.foldl (fun t (id, _) => removeEntry t id) t)
     return dead
-  for (_, a) in dead do if let some a := a then a.stop
+  for (_, a) in dead do
+    if let some a := a then
+      a.stop
+      -- a stuck actor cannot answer: fail its request and whatever is queued behind it
+      if let some (_, pr) ← a.busy.get then
+        pr.resolve (.failed s!"the session did not answer within {s.cfg.replyTimeoutMs} ms")
+        for env in ← a.inbox.drain do env.reply.resolve (.failed "the session is stuck")
   s.bump fun st => { st with expired := st.expired + dead.size }
   return dead.size
 
@@ -382,16 +446,6 @@ def statsJson (s : Sessions) : IO String := do
   return s!"\{\"live\":{live},\"pending\":{pending},\"reserved\":{st.reserved},\"spawned\":{st.spawned}," ++
     s!"\"expired\":{st.expired},\"evicted\":{st.evicted},\"requests\":{st.requests},\"gone\":{st.gone}}"
 
-/-- Wait for a reply, at most `ms` milliseconds (`0`: no limit). The timer is a libuv timer, not a
-thread, and is stopped as soon as the reply arrives. -/
-def awaitReply (t : Task Reply) (ms : Nat) : Std.Async.Async Reply := do
-  if ms == 0 then return ← Std.Async.await t
-  let sl ← Std.Async.Sleep.mk (Std.Time.Millisecond.Offset.ofNat ms)
-  let r ← Std.Async.EAsync.race (Std.Async.await t)
-    (do sl.wait; return .failed s!"the session did not answer within {ms} ms")
-  sl.stop
-  return r
-
 /-- The remote protocol endpoint: `POST <endpoint>/<session>`. Each response carries a
 `Server-Timing` entry with the time spent in the session (`actor;dur=<ms>`). -/
 def route (s : Sessions) (endpoint : String := "/leanui") : Route :=
@@ -401,7 +455,7 @@ def route (s : Sessions) (endpoint : String := "/leanui") : Route :=
     | .error e => return (Reply.bad e).toRes sid
     | .ok m =>
       let t0 ← IO.monoNanosNow
-      let reply ← awaitReply (← s.ask sid m) s.cfg.replyTimeoutMs
+      let reply ← Std.Async.await (← s.ask sid m)
       let dt := (← IO.monoNanosNow) - t0
       let ms := s!"{dt / 1000000}.{toString (1000 + (dt / 1000) % 1000) |>.drop 1}"
       return (reply.toRes sid).withHeader "server-timing" s!"actor;dur={ms}"

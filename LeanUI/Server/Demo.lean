@@ -61,6 +61,26 @@ def program : Program Model Msg := { init, update, view, subscriptions }
 
 end Ticker
 
+namespace Contract
+
+inductive Msg | go
+
+/-- Markup the HTML parser rewrites (a newline after `<pre>`/`<textarea>`, carriage returns,
+duplicate attributes, adjacent and empty texts, astral characters): the server renders it, the
+browser parses it, and the session must still claim exactly the nodes it mounted. Clicking `go`
+then updates texts through the claimed handles. -/
+def view (n : Nat) : Html Msg :=
+  el "main" #[id "contract"] #[
+    el "pre" #[id "pre"] #[text s!"\n{n}\n"],
+    el "p" #[id "texts"] #[text "a", text "", text "b", text (toString n)],
+    el "p" #[id "crlf", .attr "title" "x\r\ny"] #[text "c\r\nd"],
+    el "p" #[id "dup", cls "first", cls "last"] #[text "😀 & <tags>"],
+    el "textarea" #[id "ta"] #[text "\nline"],
+    el "button" #[id "go", onClick .go] #[text "go"]]
+
+def program : Program Nat Msg := { init := fun _ => (0, .none), update := fun _ n => (n + 1, .none), view }
+
+end Contract
 
 def style : String :=
   "<style>:root{color-scheme:light dark;font:16px/1.5 system-ui,sans-serif}" ++
@@ -82,7 +102,8 @@ def landing (wasm : Bool) : String :=
   "<tr><th><a href=\"/counter/wasm\">/counter/wasm</a></th><td>server-rendered, hydrated by the app's wasm64 build</td></tr>" ++
   "<tr><th><a href=\"/counter/server\">/counter/server</a></th><td>server-rendered, driven by a native Lean session</td></tr>" ++
   "<tr><th><a href=\"/counter/ssr\">/counter/ssr</a></th><td>server-rendered HTML only</td></tr>" ++
-  "<tr><th><a href=\"/ticker/server?from=5\">/ticker/server</a></th><td>timers and HTTP effects in a server-driven session</td></tr></table>" ++
+  "<tr><th><a href=\"/ticker/server?from=5\">/ticker/server</a></th><td>timers and HTTP effects in a server-driven session</td></tr>" ++
+  "<tr><th><a href=\"/contract/server\">/contract/server</a></th><td>markup the HTML parser rewrites, hydrated anyway</td></tr></table>" ++
   (if wasm then "" else "<p><strong>No wasm build found</strong>: run <code>leanui build CounterApp counter</code>; until then wasm pages answer 404 and <code>/counter</code> is server-driven.</p>") ++
   "<p>This browser: <strong id=\"m64\">checking…</strong></p>" ++
   "<script src=\"/leanui.js\"></script><script>document.getElementById('m64').textContent=" ++
@@ -119,6 +140,7 @@ def routes (o : Opts) (sessions : Sessions) (runtime : System.FilePath) (wasm : 
     Route.get "/ticker" fun _ => return Res.redirect "/ticker/server",
     Route.under "/ticker" (program "ticker" Ticker.program
       { page "LeanUI ticker" with assets := none, flags := fun r => (r.param? "from").getD "0" } sessions),
+    Route.under "/contract" (program "contract" Contract.program { page "SSR contract" with assets := none } sessions),
     Route.get "/api/hello" fun req =>
       return Res.json s!"\{\"hello\":\"from Lean\",\"n\":{jsonString ((req.param? "n").getD "")}}",
     sessions.statsRoute "/leanui/stats",

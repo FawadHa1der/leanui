@@ -95,6 +95,30 @@ try {
     report.static = { wasmBytes: wasmBytes.length, etag, traversal: trav.split("\r\n")[0] };
   }
 
+  // ---- load: many server-driven sessions at once over HTTP keep-alive (engine-independent) ----
+  {
+    const clients = 32, events = 100, lat = [];
+    const D = `http://127.0.0.1:${DEMO}`;
+    const one = async () => {
+      const page = await (await fetch(D + "/counter/server")).text();
+      const sid = /"session":"([0-9a-f]+)"/.exec(page)[1];
+      const post = async (body) => { const t0 = performance.now(); const r = await fetch(`${D}/leanui/${sid}`, { method: "POST", body });
+        const b = new Uint8Array(await r.arrayBuffer()); lat.push(performance.now() - t0); return { status: r.status, b }; };
+      await post("h");
+      let last;
+      for (let i = 0; i < events; i++) last = await post("e\n2\n");   // slot 2 is the + button
+      const opsLen = last.b[0] | (last.b[1] << 8) | (last.b[2] << 16) | (last.b[3] << 24);
+      // the update's strings: the output's text and the input's value, both the new count
+      return new TextDecoder().decode(last.b.subarray(4 + opsLen));
+    };
+    const t0 = performance.now();
+    const finals = await Promise.all(Array.from({ length: clients }, one));
+    const wall = performance.now() - t0;
+    check(finals.every((f) => f === String(events).repeat(2)), "load: every session counted all its events", finals.slice(0, 4));
+    report.load = { clients, eventsPerClient: events, requests: lat.length, wallMs: Math.round(wall), requestsPerSec: Math.round(lat.length / (wall / 1000)),
+      latencyMs: { p50: round(pct(lat, 0.5)), p95: round(pct(lat, 0.95)), p99: round(pct(lat, 0.99)), max: round(Math.max(...lat)) } };
+  }
+
   for (const engine of engines) {
     const browser = await pw[engine].launch({ headless: true });
     const R = (report.engines[engine] = { version: browser.version() });
@@ -258,7 +282,30 @@ try {
       await ctx.close();
     }
 
-    // ---- 5. without JavaScript the server-rendered page is the page ----
+    // ---- 5. markup the HTML parser rewrites still hydrates exactly (LeanUI.Render's contract) ----
+    {
+      const { ctx, page } = await newPage();
+      await page.goto(D + "/contract/server");
+      await page.waitForFunction(() => window.__leanui && window.__leanui.stats.flushes >= 1, null, { timeout: 10000 });
+      const read = () => page.evaluate(() => {
+        const q = (s) => document.querySelector(s);
+        return { pre: q("#pre").textContent, texts: [...q("#texts").childNodes].filter((n) => n.nodeType === 3).map((n) => n.data),
+                 crlf: q("#crlf").textContent, title: q("#crlf").getAttribute("title"), dup: q("#dup").className,
+                 dupText: q("#dup").textContent, ta: q("#ta").value };
+      });
+      const before = await read();
+      await page.click("#go");
+      await page.waitForFunction(() => document.querySelector("#pre").textContent === "\n1\n", null, { timeout: 10000 });
+      const after = await read();
+      R.contract = { before, after };
+      check(before.pre === "\n0\n" && JSON.stringify(before.texts) === JSON.stringify(["a", "", "b", "0"]) && before.crlf === "c\r\nd" &&
+        before.title === "x\r\ny" && before.dup === "last" && before.dupText === "😀 & <tags>" && before.ta === "\nline",
+        engine + ": parser-rewritten markup hydrates as the view", before);
+      check(JSON.stringify(after.texts) === JSON.stringify(["a", "", "b", "1"]), engine + ": updates reach the claimed text nodes", after);
+      await ctx.close();
+    }
+
+    // ---- 6. without JavaScript the server-rendered page is the page ----
     {
       const { ctx, page } = await newPage({ javaScriptEnabled: false });
       await page.goto(D + "/counter/ssr");
