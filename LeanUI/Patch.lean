@@ -61,8 +61,42 @@ namespace LeanUI
   if s.utf8ByteSize == s.length then s.length.toUInt32
   else s.foldl (fun n c => n + (if c.val < 0x10000 then 1 else 2)) 0
 
-@[inline] def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
+/-! ### Writing bytes
+
+A buffer for 1,000 benchmark rows holds 122,000 words and 10,000 strings, so the two primitives
+below are the hot path of every update. Their Lean bodies are the specification (what the kernel
+and proofs see); compiled code uses the C expression in `extern c inline` instead, which the Lean
+compiler pastes at each call site: no call at all, natively and in wasm alike, and no C file or
+build step. The C reserves room (if the array is shared or full, it moves the bytes to a fresh
+array of twice the capacity, as `ByteArray.push` does), then stores the bytes and bumps the size.
+Byte stores keep the layout little-endian on any host (the C compiler merges them into one store).
+The snippets use only `lean.h` and GNU statement expressions (`({ … })`), which clang (`leanc`,
+`emcc`) and GCC accept. Nothing evaluates them at compile time (the interpreter cannot run an
+inline C extern). -/
+
+/-- Append a little-endian `u32`. -/
+@[extern c inline "({ lean_object *a_ = #1; uint32_t x_ = #2; size_t n_ = lean_sarray_size(a_); \
+  if (LEAN_UNLIKELY(!lean_is_exclusive(a_) || lean_sarray_capacity(a_) - n_ < 4)) { \
+    size_t c_ = 2 * lean_sarray_capacity(a_); if (c_ < n_ + 4) c_ = n_ + 4; \
+    lean_object *r_ = lean_alloc_sarray(1, n_, c_); \
+    __builtin_memcpy(lean_sarray_cptr(r_), lean_sarray_cptr(a_), n_); lean_dec_ref(a_); a_ = r_; } \
+  uint8_t *p_ = lean_sarray_cptr(a_) + n_; \
+  p_[0] = (uint8_t)x_; p_[1] = (uint8_t)(x_ >> 8); p_[2] = (uint8_t)(x_ >> 16); p_[3] = (uint8_t)(x_ >> 24); \
+  lean_to_sarray(a_)->m_size = n_ + 4; a_; })"]
+def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
   b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8
+
+/-- Append a string's UTF-8 bytes: `b ++ s.toUTF8`, but copied straight from the string object
+(one `memcpy`, no intermediate `ByteArray`). -/
+@[extern c inline "({ lean_object *a_ = #1; lean_object *s_ = #2; size_t n_ = lean_sarray_size(a_); \
+  size_t k_ = lean_string_size(s_) - 1; \
+  if (LEAN_UNLIKELY(!lean_is_exclusive(a_) || lean_sarray_capacity(a_) - n_ < k_)) { \
+    size_t c_ = 2 * lean_sarray_capacity(a_); if (c_ < n_ + k_) c_ = n_ + k_; \
+    lean_object *r_ = lean_alloc_sarray(1, n_, c_); \
+    __builtin_memcpy(lean_sarray_cptr(r_), lean_sarray_cptr(a_), n_); lean_dec_ref(a_); a_ = r_; } \
+  __builtin_memcpy(lean_sarray_cptr(a_) + n_, lean_string_cstr(s_), k_); \
+  lean_to_sarray(a_)->m_size = n_ + k_; a_; })"]
+def appendUtf8 (b : ByteArray) (s : @& String) : ByteArray := b ++ s.toUTF8
 
 /-- A command buffer under construction, plus the session's interned names. -/
 structure Buf where
@@ -80,7 +114,7 @@ namespace Buf
 /-- Append a string to the string area and write its `(offset, length)`. -/
 @[inline] def s (b : Buf) (str : String) : Buf :=
   let n := utf16Len str
-  { b with ops := pushU32 (pushU32 b.ops b.units) n, strs := b.strs ++ str.toUTF8, units := b.units + n }
+  { b with ops := pushU32 (pushU32 b.ops b.units) n, strs := appendUtf8 b.strs str, units := b.units + n }
 
 /-- The id of an interned name. On first use this emits `INTERN id str` *before* the caller
 starts its own command, so commands are never interleaved. -/
@@ -127,7 +161,7 @@ absolute, so nothing else moves). -/
 def prependHydrate (b : Buf) (selector : String) (first count : UInt32) : Buf :=
   let n := utf16Len selector
   let head := pushU32 (pushU32 (pushU32 (pushU32 (pushU32 (ByteArray.emptyWithCapacity 20) Op.hydrate) b.units) n) first) count
-  { b with ops := head ++ b.ops, strs := b.strs ++ selector.toUTF8, units := b.units + n }
+  { b with ops := head ++ b.ops, strs := appendUtf8 b.strs selector, units := b.units + n }
 
 /-- True if nothing was written since the last `reset`. -/
 @[inline] def isEmpty (b : Buf) : Bool := b.ops.size == 0
