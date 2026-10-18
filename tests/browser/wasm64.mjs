@@ -26,6 +26,9 @@ if (kind === "firefox") fs.writeFileSync(path.join(profile, "user.js"), 'user_pr
 const args = kind === "firefox" ? ["--headless", "--no-remote", "--profile", profile, url] : ["--headless=new", `--user-data-dir=${profile}`, "--no-first-run", url];
 const child = spawn(bin, args, { stdio: "ignore" });
 const r = await Promise.race([got, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 120000))]);
+const exited = new Promise((r) => child.once("exit", r));
 try { process.kill(child.pid); } catch (e) {}
-server.close(); fs.rmSync(profile, { recursive: true, force: true });
+await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
+server.close();
+try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}
 console.log(`${r.userAgent}\n  wasm32 ${r.wasm32.toFixed(2)} ms   wasm64 ${r.wasm64.toFixed(2)} ms   wasm64/wasm32 ${(r.wasm64 / r.wasm32).toFixed(2)}x`);

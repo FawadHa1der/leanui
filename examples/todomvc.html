@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeanUI • TodoMVC</title>
+<style>
+  /* An original stylesheet for the standard TodoMVC markup. */
+  :root { --bg: #f5f5f5; --card: #fff; --ink: #2b2b2b; --muted: #8a8a8a; --line: #ececec; --accent: #b83f45; --done: #b5b5b5; --ok: #3a9e6e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --card: #1f2227; --ink: #e8e8e8; --muted: #8d939c; --line: #2c3036; --accent: #e0707a; --done: #5f646c; --ok: #58c08e; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; min-width: 230px; max-width: 550px; margin: 0 auto; padding: 0 16px; -webkit-font-smoothing: antialiased; }
+  button { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+  .todoapp { background: var(--card); margin: 130px 0 40px; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,.2), 0 25px 50px rgba(0,0,0,.1); border-radius: 4px; }
+  .todoapp h1 { position: absolute; top: -110px; width: 100%; margin: 0; text-align: center; font-size: 80px; font-weight: 200; letter-spacing: .04em; color: var(--accent); opacity: .85; }
+  .new-todo, .edit { width: 100%; font: inherit; font-size: 22px; line-height: 1.4; color: inherit; border: 0; outline: none; background: transparent; }
+  .new-todo { padding: 16px 16px 16px 60px; height: 64px; border-bottom: 1px solid var(--line); }
+  .new-todo::placeholder { font-style: italic; color: var(--muted); font-weight: 300; }
+  .main { position: relative; border-top: 1px solid var(--line); }
+  .toggle-all { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .toggle-all + label { position: absolute; top: -64px; left: 0; width: 56px; height: 64px; display: flex; align-items: center; justify-content: center; font-size: 0; cursor: pointer; }
+  .toggle-all + label::before { content: "❯"; font-size: 22px; color: var(--muted); transform: rotate(90deg); }
+  .toggle-all:checked + label::before { color: var(--ink); }
+  .todo-list { margin: 0; padding: 0; list-style: none; }
+  .todo-list li { position: relative; font-size: 22px; border-bottom: 1px solid var(--line); }
+  .todo-list li .view { display: flex; align-items: center; }
+  .todo-list li .toggle { appearance: none; -webkit-appearance: none; width: 30px; height: 30px; margin: 0 12px 0 13px; border: 1px solid var(--done); border-radius: 50%; flex: none; cursor: pointer; }
+  .todo-list li .toggle:checked { border-color: var(--ok); background: radial-gradient(circle, var(--ok) 0 4px, transparent 5px); }
+  .todo-list li label { flex: 1; padding: 15px 15px 15px 4px; word-break: break-all; transition: color .2s; }
+  .todo-list li.completed label { color: var(--done); text-decoration: line-through; }
+  .todo-list li .destroy { width: 40px; height: 40px; margin-right: 10px; font-size: 28px; color: var(--accent); opacity: 0; transition: opacity .15s; }
+  .todo-list li .destroy::after { content: "×"; }
+  .todo-list li:hover .destroy, .todo-list li .destroy:focus { opacity: .8; }
+  .todo-list li.editing .view { display: none; }
+  .todo-list li .edit { display: block; padding: 12px 16px; margin-left: 43px; width: calc(100% - 43px); border: 1px solid var(--muted); box-shadow: inset 0 -1px 5px rgba(0,0,0,.2); }
+  .footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 15px; height: 42px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  .todo-count strong { font-weight: 400; }
+  .filters { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .filters a { color: inherit; text-decoration: none; padding: 3px 7px; border: 1px solid transparent; border-radius: 3px; }
+  .filters a:hover { border-color: var(--line); }
+  .filters a.selected { border-color: var(--accent); color: var(--ink); }
+  .clear-completed:hover { text-decoration: underline; }
+  .info { margin: 60px auto 0; color: var(--muted); font-size: 11px; text-align: center; }
+  .info p { margin: 4px 0; }
+  .info a { color: inherit; }
+  @media (max-width: 430px) { .footer { height: auto; flex-wrap: wrap; justify-content: center; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="leanui.js"></script>
+<script>
+  LeanUI.start({ glue: "app.js", selector: "#app", flags: location.pathname + location.search + location.hash })
+    .then((rt) => { window.__leanui = rt; window.__ready = performance.now(); },
+          (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+</script>
+</body>
+</html>

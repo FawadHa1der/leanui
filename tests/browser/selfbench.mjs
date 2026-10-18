@@ -60,9 +60,12 @@ const child = spawn(bin, args, { stdio: "ignore" });
 const timeout = setTimeout(() => { console.error("timed out"); try { process.kill(child.pid); } catch (e) {} process.exit(1); }, 30 * 60 * 1000);
 const R = await posted;
 clearTimeout(timeout);
+// stop the browser and wait for it to exit before removing its profile
+const exited = new Promise((r) => child.once("exit", r));
 try { process.kill(child.pid); } catch (e) {}
+await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
 server.close();
-fs.rmSync(profile, { recursive: true, force: true });
+try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}
 
 const impls = IMPLS.split(",");
 const lines = [`## ${kind}: ${R.userAgent}`, "", `Memory64: ${R.memory64}; median of ${R.runs} fresh page loads${R.error ? "; ERROR " + R.error : ""}`, ""];

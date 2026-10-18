@@ -1,3 +1,5 @@
 module
 public import TodoMVC
--- wasm entry point: `leanui_app TodoMVC.program` (examples lane)
+public import LeanUI.Host.Wasm
+-- the wasm entry point (tools/build-app.sh TodoMVCApp todomvc)
+leanui_app TodoMVC.program
