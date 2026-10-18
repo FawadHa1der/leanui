@@ -129,13 +129,35 @@ Sampled CPU profiles of the synchronous click in Chromium, on a build with funct
   during the setup's clear). The hand-written reference clones a template row instead of
   creating its ten nodes one by one, which is most of its advantage on this operation.
 - **Small updates** are dominated by allocation: building the new view (one lazy node, its
-  closure, its key and its dependencies per row, about ten objects) and freeing the old one is about a
-  quarter of the time (`malloc`/`free`), followed by `patchNode`, comparing dependencies and the
-  pure check. The DOM work is a few percent.
+  closure, its key and its dependencies per row: four small objects, the closure and the key's
+  string) and freeing the old one is about a quarter of the time (`malloc`/`free`), followed by
+  `patchNode`, comparing dependencies and the pure check. The DOM work is a few percent.
 - **Next steps** this suggests: writing the command buffer a word at a time (needs a small C
   helper, also for native builds); cloning static subtrees from templates (the template syntax
   knows which parts of a view are static); avoiding the per-row view allocation altogether for
   rows whose model did not change.
+
+### Allocations
+
+Every allocation is countable: `leanui-perf allocs` counts the *small objects* (constructors,
+thunks: what Lean's heartbeat counter counts) of each benchmark operation natively, by phase, and
+`tests/browser/allocs.mjs` counts every `malloc` and `free` of one click in a wasm build linked
+with `tools/alloc-count.c`. Both are exact and deterministic, so two builds compare without noise.
+Creating a benchmark row (at commit `5c6d926`) takes 154 allocations in wasm, of which 123 small
+objects:
+
+| phase | small objects per created row |
+|---|--:|
+| update (building the rows) | 2 |
+| view (the keyed lazy row: node, key, dependencies) | 4 |
+| rendering the row (10 nodes, 2 handlers) | 14 |
+| mounting it (`mount` and the list diff around it) | 67 |
+| encoding its 30 commands | 36 |
+
+The rest are arrays (children, attributes, listener tables), strings and closures, and a copy of
+every string written to the buffer (`String.toUTF8`). `leanui-perf allocs-nodes` gives the cost of
+one node of each shape: an element costs 7 small objects (its `Node`, 4 pairs and rebuilt state
+cells of the state monad, 2 to encode `CREATE_ELEMENT`), and each attribute 3 more.
 
 ## What made the diff fast
 
@@ -225,6 +247,10 @@ node tests/browser/bench.mjs --runs 7 --json out.json   # Chromium traces, memor
 node tests/browser/selfbench.mjs /Applications/Firefox.app/Contents/MacOS/firefox firefox
 node tests/browser/selfbench.mjs "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" chromium
 ./.lake/build/bin/leanui-perf                           # native, lazy and eager rows
+./.lake/build/bin/leanui-perf allocs                    # small objects per operation, by phase
+./.lake/build/bin/leanui-perf allocs-nodes              # small objects to mount one node of each shape
+LEANUI_COUNT_ALLOCS=1 LEANUI_PAGE=examples/bench.html tools/build-app.sh BenchApp bench-allocs
+node tests/browser/allocs.mjs dist/bench-allocs [dist/other-allocs]   # every malloc/free per click
 LEANUI_PAGE=examples/bench.html tools/build-app.sh BenchApp bench-prof --debug
 node tests/browser/profile.mjs dist/bench-prof --op create1k   # where the script time goes
 bench/wasm64/build.sh && node tests/browser/wasm64.mjs <browser-binary> <firefox|chromium>
