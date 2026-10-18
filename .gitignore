@@ -1,0 +1,6 @@
+.toolchain/
+.lake/
+dist/
+work/
+*.o
+out/

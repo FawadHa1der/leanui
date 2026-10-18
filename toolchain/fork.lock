@@ -1,0 +1,7 @@
+# The Lean toolchain LeanUI compiles against: the QED64 wasm64 fork of Lean 4.34.0 at the commit of the
+# published runtime lean-v4.34.0-53cb11e (runtime wasm64-5650321f3f58aeb0), plus one 9-line opt-in CMake
+# switch (lean-wasm-threads.patch) that builds the runtime without -pthread.
+repo=https://github.com/FawadHa1der/lean4.git
+commit=53cb11e6d6ae0076f8885fec3690e01a6de03404
+lean=4.34.0
+image=qed64-toolchain:emsdk-6.0.5

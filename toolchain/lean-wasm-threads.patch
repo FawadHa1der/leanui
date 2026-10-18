@@ -1,0 +1,20 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 96768ff..2a138b8 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -227,7 +227,14 @@ if(CMAKE_SYSTEM_NAME MATCHES "Emscripten")
+     # must reach every compile: -pthread (atomics/TLS) and the EH mode. Flags
+     # that only shape the final JS/wasm output live in EMSCRIPTEN_LINK_SETTINGS
+     # so that link-only experiments keep the ccache'd objects valid.
+-    set(EMSCRIPTEN_SETTINGS "-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -pthread")
++    # research prototype: LEAN_WASM_THREADS=OFF builds a threadless wasm (no SharedArrayBuffer,
++    # so no COOP/COEP); combine with MULTI_THREAD=OFF. Default ON keeps the fork unchanged.
++    option(LEAN_WASM_THREADS "Emscripten: compile with -pthread" ON)
++    if(LEAN_WASM_THREADS)
++      set(EMSCRIPTEN_SETTINGS "-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -pthread")
++    else()
++      set(EMSCRIPTEN_SETTINGS "-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1")
++    endif()
+     # the funclet guard recompiles every C++ translation unit with its exact command
+     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+     if(CMAKE_SIZEOF_VOID_P EQUAL 8)

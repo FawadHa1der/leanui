@@ -1,0 +1,14 @@
+name = "leanui"
+version = "0.1.0"
+defaultTargets = ["LeanUI", "LeanUITesting", "leanui-tests"]
+
+[[lean_lib]]
+name = "LeanUI"
+
+[[lean_lib]]
+name = "LeanUITesting"
+roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness"]
+
+[[lean_exe]]
+name = "leanui-tests"
+root = "tests.Main"
