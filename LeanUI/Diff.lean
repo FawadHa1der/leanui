@@ -101,7 +101,9 @@ private def setOne (h : UInt32) : Attr Msg → DiffM Msg Unit
   | _ => pure ()
 
 /-- Set every attribute and listener of a freshly mounted (or claimed) element. While hydrating,
-attributes are already in the server-rendered HTML, so only properties and listeners are sent. -/
+attributes are already in the server-rendered HTML, so only properties and listeners are sent.
+A repeated listener for one event replaces the earlier one (the last one wins, as for attributes),
+so an element holds exactly one slot per event. -/
 def mountAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
   let hydrating := (← get).hydrating
   -- most elements have no listener: they share the one empty array
@@ -109,9 +111,14 @@ def mountAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (Strin
   for a in attrs do
     match a with
     | .on ev hd =>
-      let sl ← allocSlot hd
-      emit (·.setListener h ev sl hd.payload hd.flags)
-      ls := ls.push (ev, sl)
+      match ls.find? (·.1 == ev) with
+      | some (_, sl) =>
+        setSlot sl hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+      | none =>
+        let sl ← allocSlot hd
+        emit (·.setListener h ev sl hd.payload hd.flags)
+        ls := ls.push (ev, sl)
     | .attr .. => if !hydrating then setOne h a
     | .prop .. => setOne h a
     | .key _ => pure ()
@@ -125,12 +132,21 @@ private def sameShape (a b : Attr Msg) : Bool :=
   | .key _, .key _ => true
   | _, _ => false
 
+/-- Is `as[i]` overridden by a later attribute of the same kind and name? The last one is the one
+the DOM shows (`setAttribute` keeps the last value), so the earlier ones are never sent. -/
+private def shadowed (as : Array (Attr Msg)) (i : Nat) : Bool := Id.run do
+  let a := as[i]!
+  for j in [i + 1:as.size] do
+    if sameShape a as[j]! then return true
+  return false
+
+-- the value the DOM shows: the last attribute of that name
 private def findAttr (n : String) (as : Array (Attr Msg)) : Option String :=
-  as.findSome? fun | .attr m v => if m == n then some v else none | _ => none
+  as.findSomeRev? fun | .attr m v => if m == n then some v else none | _ => none
 private def findProp (n : String) (as : Array (Attr Msg)) : Option PropValue :=
-  as.findSome? fun | .prop m v => if m == n then some v else none | _ => none
+  as.findSomeRev? fun | .prop m v => if m == n then some v else none | _ => none
 private def findOn (e : String) (as : Array (Attr Msg)) : Option (Handler Msg) :=
-  as.findSome? fun | .on f hd => if f == e then some hd else none | _ => none
+  as.findSomeRev? fun | .on f hd => if f == e then some hd else none | _ => none
 
 /-- Update one listener in place: same event, so keep the slot and swap the handler; re-send the
 listener only if what the browser extracts or does changed (and report that as a change). -/
@@ -147,32 +163,44 @@ def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt
     (new : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32) × Bool) := do
   let n := old.size
   let mut same := n == new.size
-  let mut i := 0
-  while same && i < n do
-    same := sameShape old[i]! new[i]!
-    i := i + 1
+  let mut k := 0
+  while same && k < n do
+    same := sameShape old[k]! new[k]!
+    k := k + 1
   if same then
-    -- fast path: same attributes in the same order (index loop, no allocation)
+    -- fast path: same attributes in the same order, so the same ones are shadowed on both sides.
+    -- A shadowed (overridden) attribute is never sent, but any difference counts as a change,
+    -- so the stored attributes always equal the last view's.
     let mut changed := false
     for j in [0:n] do
       match old[j]!, new[j]! with
-      | .attr _ v, .attr nm w => if v != w then emit (·.setAttr h nm w); changed := true
-      | .prop _ v, .prop nm w => if v != w then emit (·.setProp h nm w); changed := true
+      | .attr _ v, .attr nm w =>
+        if v != w then
+          changed := true
+          if !shadowed new j then emit (·.setAttr h nm w)
+      | .prop _ v, .prop nm w =>
+        if v != w then
+          changed := true
+          if !shadowed new j then emit (·.setProp h nm w)
       | .on ev ho, .on _ hn =>
-        match ls.find? (·.1 == ev) with
-        | some (_, sl) => if ← updateListener h ev sl ho hn then changed := true
-        | none => pure ()
+        if !shadowed new j then
+          match ls.find? (·.1 == ev) with
+          | some (_, sl) => if ← updateListener h ev sl ho hn then changed := true
+          | none => pure ()
+        else if ho.payload != hn.payload || ho.flags != hn.flags then changed := true
       | .key a, .key b => if a != b then changed := true
       | _, _ => pure ()
     return (ls, changed)
   -- general path: attribute lists are short, so linear scans
-  for a in old do
-    match a with
+  for i in [0:old.size] do
+    if shadowed old i then continue
+    match old[i]! with
     | .attr n _ => if (findAttr n new).isNone then emit (·.removeAttr h n)
     | .prop n _ => if (findProp n new).isNone then emit (·.removeProp h n)
     | _ => pure ()
-  for b in new do
-    match b with
+  for i in [0:new.size] do
+    if shadowed new i then continue
+    match new[i]! with
     | .attr n w => if findAttr n old != some w then emit (·.setAttr h n w)
     | .prop n w => if findProp n old != some w then emit (·.setProp h n w)
     | _ => pure ()
@@ -182,10 +210,10 @@ def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt
     | some hn, some ho => let _ ← updateListener h ev sl ho hn; out := out.push (ev, sl)
     | some hn, none => setSlot sl hn; out := out.push (ev, sl)
     | none, _ => emit (·.removeListener h ev); freeSlot sl
-  for b in new do
-    match b with
+  for i in [0:new.size] do
+    match new[i]! with
     | .on ev hd =>
-      if !(out.any (·.1 == ev)) then
+      if !shadowed new i && !(out.any (·.1 == ev)) then
         let sl ← allocSlot hd
         emit (·.setListener h ev sl hd.payload hd.flags)
         out := out.push (ev, sl)
@@ -364,10 +392,10 @@ partial def replaceNode (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg)
   release old
   return n
 
-/-- Diff a child list. Keyed when every child on both sides has a key (keys cached in mounted
-nodes; new keys scanned once); positional otherwise. Keyed lists trim the common prefix and
-suffix first, and only the remaining middle is checked for unique keys and planned, so a list
-that did not change shape costs one key comparison per child. -/
+/-- Diff a child list. Keyed when every child on both sides has a key and the keys are unique on
+each side (keys cached in mounted nodes; new keys scanned once); positional otherwise. A list
+whose keys did not change order is patched pairwise without allocating; otherwise the common
+prefix and suffix are patched in place and only the middle is planned (`Keyed.plan`). -/
 partial def patchKids (parent : UInt32) (old : Array (Node Msg)) (new : Array (Html Msg)) :
     DiffM Msg (Array (Node Msg)) :=
   return (← patchKidsC parent old new).1
@@ -382,9 +410,10 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
     return (← patchSame parent old new)
   let nk := if maybeKeyed then new.map viewKey else #[]
   let keyed := maybeKeyed && old.all (·.key?.isSome) && nk.all (·.isSome)
-  if keyed then
-    let ok := old.map fun n => n.key?.getD ""
-    let nk := nk.map (·.getD "")
+  -- keyed only when the keys are unique on each side; otherwise positional (below)
+  let ok := if keyed then old.map fun n => n.key?.getD "" else #[]
+  let nk := if keyed then nk.map (·.getD "") else #[]
+  if keyed && uniqueKeys (ok.map some) && uniqueKeys (nk.map some) then
     let mut pre := 0
     while pre < old.size && pre < new.size && ok[pre]! == nk[pre]! do pre := pre + 1
     let mut suf := 0
@@ -392,35 +421,33 @@ partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (
       suf := suf + 1
     let okMid := ok.extract pre (old.size - suf)
     let nkMid := nk.extract pre (new.size - suf)
-    -- duplicate keys in the part to be planned fall back to positional diffing
-    if uniqueKeys (okMid.map some) && uniqueKeys (nkMid.map some) then
-      if okMid.isEmpty && nkMid.isEmpty then
-        -- same keys in the same order: patch in place, allocate only if a child changed
-        return (← patchSame parent old new)
-      let mut out : Array (Node Msg) := Array.replicate new.size default
-      for i in [0:pre] do
-        out := out.set! i (← patch parent old[i]! new[i]!)
-      for j in [0:suf] do
-        out := out.set! (new.size - 1 - j) (← patch parent old[old.size - 1 - j]! new[new.size - 1 - j]!)
-      let oldMid := old.extract pre (old.size - suf)
-      let newMid := new.extract pre (new.size - suf)
-      let p := Keyed.plan okMid nkMid
-      for j in p.removed do
-        emit (·.remove oldMid[j]!.handle)
-        release oldMid[j]!
-      -- right to left, so the anchor (the node after i) is already final
-      let mut i := newMid.size
-      while i > 0 do
-        i := i - 1
-        let n ← match p.src[i]! with
-          | some j => patch parent oldMid[j]! newMid[i]!
-          | none => mount newMid[i]!
-        out := out.set! (pre + i) n
-        if p.move[i]! then
-          let nxt := pre + i + 1
-          if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
-          else emit (·.appendChild parent n.handle)
-      return (out, true)
+    if okMid.isEmpty && nkMid.isEmpty then
+      -- same keys in the same order: patch in place, allocate only if a child changed
+      return (← patchSame parent old new)
+    let mut out : Array (Node Msg) := Array.replicate new.size default
+    for i in [0:pre] do
+      out := out.set! i (← patch parent old[i]! new[i]!)
+    for j in [0:suf] do
+      out := out.set! (new.size - 1 - j) (← patch parent old[old.size - 1 - j]! new[new.size - 1 - j]!)
+    let oldMid := old.extract pre (old.size - suf)
+    let newMid := new.extract pre (new.size - suf)
+    let p := Keyed.plan okMid nkMid
+    for j in p.removed do
+      emit (·.remove oldMid[j]!.handle)
+      release oldMid[j]!
+    -- right to left, so the anchor (the node after i) is already final
+    let mut i := newMid.size
+    while i > 0 do
+      i := i - 1
+      let n ← match p.src[i]! with
+        | some j => patch parent oldMid[j]! newMid[i]!
+        | none => mount newMid[i]!
+      out := out.set! (pre + i) n
+      if p.move[i]! then
+        let nxt := pre + i + 1
+        if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
+        else emit (·.appendChild parent n.handle)
+    return (out, true)
   if old.size == new.size then return (← patchSame parent old new)
   -- positional, different lengths
   let common := min old.size new.size
