@@ -46,13 +46,26 @@ def size : Node Msg → Nat
 @[inline] def sizeOf (kids : Array (Node Msg)) : Nat := kids.foldl (fun n k => n + k.size) 1
 end Node
 
-/-- What a template fixes about a subtree (`docs/PROTOCOL.md`, template cloning): namespaces and
-tags, each element's attributes (names and values, in order) and property names (in order), and
-the tree's structure. A text is a text whatever its content; the template's own texts are kept,
-so a clone only re-sends the texts that differ. Listeners and keys are not part of a shape. -/
+/-- How a template holds an element's attributes, and what a clone re-sends (`attrMode`). -/
+inductive AttrMode where
+  /-- The template holds the attributes before the first property; a clone re-sets those whose
+  value differs from the template's. -/
+  | values
+  /-- As `values`, but the values are part of the shape: a clone never re-sets one. -/
+  | exact
+  /-- The template holds none; a clone gets every attribute, in view order, as a mount does. -/
+  | bare
+  deriving BEq, Inhabited
+
+/-- What a template fixes about a subtree (`docs/PROTOCOL.md`, section 7): namespaces and tags,
+each element's attribute names (in order), property names (in order), where its first property
+comes (`pre`: the number of attributes before it) and its `AttrMode`, and the tree's structure.
+The template's own attribute values and texts are kept, so a clone only re-sends those that
+differ. Listeners and keys are not part of a shape. -/
 inductive TplShape where
   | text (s : String)
-  | elem (ns : Ns) (tag : String) (attrs : Array (String × String)) (props : Array String) (kids : Array TplShape)
+  | elem (ns : Ns) (tag : String) (attrs : Array (String × String)) (props : Array String) (pre : Nat)
+      (mode : AttrMode) (kids : Array TplShape)
   deriving Inhabited
 
 /-- The templates of a session (`mountShape`). -/
@@ -360,11 +373,18 @@ private partial def keysAligned (old : Array (Node Msg)) (new : Array (Html Msg)
 /-! ## Templates
 
 Most created DOM comes from lists whose rows share one shape. The second time a subtree of a
-shape is mounted, its finished DOM becomes a template (`TEMPLATE`); later subtrees of that shape
-are created with one `CLONE` (one `cloneNode(true)` in the browser) plus what differs from a
-fresh mount: the texts that differ from the template's, every property and every listener.
-Hashing and matching walk the view without allocating; a stored `TplShape` is compared exactly, so
-a hash collision never clones the wrong thing.
+shape is mounted, it is built as a *prototype* first: its elements and texts, and each element's
+attributes up to its first property, which is all a mount has done to an element before it sets
+a property or a listener (an `input` gets none, `AttrMode.bare`). That DOM becomes the template
+(`TEMPLATE`), and the subtree is then finished like every later one of its shape: those are
+created with one `CLONE` (one `cloneNode(true)` in the browser) plus what a clone lacks: the
+texts and attribute values that differ from the template's, then, element by element and in view
+order, every property, every listener and the attributes that follow the first property. So each
+element of a clone gets, from the point where a mount sets its first property on, exactly the
+commands a mount sends it, starting from the same state; a property that reflects onto an
+attribute, or a guard that skips a property already equal, sees what it would see in a mount.
+Hashing and matching walk the view without allocating; a stored `TplShape` is compared exactly,
+so a hash collision never clones the wrong thing.
 
 Policy: element subtrees of `tplMin`..`tplMax` DOM nodes, without `lazy` nodes (mounting would
 force them) and without properties on elements that have children (mount sets properties before
@@ -392,14 +412,46 @@ partial def kidsFuel (f : Nat) (ks : Array (Html Msg)) (i : Nat) : Nat :=
   if f == 0 then 0 else if h : i < ks.size then kidsFuel (shapeFuel f ks[i]) ks (i + 1) else f
 end
 
-@[inline] private def mixStr (h : UInt64) (s : String) : UInt64 := mixHash h (hash s)
-
-private def attrsHash (h : UInt64) (attrs : Array (Attr Msg)) (i : Nat := 0) : UInt64 :=
+/-- Does an attribute name repeat? (Linear scans: attribute lists are short.) -/
+private def dupAttr (attrs : Array (Attr Msg)) (i : Nat := 0) : Bool :=
   if hi : i < attrs.size then
     match attrs[i] with
-    | .attr n v => attrsHash (mixStr (mixStr (mixHash h 3) n) v) attrs (i + 1)
-    | .prop n _ => attrsHash (mixStr (mixHash h 5) n) attrs (i + 1)
-    | _ => attrsHash h attrs (i + 1)
+    | .attr n _ =>
+      (attrs.extract (i + 1) attrs.size).any (fun | .attr m _ => m == n | _ => false) || dupAttr attrs (i + 1)
+    | _ => dupAttr attrs (i + 1)
+  else false
+termination_by attrs.size - i
+
+/-- How a template holds an element's attributes. An `input` is `bare`: its value and checkedness
+follow its attributes through a history (sanitization against `min`/`max` set later, type
+changes), which `cloneNode` does not replay the way a mount's attribute-by-attribute sequence
+does, so every copy gets its attributes one by one. `exact`: other form controls, elements that
+load or run something when an attribute is set (a clone would start with the template's
+resource), custom elements (`attributeChangedCallback`), and elements that repeat an attribute
+name. Elsewhere an attribute does nothing but hold its value, so a clone re-sets the values that
+differ from the template's. -/
+def attrMode (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) : AttrMode :=
+  match ns with
+  | .html =>
+    if tag == "input" then .bare
+    else if tag == "select" || tag == "textarea" || tag == "option" || tag == "img" || tag == "source" ||
+        tag == "video" || tag == "audio" || tag == "track" || tag == "iframe" || tag == "embed" ||
+        tag == "object" || tag == "script" || tag == "link" || tag == "style" || tag.contains '-' ||
+        dupAttr attrs then .exact
+    else .values
+  | .svg =>
+    if tag == "image" || tag == "use" || tag == "script" || tag == "feImage" || dupAttr attrs then .exact
+    else .values
+  | .mathml => if dupAttr attrs then .exact else .values
+
+@[inline] private def mixStr (h : UInt64) (s : String) : UInt64 := mixHash h (hash s)
+
+private def attrsHash (h : UInt64) (exact : Bool) (attrs : Array (Attr Msg)) (i : Nat := 0) : UInt64 :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .attr n v => attrsHash (let h := mixStr (mixHash h 3) n; if exact then mixStr h v else h) exact attrs (i + 1)
+    | .prop n _ => attrsHash (mixStr (mixHash h 5) n) exact attrs (i + 1)
+    | _ => attrsHash h exact attrs (i + 1)
   else h
 termination_by attrs.size - i
 
@@ -413,42 +465,49 @@ termination_by attrs.size - i
 
 mutual
 /-- The shape hash of a view (no allocation); 0: not templatable (a lazy node, or a property on an
-element with children). -/
+element with children). The position of the first property is implied by the names in order. -/
 partial def shapeHash (h : UInt64) (v : Html Msg) : UInt64 :=
   match v with
   | .text _ => mixHash h 1
   | .elem ns tag attrs kids =>
     let kids := effectiveKids tag kids
     if !kids.isEmpty && hasProp attrs then 0
-    else kidsHash (mixHash (attrsHash (mixStr (mixHash h (2 + ns.code.toUInt64)) tag) attrs) kids.size.toUInt64) kids 0
+    else
+      let h := attrsHash (mixStr (mixHash h (2 + ns.code.toUInt64)) tag) (attrMode ns tag attrs == .exact) attrs
+      kidsHash (mixHash h kids.size.toUInt64) kids 0
   | .lazy .. => 0
 
 partial def kidsHash (h : UInt64) (ks : Array (Html Msg)) (i : Nat) : UInt64 :=
   if h == 0 then 0 else if hi : i < ks.size then kidsHash (shapeHash h ks[i]) ks (i + 1) else h
 end
 
-/-- Do the attributes of a view element match a shape's attribute pairs and property names (in
-order; listeners and keys are skipped)? No allocation. -/
-private def attrsMatch (as : Array (String × String)) (ps : Array String) (attrs : Array (Attr Msg))
-    (i ai pi : Nat) : Bool :=
+/-- Do the attributes of a view element match a shape's attributes (names in order, and values if
+`exact`) and property names (in order, the first after exactly `pre` attributes)? Listeners and
+keys are skipped. No allocation. (The mode follows from the tag and the names, which match.) -/
+private def attrsMatch (as : Array (String × String)) (ps : Array String) (pre : Nat) (exact : Bool)
+    (attrs : Array (Attr Msg)) (i ai pi : Nat) : Bool :=
   if hi : i < attrs.size then
     match attrs[i] with
     | .attr n v =>
-      if ha : ai < as.size then as[ai].1 == n && as[ai].2 == v && attrsMatch as ps attrs (i + 1) (ai + 1) pi
+      if ha : ai < as.size then
+        as[ai].1 == n && (!exact || as[ai].2 == v) && attrsMatch as ps pre exact attrs (i + 1) (ai + 1) pi
       else false
     | .prop n _ =>
-      if hp : pi < ps.size then ps[pi] == n && attrsMatch as ps attrs (i + 1) ai (pi + 1) else false
-    | _ => attrsMatch as ps attrs (i + 1) ai pi
+      if hp : pi < ps.size then
+        (pi != 0 || ai == pre) && ps[pi] == n && attrsMatch as ps pre exact attrs (i + 1) ai (pi + 1)
+      else false
+    | _ => attrsMatch as ps pre exact attrs (i + 1) ai pi
   else ai == as.size && pi == ps.size
 termination_by attrs.size - i
 
 mutual
-/-- Does view `v` have shape `sh` (texts aside)? Exact, without allocating. -/
+/-- Does view `v` have shape `sh` (texts and non-exact attribute values aside)? Exact, without
+allocating. -/
 partial def TplShape.matches (sh : TplShape) (v : Html Msg) : Bool :=
   match sh, v with
   | .text _, .text _ => true
-  | .elem ns tag as ps ks, .elem ns' tag' attrs kids =>
-    ns == ns' && tag == tag' && attrsMatch as ps attrs 0 0 0 &&
+  | .elem ns tag as ps pre m ks, .elem ns' tag' attrs kids =>
+    ns == ns' && tag == tag' && attrsMatch as ps pre (m == .exact) attrs 0 0 0 &&
       (let kids := if kids.size == ks.size then kids else effectiveKids tag kids
        ks.size == kids.size && TplShape.kidsMatch ks kids 0)
   | _, _ => false
@@ -457,22 +516,27 @@ partial def TplShape.kidsMatch (ks : Array TplShape) (vs : Array (Html Msg)) (i 
   if i < ks.size then ks[i]!.matches vs[i]! && TplShape.kidsMatch ks vs (i + 1) else true
 end
 
+/-- The number of attributes before the first property (all of them if there is none). -/
+private def preCount (attrs : Array (Attr Msg)) (i n : Nat := 0) : Nat :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .attr .. => preCount attrs (i + 1) (n + 1)
+    | .prop .. => n
+    | _ => preCount attrs (i + 1) n
+  else n
+termination_by attrs.size - i
+
 /-- The shape of a (templatable, so lazy-free) view. -/
 partial def TplShape.ofHtml : Html Msg → TplShape
   | .text s => .text s
   | .elem ns tag attrs kids =>
     .elem ns tag (attrs.filterMap fun | .attr n v => some (n, v) | _ => none)
-      (attrs.filterMap fun | .prop n _ => some n | _ => none) ((effectiveKids tag kids).map TplShape.ofHtml)
+      (attrs.filterMap fun | .prop n _ => some n | _ => none) (preCount attrs) (attrMode ns tag attrs)
+      ((effectiveKids tag kids).map TplShape.ofHtml)
   | .lazy .. => .text ""
 
-/-- The handles of a mounted subtree in pre-order. -/
-partial def Node.handlesInto (acc : Array UInt32) : Node Msg → Array UInt32
-  | .text h _ => acc.push h
-  | .elem h _ _ _ _ _ kids _ => kids.foldl Node.handlesInto (acc.push h)
-  | .lazy _ _ n => n.handlesInto acc
-
-/-- What `mountShape` does with a templatable subtree: `0` mount it, `tplMake` mount it and keep
-it as a template, any other value: clone that template. -/
+/-- What `mountShape` does with a templatable subtree: `0` mount it, `tplMake` make it the
+template, any other value: clone that template. -/
 def tplMake : UInt32 := 0xFFFFFFFF
 
 private def tplAction (h : UInt64) (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
@@ -511,12 +575,43 @@ private def allocLoop (s : DiffState Msg) (hs : Array UInt32) : Nat → Array UI
 /-- `n` handles, in the order `n` calls of `allocNode` would return them (never while hydrating). -/
 def allocNodes (n : Nat) : DiffM Msg (Array UInt32) := modifyGet fun s => allocLoop s (Array.mkEmpty n) n
 
-/-- The commands a cloned element still needs: every property (a fresh mount sets them all),
-every listener (listeners are never cloned), and the attributes that follow a property in the
-view (re-sent: a property can reflect onto an attribute, and mount sets them in view order).
-Returns the listener table, as `mountAttrs` builds it. -/
-partial def cloneAttrs (h : UInt32) (attrs : Array (Attr Msg)) (i : Nat := 0) (afterProp := false)
-    (ls : Array (String × UInt32) := #[]) : DiffM Msg (Array (String × UInt32)) :=
+/-- The attributes of a prototype element: those before its first property, as `mountAttrs` sets
+them. -/
+private def protoAttrs (h : UInt32) (attrs : Array (Attr Msg)) (i : Nat := 0) : DiffM Msg Unit :=
+  if hi : i < attrs.size then
+    match attrs[i] with
+    | .attr n v => do emit (·.setAttr h n v); protoAttrs h attrs (i + 1)
+    | .prop .. => pure ()
+    | _ => protoAttrs h attrs (i + 1)
+  else pure ()
+termination_by attrs.size - i
+
+/-- Build `v` (templatable) as a prototype: every element and text, and each element's attributes
+before its first property (none on a `bare` element); no property, no listener. Handles are
+allocated as `mount` allocates them; returns them in pre-order. -/
+partial def mountProto (v : Html Msg) (acc : Array UInt32) : DiffM Msg (Array UInt32) := do
+  match v with
+  | .text s => let h ← allocNode; emit (·.createText h s); return acc.push h
+  | .elem ns tag attrs kids =>
+    let h ← allocNode
+    emit (·.createElement h ns tag)
+    if attrMode ns tag attrs != .bare then protoAttrs h attrs
+    let mut acc := acc.push h
+    for k in effectiveKids tag kids do
+      let n := acc.size
+      acc ← mountProto k acc
+      emit (·.appendChild h acc[n]!)
+    return acc
+  | .lazy .. => return acc  -- unreachable: a templatable view has no lazy node
+
+/-- The commands a cloned element still needs, in view order: the attributes before the first
+property whose value differs from the template's (`tas`), then from the first property on (from
+the start with `afterProp`: a `bare` element) every property and every attribute, as a mount
+sends them, and every listener (listeners are never cloned). Returns the listener table, as
+`mountAttrs` builds it. -/
+partial def cloneAttrs (h : UInt32) (tas : Array (String × String)) (attrs : Array (Attr Msg)) (i : Nat := 0)
+    (ai : Nat := 0) (afterProp := false) (ls : Array (String × UInt32) := #[]) :
+    DiffM Msg (Array (String × UInt32)) :=
   if hi : i < attrs.size then
     match attrs[i] with
     | .on ev hd => do
@@ -525,39 +620,40 @@ partial def cloneAttrs (h : UInt32) (attrs : Array (Attr Msg)) (i : Nat := 0) (a
         -- a repeated event: the last handler wins, in the same slot
         setSlot sl hd
         emit (·.setListener h ev sl hd.payload hd.flags)
-        cloneAttrs h attrs (i + 1) afterProp ls
+        cloneAttrs h tas attrs (i + 1) ai afterProp ls
       else
         let sl ← allocSlot hd
         emit (·.setListener h ev sl hd.payload hd.flags)
-        cloneAttrs h attrs (i + 1) afterProp (ls.push (ev, sl))
+        cloneAttrs h tas attrs (i + 1) ai afterProp (ls.push (ev, sl))
     | .attr n v => do
-      if afterProp then emit (·.setAttr h n v)
-      cloneAttrs h attrs (i + 1) afterProp ls
+      if afterProp || tas[ai]!.2 != v then emit (·.setAttr h n v)
+      cloneAttrs h tas attrs (i + 1) (ai + 1) afterProp ls
     | .prop n v => do
       emit (·.setProp h n v)
-      cloneAttrs h attrs (i + 1) true ls
-    | .key _ => cloneAttrs h attrs (i + 1) afterProp ls
+      cloneAttrs h tas attrs (i + 1) ai true ls
+    | .key _ => cloneAttrs h tas attrs (i + 1) ai afterProp ls
   else pure ls
 
 mutual
-/-- Finish a clone of a template with shape `sh`: node `i` of the clone (pre-order) is `hs[i]`.
-Returns the mounted node `mount` would have built, with the same handles and slots. -/
+/-- Finish a copy of the template of shape `sh` (a clone, or the prototype itself): node `i` of
+the copy (pre-order) is `hs[i]`. Returns the mounted node `mount` would have built, with the same
+handles and slots. -/
 partial def cloneWalk (hs : Array UInt32) (sh : TplShape) (v : Html Msg) (i : Nat) : DiffM Msg (Node Msg) := do
   let h := hs[i]!
   match v, sh with
   | .text s, .text t =>
     if s != t then emit (·.setText h s)
     return .text h s
-  | .elem ns tag attrs kids, .elem _ _ _ _ sks =>
+  | .elem ns tag attrs kids, .elem _ _ tas _ _ m sks =>
     -- a void element's view may name children it never gets
     let kids := if kids.size == sks.size then kids else effectiveKids tag kids
-    let ls ← cloneAttrs h attrs
+    let ls ← cloneAttrs h tas attrs (afterProp := m == .bare)
     if kids.isEmpty then return .elem h ns tag (attrsKey attrs) attrs ls #[] 1
     let (ks, j) ← cloneKids hs sks kids 0 (i + 1) (Array.mkEmpty kids.size)
     return .elem h ns tag (attrsKey attrs) attrs ls ks (j - i)
   | _, _ => return .text h ""  -- unreachable: `v` matches `sh`
 
-/-- Children `k..` of a clone, the first of them node `j`; returns them and the next node. -/
+/-- Children `k..` of a copy, the first of them node `j`; returns them and the next node. -/
 partial def cloneKids (hs : Array UInt32) (sks : Array TplShape) (kids : Array (Html Msg)) (k j : Nat)
     (acc : Array (Node Msg)) : DiffM Msg (Array (Node Msg) × Nat) := do
   if k < kids.size then
@@ -621,9 +717,9 @@ partial def mountElem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids 
   return .elem h ns tag (attrsKey attrs) attrs ls ks (Node.sizeOf ks)
 
 /-- Mount an element subtree of `size` (`tplMin`..`tplMax`) nodes: clone its shape's template if
-there is one, make it the template the second time its shape is seen (`TEMPLATE` right after the
-subtree is complete, before its parent takes it), else mount it node by node. Inside a
-candidate, children are not candidates themselves. -/
+there is one; the second time its shape is seen, build its prototype, make that the template
+(`TEMPLATE`, before anything else touches the subtree) and finish it as a clone; else mount it
+node by node. Inside a candidate, children are not candidates themselves. -/
 partial def mountShape (v : Html Msg) (size : Nat) : DiffM Msg (Node Msg) := do
   match v with
   | .elem ns tag attrs kids =>
@@ -632,10 +728,13 @@ partial def mountShape (v : Html Msg) (size : Nat) : DiffM Msg (Node Msg) := do
     let act ← tplAction h v
     if act == 0 then mountElem ns tag attrs kids false
     else if act == tplMake then
-      let n ← mountElem ns tag attrs kids false
-      let tid ← addTemplate h (TplShape.ofHtml v) size
-      emit (·.template tid (n.handlesInto #[]))
-      return n
+      -- the template is the prototype (before any property or listener); the subtree is then
+      -- finished as a clone is
+      let hs ← mountProto v #[]
+      let sh := TplShape.ofHtml v
+      let tid ← addTemplate h sh size
+      emit (·.template tid hs)
+      cloneWalk hs sh v 0
     else cloneOf act v
   | _ => mount v
 

@@ -181,17 +181,21 @@ end Session
 /-! ## Invariants -/
 
 /-- Does a template the browser holds (the model's snapshot) show the engine's shape: the same
-namespaces, tags, effective attributes (in DOM order) and texts? -/
+namespaces, tags and texts, and on each element the effective attributes (in DOM order) of those
+before its first property (the template is the prototype, which has only those; a `bare` element
+has none)? -/
 partial def snapMatches : Snap → TplShape → Bool
   | .text a, .text b => a == b
-  | .elem ns tag attrs kids, .elem ns' tag' as _ ks =>
-    ns == ns'.code && tag == tag' && attrs == as.foldl (fun acc (k, v) => Dom.setKV acc k v) #[] &&
+  | .elem ns tag attrs kids, .elem ns' tag' as _ pre m ks =>
+    let held := if m == .bare then #[] else as.extract 0 pre
+    ns == ns'.code && tag == tag' && attrs == held.foldl (fun acc (k, v) => Dom.setKV acc k v) #[] &&
       kids.size == ks.size && (kids.zip ks).all fun (k, sh) => snapMatches k sh
   | _, _ => false
 
 namespace Session
 
-/-- Does the engine's mounted tree name exactly the DOM's nodes and listener slots? -/
+/-- Does the engine's mounted tree name exactly the DOM's nodes and listener slots, with each
+element's cached size equal to a recount? -/
 partial def nodeMatches (d : Dom) : Node String → UInt32 → Array String
   | .lazy _ _ n, h => nodeMatches d n h
   | .text h' s, h =>
@@ -200,9 +204,10 @@ partial def nodeMatches (d : Dom) : Node String → UInt32 → Array String
     else if !dn.isText then #[s!"node: engine text {h} is a DOM element"]
     else if dn.text != s then #[s!"node: engine text {h} is {s.quote}, DOM has {dn.text.quote}"]
     else #[]
-  | .elem h' _ tag _ _ ls kids _, h =>
+  | .elem h' _ tag _ _ ls kids sz, h =>
     let dn := d.get h
     if h' != h then #[s!"node: engine element handle {h'} where the DOM has {h}"]
+    else if sz != Node.sizeOf kids then #[s!"node: engine element {h} caches size {sz}, its children make {Node.sizeOf kids}"]
     else if dn.isText then #[s!"node: engine element {h} is a DOM text"]
     else if dn.tag != tag then #[s!"node: engine tag {tag} at {h}, DOM has {dn.tag}"]
     else if dn.kids.size != kids.size then #[s!"node: engine element {h} has {kids.size} children, DOM has {dn.kids.size}"]

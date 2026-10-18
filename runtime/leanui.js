@@ -157,40 +157,22 @@
       if (h - first !== count) throw new Error("LeanUI: hydration found " + (h - first) + " nodes, expected " + count + "; the server and client views differ");
     }
 
-    // TEMPLATE tid count h1..hcount: keep a copy of the subtree rooted at h1 as mount built it,
-    // whose nodes are h1..hcount in pre-order.
+    // TEMPLATE tid count h1..hcount: keep a copy of the subtree rooted at h1, whose nodes are
+    // h1..hcount in pre-order (Lean sends it before any property or listener touches the subtree).
     template(w, i) {
-      const N = this.nodes, end = i + 3 + w[i + 2], root = N[w[i + 3]], snap = root.cloneNode(true);
-      // keep only the nodes Lean knows (a property such as innerHTML can add others)
-      const prune = (o, s, k) => {
-        for (let oc = o.firstChild, sc = s.firstChild; oc !== null; ) {
-          const on = oc.nextSibling, sn = sc.nextSibling;
-          if (k < end && oc === N[w[k]]) k = prune(oc, sc, k + 1); else sc.remove();
-          oc = on; sc = sn;
-        }
-        return k;
-      };
-      if (prune(root, snap, i + 4) !== end) throw new Error("LeanUI: TEMPLATE " + w[i + 1] + " does not name its subtree");
-      // cloneNode copies the value and checkedness of form controls (dirty flags included), which
-      // a fresh mount does not have: give the copy fresh controls with the same attributes
-      for (const el of snap.querySelectorAll("input, textarea")) {
-        if (el.namespaceURI !== "http://www.w3.org/1999/xhtml") continue;
-        const f = document.createElement(el.localName);
-        for (const a of el.attributes) f.setAttributeNode(a.cloneNode());
-        while (el.firstChild !== null) f.appendChild(el.firstChild);
-        el.replaceWith(f);
-      }
+      const tid = w[i + 1], count = w[i + 2], snap = this.nodes[w[i + 3]].cloneNode(true), moves = [];
       // the pre-order walk, as moves from each node to the next: 0 to the first child, u > 0 up
       // u - 1 levels, then to the next sibling (a clone is walked without probing for children)
-      const moves = new Uint8Array(w[i + 2] - 1);
-      for (let n = snap, k = 0; k < moves.length; k++) {
-        if (n.firstChild !== null) { n = n.firstChild; continue; }
+      for (let n = snap; ; ) {
+        if (n.firstChild !== null) { n = n.firstChild; moves.push(0); continue; }
         let u = 1;
-        while (n.nextSibling === null) { n = n.parentNode; u++; }
-        n = n.nextSibling; moves[k] = u;
+        while (n !== snap && n.nextSibling === null) { n = n.parentNode; u++; }
+        if (n === snap) break;
+        n = n.nextSibling; moves.push(u);
       }
-      this.tpl[w[i + 1]] = { snap, moves };
-      return end;
+      if (moves.length !== count - 1) throw new Error("LeanUI: TEMPLATE " + tid + " names " + count + " nodes, its subtree has " + (moves.length + 1));
+      this.tpl[tid] = { snap, moves: Uint8Array.from(moves) };
+      return i + 3 + count;
     }
     // CLONE tid count h1..hcount: a copy of template tid, whose nodes become h1..hcount in pre-order
     // (the order mount allocates handles in).

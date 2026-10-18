@@ -131,24 +131,45 @@ order.
 Most created DOM comes from lists whose rows share one shape, so Lean creates repeated subtrees
 by copying a template (one `cloneNode(true)`) instead of one command per node.
 
-- `TEMPLATE tid count n1..ncount` follows, in the same buffer, the commands that built the
-  subtree rooted at `n1` (before it is attached anywhere); `n1..ncount` are all of its nodes in
-  pre-order (elements and texts). The receiver keeps a copy taken now, with only those nodes:
-  nodes the subtree gained otherwise (an `innerHTML` property, say) are not part of the template.
-  Form controls in the copy are fresh: a copied `input` or `textarea` has the template's
-  attributes and children but neither its value nor its checkedness (nor their dirty flags), as a
-  newly created one. Template ids are ≥ 1, defined once per session; there are at most 256.
+- `TEMPLATE tid count n1..ncount` follows, in the same buffer, the commands that built a
+  *prototype*: the subtree rooted at `n1`, detached, with its elements and texts and each
+  element's attributes up to its first property (an `input` with none), and no property and no
+  listener yet. `n1..ncount` are exactly the nodes of that subtree in pre-order (elements and
+  texts); the receiver keeps a copy taken now as template `tid` and rejects a `TEMPLATE` whose
+  subtree has another number of nodes. The commands after it finish the prototype as they finish
+  a clone (below). Template ids are ≥ 1, defined once per session; there are at most 256.
 - `CLONE tid count n1..ncount` makes `n1..ncount` (handles that are not live) the nodes of a new
   copy of template `tid`, in pre-order; `count` is the template's size. The copy is detached and
   carries the template's namespaces, tags, attributes and texts, and no listeners. The commands
-  that follow make it what a mount of the view builds: `SET_TEXT` for the texts that differ, every
-  property (`SET_PROP_*`), every listener (`SET_LISTENER`), and the attributes that follow a
-  property in the view (a property can reflect onto an attribute).
+  that follow make it what a mount of the view builds: `SET_TEXT` for the texts that differ,
+  then element by element (pre-order) and in view order: `SET_ATTR` for the attributes before
+  the first property whose value differs from the template's, and from the first property on
+  everything a mount sends (`SET_PROP_*`, `SET_ATTR`), and every listener (`SET_LISTENER`). An
+  `input` gets all of its attributes this way.
+
+So every element of a copy reaches its first property in the state a fresh mount has there (the
+same attributes in the same order, no property set, no dirty value or checkedness), and from then
+on receives the same commands: a property that reflects onto an attribute (`className`, `id`,
+`hidden`, `value`), or the runtime's skip of a string property that already has its value, sees
+what it sees in a mount. `tests/browser/templates.mjs` checks this in Chromium and Firefox on
+engine-generated buffers, comparing every node with and without templates: attributes in order,
+`value`/`checked`/`selected`, listener slots, scripts run, and dirty flags.
 
 Lean templates element subtrees of 4 to 64 nodes that contain no lazy node and no property on an
 element with children (mount sets properties before the children exist; a copy has them
-already). A subtree's shape is its namespaces and tags, each element's attributes (names and
-values, in order) and property names (in order), and its structure; listeners, keys and text
-contents are not part of it. The second subtree of a shape becomes the template, later ones are
-clones; shapes are compared exactly, never by hash alone. `LeanUI/Testing/Dom.lean` models both
-commands (the model's copy carries attributes and texts, not properties).
+already). A subtree's shape is its namespaces and tags, each element's attribute names (in
+order), property names (in order) and where its first property comes, and its structure;
+listeners, keys, texts and most attribute values are not part of it. The values *are* part of
+the shape on elements where setting an attribute does more than hold a value or where the order
+of a history matters (`select`, `textarea`, `option`, media and resource elements such as `img`,
+`script`, `iframe`, `link`; SVG `image`, `use`, `script`; custom elements; any element that
+repeats an attribute name), so a copy never re-sets an attribute there. The second subtree of a
+shape becomes the template, later ones are clones; shapes are compared exactly, never by hash
+alone. Candidates are the children a patch mounts and, in a new subtree, children with a
+neighbouring sibling of the same tag (list rows). `LeanUI/Testing/Dom.lean` models both commands
+(the model's copy carries attributes and texts, not properties).
+
+What a copy can still do differently from a mount: a custom element's callbacks run in another
+order (its attributes arrive while it is copied, before its children), and a property on a leaf
+is set while the leaf is already inside its (detached) parent, where a mount sets it before the
+leaf has a parent; no difference has been observed for radio groups and selects.
