@@ -260,7 +260,7 @@ def check (s : Session) (what : String) : Array String := Id.run do
   for e in d.errors do out := out.push s!"{what}: Dom.apply: {e}"
   for e in s.shadow.errors do out := out.push s!"{what}: wire: {e}"
   -- the browser holds exactly the engine's templates (a lost TEMPLATE breaks a later CLONE)
-  let shapes := s.diff.tplShapes
+  let shapes := s.diff.tpl.shapes
   if d.templates.size != shapes.size then
     out := out.push s!"{what}: the engine has {shapes.size} templates, the DOM {d.templates.size}"
   for h : i in [0:shapes.size] do

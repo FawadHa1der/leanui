@@ -2,7 +2,6 @@ module
 public import LeanUI.Html
 public import LeanUI.Patch
 public import LeanUI.Keyed
-public import Std.Data.HashSet
 /-!
 # Mounting and diffing
 
@@ -56,6 +55,19 @@ inductive TplShape where
   | elem (ns : Ns) (tag : String) (attrs : Array (String × String)) (props : Array String) (kids : Array TplShape)
   deriving Inhabited
 
+/-- The templates of a session (`mountShape`). -/
+structure TplState where
+  /-- Hashes of shapes seen once (cleared when it reaches `tplSeenLimit`). -/
+  seen : Std.HashMap UInt64 Unit := {}
+  /-- Shape hash → template id. -/
+  ids : Std.HashMap UInt64 UInt32 := {}
+  /-- The shape of template `i + 1`, and its number of nodes. -/
+  shapes : Array TplShape := #[]
+  sizes : Array Nat := #[]
+  /-- The template made or cloned last (0: none): the first one tried, so the rows of a list
+  that share a shape cost one comparison each instead of counting and hashing. -/
+  last : UInt32 := 0
+
 structure DiffState (Msg : Type) where
   buf : Buf := {}
   nextNode : UInt32 := 1
@@ -68,16 +80,7 @@ structure DiffState (Msg : Type) where
   /-- Create repeated subtrees by cloning a template (`mountShape`). Off: every node is created
   by its own commands (the tests compare both). -/
   templates : Bool := true
-  /-- Hashes of shapes seen once (cleared when it reaches `tplSeenLimit`). -/
-  tplSeen : Std.HashSet UInt64 := {}
-  /-- Shape hash → template id. -/
-  tplIds : Std.HashMap UInt64 UInt32 := {}
-  /-- The shape of template `i + 1`, and its number of nodes. -/
-  tplShapes : Array TplShape := #[]
-  tplSizes : Array Nat := #[]
-  /-- The template made or cloned last (0: none): the first one tried, so the rows of a list
-  that share a shape cost one comparison each instead of counting and hashing. -/
-  tplLast : UInt32 := 0
+  tpl : TplState := {}
 
 abbrev DiffM (Msg : Type) := StateM (DiffState Msg)
 
@@ -473,22 +476,24 @@ it as a template, any other value: clone that template. -/
 def tplMake : UInt32 := 0xFFFFFFFF
 
 private def tplAction (h : UInt64) (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
-  let tid := s.tplIds.getD h 0
-  if tid != 0 then (if s.tplShapes[tid.toNat - 1]!.matches v then tid else 0, s)
-  else if s.tplSeen.contains h then (if s.tplShapes.size < tplLimit then tplMake else 0, s)
+  let t := s.tpl
+  let tid := t.ids.getD h 0
+  if tid != 0 then (if t.shapes[tid.toNat - 1]!.matches v then tid else 0, s)
+  else if t.seen.contains h then (if t.shapes.size < tplLimit then tplMake else 0, s)
   else
-    let seen := if s.tplSeen.size ≥ tplSeenLimit then {} else s.tplSeen
-    (0, { s with tplSeen := seen.insert h })
+    let seen := if t.seen.size ≥ tplSeenLimit then {} else t.seen
+    (0, { s with tpl := { t with seen := seen.insert h () } })
 
 private def addTemplate (h : UInt64) (sh : TplShape) (size : Nat) : DiffM Msg UInt32 := modifyGet fun s =>
-  let tid := (s.tplShapes.size + 1).toUInt32
-  (tid, { s with tplShapes := s.tplShapes.push sh, tplSizes := s.tplSizes.push size, tplIds := s.tplIds.insert h tid,
-                 tplSeen := s.tplSeen.erase h, tplLast := tid })
+  let t := s.tpl
+  let tid := (t.shapes.size + 1).toUInt32
+  (tid, { s with tpl := { shapes := t.shapes.push sh, sizes := t.sizes.push size, ids := t.ids.insert h tid,
+                          seen := t.seen.erase h, last := tid } })
 
 /-- The last template, if `v` has its shape (else 0). -/
 private def lastTemplate (v : Html Msg) : DiffM Msg UInt32 := modifyGet fun s =>
-  let t := s.tplLast
-  (if t != 0 && s.templates && !s.hydrating && s.tplShapes[t.toNat - 1]!.matches v then t else 0, s)
+  let t := s.tpl.last
+  (if t != 0 && s.templates && !s.hydrating && s.tpl.shapes[t.toNat - 1]!.matches v then t else 0, s)
 
 @[inline] private def templatesOn : DiffM Msg Bool := modifyGet fun s => (s.templates && !s.hydrating, s)
 
@@ -583,15 +588,20 @@ partial def mount (v : Html Msg) (tpl : Bool := false) : DiffM Msg (Node Msg) :=
     let h ← allocNode
     if !(← get).hydrating then emit (·.createText h s)
     return .text h s
-  | .elem ns tag attrs kids =>
-    if tpl then
-      let last ← lastTemplate v
-      if last != 0 then return ← cloneOf last v
-      if ← templatesOn then
-        let left := shapeFuel (tplMax + 1) v
-        if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
-    mountElem ns tag attrs kids true
+  | .elem ns tag attrs kids => if tpl then mountCandidate v else mountElem ns tag attrs kids true
   | .lazy k deps r => return .lazy k deps (← mount (r ()) tpl)
+
+/-- Mount an element that may be created from a template: a clone of the last template if it has
+its shape, else `mountShape` if it is templatable, else node by node. -/
+partial def mountCandidate (v : Html Msg) : DiffM Msg (Node Msg) := do
+  let last ← lastTemplate v
+  if last != 0 then return ← cloneOf last v
+  if ← templatesOn then
+    let left := shapeFuel (tplMax + 1) v
+    if left != 0 && left + tplMin ≤ tplMax + 1 then return ← mountShape v (tplMax + 1 - left)
+  match v with
+  | .elem ns tag attrs kids => mountElem ns tag attrs kids true
+  | _ => mount v
 
 /-- Mount an element node by node. With `tplKids`, the children of an element with at least two
 are template candidates. -/
@@ -631,7 +641,9 @@ partial def mountShape (v : Html Msg) (size : Nat) : DiffM Msg (Node Msg) := do
 
 /-- Create `v` as a clone of template `tid` (`v` has its shape). -/
 partial def cloneOf (tid : UInt32) (v : Html Msg) : DiffM Msg (Node Msg) := do
-  let (sh, size) ← modifyGet fun s => ((s.tplShapes[tid.toNat - 1]!, s.tplSizes[tid.toNat - 1]!), { s with tplLast := tid })
+  let (sh, size) ← modifyGet fun s =>
+    let t := s.tpl
+    ((t.shapes[tid.toNat - 1]!, t.sizes[tid.toNat - 1]!), if t.last == tid then s else { s with tpl := { t with last := tid } })
   let hs ← allocNodes size
   emit (·.clone tid hs)
   cloneWalk hs sh v 0
