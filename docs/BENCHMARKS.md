@@ -179,7 +179,8 @@ protocol:
    `HashMap.get?`; the compiler took the buffer apart around the pair and allocated a new one for
    every command that names something, plus an `Option` per lookup. Now `named` passes the
    caller's own buffer to an out-of-line writer that takes the id (updated in place), uses
-   `getD` (ids start at 1), and defines new names out of line.
+   `getD … 0` (ids start at 1; on a miss a `contains` check keeps a name that really has id 0
+   exact), and defines new names out of line.
 
 Measured A/B against `0a415c1` on the same machine and session (native: median of five
 alternating runs of `leanui-perf`, lazy rows; Chromium 151 traced script time, the median over

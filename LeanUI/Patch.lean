@@ -124,33 +124,45 @@ namespace Buf
   let n := utf16Len str
   { b with ops := pushU32 (pushU32 b.ops b.units) n, strs := appendUtf8 b.strs str, units := b.units + n }
 
-/-- Define a new name: give it the next id and emit `INTERN id nm`. Out of line: it runs once per
-name and session, while `named` is inlined into every command writer. -/
-@[noinline] def define (b : Buf) (nm : String) : Buf :=
-  let id := b.nextName
-  { b with names := b.names.insert nm id, nextName := id + 1 }.w Op.intern |>.w id |>.s nm
+/-- Define `nm` if it is new: give it the next id and emit `INTERN id nm`. Out of line: it runs
+on a lookup miss, once per name and session, while `named` is inlined into every command writer.
+
+A miss means `getD … 0` returned 0, and ids start at 1, so the name is almost always new. It can
+be known with id 0 only in a `Buf` built with `nextName := 0`, or after 2³² names when the
+counter wraps; then this leaves the buffer as it is, and the caller reads the id again. -/
+@[noinline] private def define (b : Buf) (nm : String) : Buf :=
+  if b.names.contains nm then b
+  else
+    let id := b.nextName
+    { b with names := b.names.insert nm id, nextName := id + 1 }.w Op.intern |>.w id |>.s nm
 
 /-- The id of an interned name. On first use this emits `INTERN id str` *before* the caller
-starts its own command, so commands are never interleaved. Ids start at 1, so `getD … 0` finds a
-name without allocating an `Option`. -/
+starts its own command, so commands are never interleaved.
+
+The lookup is `getD … 0`, which allocates no `Option`. On a miss, `define` adds the name unless
+it is already there with id 0, and the id is looked up again: two more lookups per new name and
+session, and exact for every starting `nextName`. (Checking `contains` here instead keeps the
+name map alive across the hot lookup, which measured 2–5% slower natively on the benchmark's
+creates.) -/
 @[inline] def intern (b : Buf) (nm : String) : UInt32 × Buf :=
   let id := b.names.getD nm 0
   if id != 0 then (id, b)
   else
     let b := b.define nm
-    (b.nextName - 1, b)
+    (b.names.getD nm 0, b)
 
 /-- `k` applied to the buffer and the id of `nm`, interned first if new (`intern` in continuation
-form, which the command writers use). Each `k` below is a call to an out-of-line writer that takes
-the id, so the buffer stays one object that every write updates in place. (When `k` writes the
-words itself, or through `intern`'s pair, the compiler takes the buffer apart where the two
-branches meet and allocates a new one for every command: 18 per benchmark row.) -/
+form, with the same lookup; the command writers use it). Each `k` below is a call to an
+out-of-line writer that takes the id, so the buffer stays one object that every write updates in
+place. (When `k` writes the words itself, or through `intern`'s pair, the compiler takes the
+buffer apart where the branches meet and allocates a new one for every command: 18 per benchmark
+row.) -/
 @[inline] def named (b : Buf) (nm : String) (k : Buf → UInt32 → Buf) : Buf :=
   let id := b.names.getD nm 0
   if id != 0 then k b id
   else
     let b := b.define nm
-    k b (b.nextName - 1)
+    k b (b.names.getD nm 0)
 
 /-! ### One writer per command (each interns first, then writes the opcode and operands) -/
 

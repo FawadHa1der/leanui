@@ -196,6 +196,39 @@ def encStep (spec : Bool) (a : ByteArray) (k x : Nat) : ByteArray :=
     let s := encStrs[x % encStrs.size]!
     if spec then a ++ s.toUTF8 else appendUtf8 a s
 
+/-- Interning as `0a415c1` defined it (`get?`, then the caller writes its words): the reference
+that the allocation-free `intern` and `named` must match exactly, from any starting counter. -/
+def refIntern (b : Buf) (nm : String) : UInt32 × Buf :=
+  match b.names.get? nm with
+  | some n => (n, b)
+  | none =>
+    let n := b.nextName
+    (n, ({ b with names := b.names.insert nm n, nextName := n + 1 }.w Op.intern |>.w n |>.s nm))
+
+/-- One command that names something (`k` picks which), by the writers or by the reference. -/
+def namedStep (spec : Bool) (b : Buf) (k : Nat) (node : UInt32) (nm v : String) : Buf :=
+  if spec then
+    let (n, b) := refIntern b nm
+    match k with
+    | 0 => b.w Op.createElement |>.w node |>.w Ns.svg.code |>.w n
+    | 1 => b.w Op.setAttr |>.w node |>.w n |>.s v
+    | 2 => b.w Op.removeAttr |>.w node |>.w n
+    | 3 => b.w Op.setPropStr |>.w node |>.w n |>.s v
+    | 4 => b.w Op.setPropBool |>.w node |>.w n |>.w 1
+    | 5 => b.w Op.removeProp |>.w node |>.w n
+    | 6 => b.w Op.setListener |>.w node |>.w n |>.w (node + 1) |>.w Payload.value.code |>.w 3
+    | _ => b.w Op.removeListener |>.w node |>.w n
+  else
+    match k with
+    | 0 => b.createElement node .svg nm
+    | 1 => b.setAttr node nm v
+    | 2 => b.removeAttr node nm
+    | 3 => b.setProp node nm (.str v)
+    | 4 => b.setProp node nm (.bool true)
+    | 5 => b.removeProp node nm
+    | 6 => b.setListener node nm (node + 1) .value 3
+    | _ => b.removeListener node nm
+
 def testEncoding : IO Unit := do
   let fail (what : String) : IO Unit := throw (IO.userError s!"encoding: {what}")
   -- random appends to arrays of every starting capacity; every 7th step appends to a shared array
@@ -229,6 +262,33 @@ def testEncoding : IO Unit := do
   | .ok cmds =>
     let interns := cmds.filterMap fun c => match c.op with | .intern i s => some (i, s) | _ => none
     unless interns == #[(1, "class"), (2, "td"), (3, "new")] do fail s!"INTERN commands {interns}"
+  -- random sessions of `intern` and every named writer (and `reset`) against the reference, from
+  -- several starting counters: 0 (a name can then have id 0, which `getD … 0` also returns for a
+  -- miss) and the counter wrapping through 0 included
+  let pool := #["a", "class", "td", "", "é", "😀", "click", "input", "a\x00b"] ++
+    (Array.range 24).map (s!"n{·}")
+  for start in [0, 1, 2, 1000, 0xFFFFFFF0, 0xFFFFFFFE, 0xFFFFFFFF] do
+    let mut b : Buf := { nextName := start }
+    let mut ref : Buf := { nextName := start }
+    for step in [0:600] do
+      let (r1, k) := rng.below 10; let (r2, i) := r1.below pool.size; let (r3, node) := r2.below 5000
+      rng := r3
+      let nm := pool[i]!
+      if k == 8 then
+        let (n, b') := b.intern nm
+        let (rn, ref') := refIntern ref nm
+        if n != rn then fail s!"intern {nm.quote} = {n}, want {rn} (start {start}, step {step})"
+        b := b'; ref := ref'
+      else if k == 9 then
+        b := b.reset; ref := ref.reset
+      else
+        b := namedStep false b k node.toUInt32 nm s!"v{step}"
+        ref := namedStep true ref k node.toUInt32 nm s!"v{step}"
+      let same := b.ops == ref.ops && b.strs == ref.strs && b.units == ref.units &&
+        b.nextName == ref.nextName && b.names.size == ref.names.size &&
+        pool.all fun n => b.names.get? n == ref.names.get? n
+      unless same do
+        fail s!"named writers differ from the reference (start {start}, step {step}, op {k}, name {nm.quote})"
   IO.println "  encoding primitives: ok"
 
 def main : IO UInt32 := do
