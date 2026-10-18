@@ -1,7 +1,36 @@
 module
 public import LeanUI.Keyed
+/-!
+# Keyed reconciliation, machine-checked
+
+Everything here is proved with no `sorry` and only the standard axioms (`propext`,
+`Classical.choice`, `Quot.sound`); the `#guard_msgs` blocks at the end make `lake build` fail if
+that ever changes. `docs/PROOFS.md` explains what is proved, what is tested and what is assumed.
+
+**Correctness.** For duplicate-free key lists, applying the plan (`LeanUI.Keyed.applyList`: drop
+`removed`, then right to left insert every child with `move` before its successor) yields the new
+keys: `plan_correct`.
+
+**The plan's fields.** `plan_src_some` / `plan_src_none` (`src` points at the old child with the
+same key, `none` exactly for new keys), `plan_src_inj` (no old child is reused twice),
+`mem_plan_removed` / `mem_plan_removed_iff` / `plan_removed_sorted` (`removed` is exactly the
+unused old indices, increasing), `plan_create_moves` (every created child is inserted).
+
+**Placement, both directions.** `place_correct_iff`: for any move flags, the right-to-left pass
+is correct exactly when the keys at the non-moving positions appear in the start list in the
+order `new` wants.
+
+**Optimality.** `lis_spec`: `lis` returns a longest strictly increasing subsequence.
+`plan_moves_fewest`: every plan that turns `old` into `new` (whatever it removes and moves)
+inserts at least as many children as `plan old new`.
+
+The proof of correctness follows one invariant through the right-to-left pass (`Inv`): once
+positions `s … n-1` are done, the list is `P ++ Q` where `P` holds no finished key, the finished
+keys `new[s:]` appear in `Q` in order, and the stable keys below `s` are still in `P` in order.
+-/
 @[expose] public section
-namespace LeanUI.Keyed
+namespace LeanUI.Proofs.Keyed
+open LeanUI.Keyed
 open scoped List
 
 /-! ## `placeBefore` -/
@@ -286,51 +315,72 @@ structure ScanOk (xs : Array Nat) (i : Nat) (tails : Array Nat) (prev : Array (O
   tails_lt : ∀ t ∈ tails, t < i
   prev_ok : ∀ j p, prev[j]! = some p → IncRel xs p j ∧ j < xs.size
 
-theorem lisScan_ok (xs : Array Nat) (i : Nat) (tails : Array Nat) (prev : Array (Option Nat))
-    (hi : i ≤ xs.size) (h : ScanOk xs i tails prev) :
-    ScanOk xs xs.size (lisScan xs i tails prev).1 (lisScan xs i tails prev).2 := by
+/-- One patience-sorting step, as `lisScan` takes it. -/
+def scanTails (xs tails : Array Nat) (i : Nat) : Array Nat :=
+  if lisSearch xs tails xs[i]! 0 tails.size < tails.size then
+    tails.set! (lisSearch xs tails xs[i]! 0 tails.size) i
+  else tails.push i
+def scanPrev (xs tails : Array Nat) (prev : Array (Option Nat)) (i : Nat) : Array (Option Nat) :=
+  if lisSearch xs tails xs[i]! 0 tails.size = 0 then prev
+  else prev.set! i (some tails[lisSearch xs tails xs[i]! 0 tails.size - 1]!)
+
+theorem scanOk_step {xs : Array Nat} {i : Nat} {tails : Array Nat} {prev : Array (Option Nat)}
+    (hlt : i < xs.size) (h : ScanOk xs i tails prev) :
+    ScanOk xs (i + 1) (scanTails xs tails i) (scanPrev xs tails prev i) := by
+  obtain ⟨-, hs2, hs3⟩ := lisSearch_spec xs tails xs[i]! 0 tails.size (Nat.zero_le _)
+  generalize hlo : lisSearch xs tails xs[i]! 0 tails.size = lo at hs2 hs3
+  simp only [scanTails, scanPrev, hlo]
+  refine ⟨?_, ?_, ?_⟩
+  · split <;> simp [h.size]
+  · intro t ht
+    split at ht
+    · rcases Array.mem_or_eq_of_mem_setIfInBounds ht with ht | rfl
+      · exact Nat.lt_succ_of_lt (h.tails_lt t ht)
+      · omega
+    · rcases Array.mem_push.1 ht with ht | rfl
+      · exact Nat.lt_succ_of_lt (h.tails_lt t ht)
+      · omega
+  · intro j p hp
+    split at hp
+    · exact h.prev_ok j p hp
+    · rename_i hlo0
+      rw [Array.set!_eq_setIfInBounds, getElem!_setIfInBounds'] at hp
+      split at hp
+      · rename_i hij
+        obtain ⟨rfl, hjs⟩ := hij
+        cases hp
+        have hmem : tails[lo - 1]! ∈ tails := by
+          rw [getElem!_pos tails (lo - 1) (by omega)]; exact Array.getElem_mem (by omega)
+        refine ⟨⟨h.tails_lt _ hmem, ?_⟩, by rwa [h.size] at hjs⟩
+        rcases hs3 with hs3 | hs3
+        · omega
+        · exact hs3
+      · exact h.prev_ok j p hp
+
+/-- Run an invariant through the whole scan. -/
+theorem lisScan_induct (xs : Array Nat) (Inv : Nat → Array Nat → Array (Option Nat) → Prop)
+    (step : ∀ i tails prev, i < xs.size → Inv i tails prev →
+      Inv (i + 1) (scanTails xs tails i) (scanPrev xs tails prev i)) :
+    ∀ i tails prev, i ≤ xs.size → Inv i tails prev →
+      Inv xs.size (lisScan xs i tails prev).1 (lisScan xs i tails prev).2 := by
+  intro i tails prev hi h
   fun_induction lisScan xs i tails prev with
   | case1 i tails prev hlt x lo prev' tails' ih =>
-    have hlo : lo = lisSearch xs tails x 0 tails.size := rfl
-    have hprev' : prev' = if lo = 0 then prev else prev.set! i (some tails[lo - 1]!) := by
-      simp [prev']
-    have htails' : tails' = if lo < tails.size then tails.set! lo i else tails.push i := by
-      simp [tails']
-    obtain ⟨-, hs2, hs3⟩ := lisSearch_spec xs tails x 0 tails.size (Nat.zero_le _)
-    rw [← hlo] at hs2 hs3
-    apply ih (by omega)
-    refine ⟨?_, ?_, ?_⟩
-    · rw [hprev']; split <;> simp [h.size]
-    · intro t ht
-      rw [htails'] at ht
-      split at ht
-      · rcases Array.mem_or_eq_of_mem_setIfInBounds ht with ht | rfl
-        · exact Nat.lt_succ_of_lt (h.tails_lt t ht)
-        · omega
-      · rcases Array.mem_push.1 ht with ht | rfl
-        · exact Nat.lt_succ_of_lt (h.tails_lt t ht)
-        · omega
-    · intro j p hp
-      rw [hprev'] at hp
-      split at hp
-      · exact h.prev_ok j p hp
-      · rename_i hlo0
-        rw [Array.set!_eq_setIfInBounds, getElem!_setIfInBounds'] at hp
-        split at hp
-        · rename_i hij
-          obtain ⟨rfl, hjs⟩ := hij
-          cases hp
-          have hmem : tails[lo - 1]! ∈ tails := by
-            rw [getElem!_pos tails (lo - 1) (by omega)]; exact Array.getElem_mem (by omega)
-          refine ⟨⟨h.tails_lt _ hmem, ?_⟩, by rwa [h.size] at hjs⟩
-          rcases hs3 with hs3 | hs3
-          · omega
-          · rw [getElem!_pos xs i hlt]; exact hs3
-        · exact h.prev_ok j p hp
+    have e1 : tails' = scanTails xs tails i := by
+      simp [tails', lo, x, scanTails, getElem!_pos xs i hlt]
+    have e2 : prev' = scanPrev xs tails prev i := by
+      simp [prev', lo, x, scanPrev, getElem!_pos xs i hlt]
+    rw [e1, e2] at ih ⊢
+    exact ih (by omega) (step i tails prev hlt h)
   | case2 i tails prev hge =>
     have : i = xs.size := by omega
     subst this
     exact h
+
+theorem lisScan_ok (xs : Array Nat) (i : Nat) (tails : Array Nat) (prev : Array (Option Nat))
+    (hi : i ≤ xs.size) (h : ScanOk xs i tails prev) :
+    ScanOk xs xs.size (lisScan xs i tails prev).1 (lisScan xs i tails prev).2 :=
+  lisScan_induct xs (ScanOk xs) (fun _ _ _ hlt h => scanOk_step hlt h) i tails prev hi h
 
 /-- Walking back along `prev` yields an increasing subsequence. -/
 theorem lisWalk_ok (xs : Array Nat) (prev : Array (Option Nat))
@@ -431,6 +481,265 @@ theorem Pairwise.rel_or_rel {α : Type} {R : α → α → Prop} {l : List α} (
     · rcases List.mem_cons.1 hb with rfl | hb'
       · exact .inr (h.1 a ha')
       · exact ih h.2 ha' hb'
+
+/-! ## LIS: the result is a *longest* strictly increasing subsequence -/
+
+theorem lisSearch_exact (xs tails : Array Nat) (x : Nat)
+    (hs : ∀ k k', k < k' → k' < tails.size → xs[tails[k]!]! < xs[tails[k']!]!) (lo hi : Nat)
+    (hlh : lo ≤ hi) (hhi : hi ≤ tails.size) (hlo : ∀ k < lo, xs[tails[k]!]! < x)
+    (hhi' : ∀ k, hi ≤ k → k < tails.size → x ≤ xs[tails[k]!]!) :
+    lisSearch xs tails x lo hi ≤ tails.size ∧
+      (∀ k < lisSearch xs tails x lo hi, xs[tails[k]!]! < x) ∧
+      (∀ k, lisSearch xs tails x lo hi ≤ k → k < tails.size → x ≤ xs[tails[k]!]!) := by
+  fun_induction lisSearch xs tails x lo hi with
+  | case1 lo hi hlt mid hv ih =>
+    have hm : mid = (lo + hi) / 2 := rfl
+    refine ih (by omega) hhi (fun k hk => ?_) hhi'
+    by_cases hkl : k < lo
+    · exact hlo k hkl
+    · rcases Nat.lt_or_eq_of_le (Nat.le_of_lt_succ hk) with hk' | rfl
+      · exact Nat.lt_trans (hs k mid hk' (by omega)) hv
+      · exact hv
+  | case2 lo hi hlt mid hv ih =>
+    have hm : mid = (lo + hi) / 2 := rfl
+    refine ih (by omega) (by omega) hlo (fun k hk hkt => ?_)
+    rcases Nat.lt_or_eq_of_le hk with hk' | rfl
+    · exact Nat.le_trans (Nat.le_of_not_lt hv) (Nat.le_of_lt (hs mid k hk' hkt))
+    · exact Nat.le_of_not_lt hv
+  | case3 lo hi hlt =>
+    have : lo = hi := by omega
+    subst this
+    exact ⟨hhi, hlo, hhi'⟩
+
+/-- `j` starts a chain of `d` indices along `prev`. -/
+def Reach (prev : Array (Option Nat)) : Nat → Nat → Prop
+  | _, 0 => True
+  | _, 1 => True
+  | j, d + 2 => ∃ p, prev[j]! = some p ∧ p < j ∧ Reach prev p (d + 1)
+
+theorem lisWalk_length {prev : Array (Option Nat)} :
+    ∀ d j acc, Reach prev j (d + 1) →
+      (lisWalk prev (d + 1) (some j) acc).length = d + 1 + acc.length
+  | 0, j, acc, _ => by simp only [lisWalk]; simp; omega
+  | d + 1, j, acc, h => by
+    obtain ⟨p, hp, -, hr⟩ := h
+    rw [lisWalk.eq_3, hp, lisWalk_length d p (j :: acc) hr, List.length_cons]
+    omega
+
+theorem Reach.frame {prev prev' : Array (Option Nat)} :
+    ∀ d j, Reach prev j d → (∀ j' ≤ j, prev'[j']! = prev[j']!) → Reach prev' j d
+  | 0, _, _, _ => trivial
+  | 1, _, _, _ => trivial
+  | d + 2, j, ⟨p, hp, hpj, hr⟩, hf =>
+    ⟨p, by rw [hf j (Nat.le_refl _)]; exact hp, hpj,
+      Reach.frame (d + 1) p hr fun j' hj' => hf j' (by omega)⟩
+
+theorem sublist_singleton' {α : Type} {l : List α} {a : α} (h : l <+ [a]) :
+    l = [] ∨ l = [a] := by
+  cases h with
+  | cons _ h => exact .inl (List.sublist_nil.1 h)
+  | cons_cons _ h => exact .inr (by rw [List.sublist_nil.1 h])
+
+/-- What patience sorting keeps true (all that optimality needs). -/
+structure ScanBest (xs : Array Nat) (i : Nat) (tails : Array Nat) (prev : Array (Option Nat)) :
+    Prop where
+  ok : ScanOk xs i tails prev
+  sorted : ∀ k k', k < k' → k' < tails.size → xs[tails[k]!]! < xs[tails[k']!]!
+  reach : ∀ k < tails.size, Reach prev tails[k]! (k + 1)
+  best : ∀ l v, l ++ [v] <+ xs.toList.take i → (l ++ [v]).Pairwise (· < ·) →
+    l.length < tails.size ∧ xs[tails[l.length]!]! ≤ v
+
+theorem scanTails_spec {xs tails : Array Nat} {i : Nat} :
+    (scanTails xs tails i).size = (if lisSearch xs tails xs[i]! 0 tails.size < tails.size then
+      tails.size else tails.size + 1) ∧
+    ∀ k < (scanTails xs tails i).size, (scanTails xs tails i)[k]! =
+      if k = lisSearch xs tails xs[i]! 0 tails.size then i else tails[k]! := by
+  have hle := (lisSearch_spec xs tails xs[i]! 0 tails.size (Nat.zero_le _)).2.1
+  simp only [scanTails]
+  generalize lisSearch xs tails xs[i]! 0 tails.size = lo at hle ⊢
+  split
+  · refine ⟨by simp, fun k hk => ?_⟩
+    simp only [Array.set!_eq_setIfInBounds, Array.size_setIfInBounds] at hk ⊢
+    rw [getElem!_setIfInBounds']
+    by_cases hk' : k = lo
+    · subst hk'; simp [hk]
+    · simp [hk', Ne.symm hk']
+  · rename_i hlt
+    refine ⟨by simp, fun k hk => ?_⟩
+    rw [getElem!_pos _ k hk, Array.getElem_push]
+    by_cases hk' : k < tails.size
+    · rw [dite_eq_left hk', getElem!_pos tails k hk', ite_eq_right (by omega)]
+    · rw [dite_eq_right hk', ite_eq_left (by simp at hk; omega)]
+
+theorem scanBest_step {xs : Array Nat} {i : Nat} {tails : Array Nat} {prev : Array (Option Nat)}
+    (hlt : i < xs.size) (h : ScanBest xs i tails prev) :
+    ScanBest xs (i + 1) (scanTails xs tails i) (scanPrev xs tails prev i) := by
+  obtain ⟨hloL, hbelow, habove⟩ := lisSearch_exact xs tails xs[i]! h.sorted 0 tails.size
+    (Nat.zero_le _) (Nat.le_refl _) (fun k hk => absurd hk (Nat.not_lt_zero k))
+    (fun k hk hkt => absurd hkt (Nat.not_lt.2 hk))
+  obtain ⟨hTs, hTg⟩ := scanTails_spec (xs := xs) (tails := tails) (i := i)
+  have hok := scanOk_step hlt h.ok
+  have hPdef : scanPrev xs tails prev i = if lisSearch xs tails xs[i]! 0 tails.size = 0 then prev
+      else prev.set! i (some tails[lisSearch xs tails xs[i]! 0 tails.size - 1]!) := rfl
+  generalize scanTails xs tails i = T at hTs hTg hok ⊢
+  generalize scanPrev xs tails prev i = P at hPdef hok ⊢
+  generalize lisSearch xs tails xs[i]! 0 tails.size = lo at hloL hbelow habove hTs hTg hPdef
+  have hTsz1 : lo < T.size := by split at hTs <;> omega
+  have hTsz2 : tails.size ≤ T.size := by split at hTs <;> omega
+  -- the predecessor array only changes at `i`
+  have hframe : ∀ j' < i, P[j']! = prev[j']! := by
+    intro j' hj'
+    rw [hPdef]
+    split
+    · rfl
+    · rw [Array.set!_eq_setIfInBounds, getElem!_setIfInBounds', ite_eq_right (by omega)]
+  refine ⟨hok, ?_, ?_, ?_⟩
+  · -- sorted
+    intro k k' hkk hk'
+    rw [hTg k (by omega), hTg k' hk']
+    by_cases h1 : k' = lo
+    · rw [ite_eq_left h1, ite_eq_right (by omega)]
+      exact hbelow k (by omega)
+    · have hk'L : k' < tails.size := by split at hTs <;> omega
+      rw [ite_eq_right h1]
+      by_cases h2 : k = lo
+      · rw [ite_eq_left h2]
+        subst h2
+        exact Nat.lt_of_le_of_lt (habove k (Nat.le_refl _) (by omega)) (h.sorted k k' hkk hk'L)
+      · rw [ite_eq_right h2]
+        exact h.sorted k k' hkk hk'L
+  · -- reach
+    intro k hk
+    rw [hTg k hk]
+    split
+    · rename_i hklo
+      subst hklo
+      cases k with
+      | zero => trivial
+      | succ k =>
+        have hkL : k < tails.size := by omega
+        have hmem : tails[k]! ∈ tails := by
+          rw [getElem!_pos tails k hkL]; exact Array.getElem_mem hkL
+        refine ⟨tails[k]!, ?_, h.ok.tails_lt _ hmem, ?_⟩
+        · rw [hPdef, ite_eq_right (by omega), Array.set!_eq_setIfInBounds, getElem!_setIfInBounds',
+            ite_eq_left ⟨rfl, by rw [h.ok.size]; exact hlt⟩]
+          rfl
+        · exact Reach.frame _ _ (h.reach k hkL) fun j' hj' =>
+            hframe j' (Nat.lt_of_le_of_lt hj' (h.ok.tails_lt _ hmem))
+    · rename_i hklo
+      have hkL : k < tails.size := by split at hTs <;> omega
+      have hmem : tails[k]! ∈ tails := by
+        rw [getElem!_pos tails k hkL]; exact Array.getElem_mem hkL
+      exact Reach.frame _ _ (h.reach k hkL) fun j' hj' =>
+        hframe j' (Nat.lt_of_le_of_lt hj' (h.ok.tails_lt _ hmem))
+  · -- best
+    intro l v hl hinc
+    have htake : xs.toList.take (i + 1) = xs.toList.take i ++ [xs[i]!] := by
+      rw [List.take_add_one, getElem!_pos xs i hlt]; simp [hlt]
+    rw [htake] at hl
+    -- the value stored at position `k` never grows
+    have hdown : ∀ k < tails.size, xs[T[k]!]! ≤ xs[tails[k]!]! := by
+      intro k hk
+      rw [hTg k (by omega)]
+      split
+      · rename_i hklo; subst hklo; exact habove k (Nat.le_refl _) hk
+      · exact Nat.le_refl _
+    obtain ⟨l₁, l₂, he, h1, h2⟩ := List.sublist_append_iff.1 hl
+    rcases sublist_singleton' h2 with rfl | rfl
+    · rw [List.append_nil] at he
+      subst he
+      obtain ⟨hlen, hv⟩ := h.best l v h1 hinc
+      exact ⟨by omega, Nat.le_trans (hdown _ hlen) hv⟩
+    · obtain ⟨rfl, rfl⟩ := List.append_singleton_inj.1 he
+      rcases List.eq_nil_or_concat l with rfl | ⟨l', u, rfl⟩
+      · refine ⟨by simp; omega, ?_⟩
+        simp only [List.length_nil]
+        rw [hTg 0 (by omega)]
+        split
+        · exact Nat.le_refl _
+        · exact Nat.le_of_lt (hbelow 0 (by omega))
+      · simp only [List.concat_eq_append] at h1 hinc ⊢
+        rw [List.pairwise_append] at hinc
+        have hux : u < xs[i]! := hinc.2.2 u (by simp) xs[i]! (by simp)
+        obtain ⟨hlen, hv⟩ := h.best l' u h1 hinc.1
+        have hlo' : l'.length < lo := by
+          refine Nat.lt_of_not_le fun hge => ?_
+          have := habove l'.length hge hlen
+          omega
+        simp only [List.length_append, List.length_singleton]
+        refine ⟨by omega, ?_⟩
+        rw [hTg _ (by omega)]
+        split
+        · exact Nat.le_refl _
+        · exact Nat.le_of_lt (hbelow _ (by omega))
+
+theorem lisScan_best (xs : Array Nat) :
+    ScanBest xs xs.size (lisScan xs 0 #[] (Array.replicate xs.size none)).1
+      (lisScan xs 0 #[] (Array.replicate xs.size none)).2 := by
+  refine lisScan_induct xs (ScanBest xs) (fun _ _ _ hlt h => scanBest_step hlt h) 0 _ _
+    (Nat.zero_le _) ⟨⟨by simp, by simp, fun j p hp => ?_⟩, by simp, by simp, ?_⟩
+  · by_cases hj : j < xs.size
+    · simp [getElem!_pos (Array.replicate xs.size (none : Option Nat)) j (by simpa using hj)] at hp
+    · simp [getElem!_neg (Array.replicate xs.size (none : Option Nat)) j (by simpa using hj)] at hp
+  · intro l v hl _
+    simp at hl
+
+/-- The scan's `tails.size` is the length of `lis`. -/
+theorem lis_size (xs : Array Nat) :
+    (lis xs).size = (lisScan xs 0 #[] (Array.replicate xs.size none)).1.size := by
+  have hb := lisScan_best xs
+  simp only [lis]
+  generalize lisScan xs 0 #[] (Array.replicate xs.size none) = r at hb ⊢
+  obtain ⟨tails, prev⟩ := r
+  dsimp only at hb ⊢
+  simp only [List.size_toArray]
+  cases hL : tails.size with
+  | zero =>
+    have : tails = #[] := Array.eq_empty_of_size_eq_zero hL
+    subst this; rfl
+  | succ d =>
+    have hback : tails.back? = some tails[d]! := by
+      rw [Array.back?_eq_getElem?, hL, Nat.add_sub_cancel, getElem!_pos tails d (by omega)]
+      exact getElem?_pos tails d (by omega)
+    rw [hback, lisWalk_length d _ [] (hb.reach d (by omega))]
+    rfl
+
+/-- **`lis` is longest**: no strictly increasing subsequence of `xs` is longer. -/
+theorem lis_longest (xs : Array Nat) (l : List Nat) (hl : l <+ xs.toList)
+    (hinc : l.Pairwise (· < ·)) : l.length ≤ (lis xs).size := by
+  rw [lis_size]
+  rcases List.eq_nil_or_concat l with rfl | ⟨l', v, rfl⟩
+  · exact Nat.zero_le _
+  · simp only [List.concat_eq_append] at hl hinc ⊢
+    have hl' : l' ++ [v] <+ xs.toList.take xs.size := by
+      rw [List.take_of_length_le (by simp)]; exact hl
+    have := ((lisScan_best xs).best l' v hl' hinc).1
+    simp only [List.length_append, List.length_singleton]
+    omega
+
+theorem map_getElem!_range {α : Type} [Inhabited α] (xs : Array α) :
+    (List.range xs.size).map (xs[·]!) = xs.toList := by
+  apply List.ext_getElem (by simp)
+  intro k h1 h2
+  simp only [List.getElem_map, List.getElem_range]
+  rw [getElem!_pos xs k (by simpa using h2)]
+  simp
+
+/-- **`lis` is a longest strictly increasing subsequence** of `xs`: the values at its indices
+are a strictly increasing sublist of `xs`, and no strictly increasing sublist is longer. -/
+theorem lis_spec (xs : Array Nat) :
+    (lis xs).toList.map (xs[·]!) <+ xs.toList ∧
+      ((lis xs).toList.map (xs[·]!)).Pairwise (· < ·) ∧
+      ∀ l, l <+ xs.toList → l.Pairwise (· < ·) →
+        l.length ≤ ((lis xs).toList.map (xs[·]!)).length := by
+  obtain ⟨hv, hb⟩ := lis_valid xs
+  refine ⟨?_, ?_, fun l hl hinc => ?_⟩
+  · rw [← map_getElem!_range xs]
+    apply List.Sublist.map
+    rw [List.range_eq_range']
+    exact sublist_range' (hv.imp fun h => h.1) fun x hx => ⟨Nat.zero_le _, by simpa using hb x hx⟩
+  · rw [List.pairwise_map]; exact hv.imp fun h => h.2
+  · simpa using lis_longest xs l hl hinc
 
 /-! ## The key index -/
 
@@ -664,6 +973,25 @@ theorem planStable_spec (old new : Array String) :
     rw [getElem!_pos _ k hk']
     exact hrpmem _ (Array.getElem_mem hk')
 
+/-- **No old child is reused twice** (so the diff never patches one DOM node into two places). -/
+theorem plan_src_inj {old new : Array String} (h1 : old.toList.Nodup) (h2 : new.toList.Nodup)
+    {i i' j : Nat} (hi : i < new.size) (hi' : i' < new.size)
+    (h : (plan old new).src[i]! = some j) (h' : (plan old new).src[i']! = some j) : i = i' := by
+  have e := ((plan_src_some h1 hi).1 h).2
+  have e' := ((plan_src_some h1 hi').1 h').2
+  exact (h2.getElem_inj (hi := by simpa using hi) (hj := by simpa using hi')).1
+    (by simpa using e.symm.trans e')
+
+/-- **Every created child is inserted**: a position with no old child always has `move`. -/
+theorem plan_create_moves {old new : Array String} {i : Nat} (hi : i < new.size)
+    (h : (plan old new).src[i]! = none) : (plan old new).move[i]! = true := by
+  cases hm : (plan old new).move[i]!
+  · rw [plan_move] at hm
+    have := ((planStable_spec old new).2 i ((markStable_spec hi).1 hm)).2
+    rw [h] at this
+    exact absurd this (by decide)
+  · rfl
+
 /-! ## The main theorem -/
 
 /-- The children `applyList` starts from: the old children that are not removed. -/
@@ -686,7 +1014,7 @@ theorem mem_kept {old new : Array String} (j : Nat) :
 /-- **Keyed reconciliation is correct**: removing `removed` and then, right to left, inserting
 every child with `move` before its successor turns the old children into the new ones. -/
 theorem plan_correct (old new : Array String) (h1 : old.toList.Nodup) (h2 : new.toList.Nodup) :
-    applyList old new (plan old new) = new.toList := by
+    Keyed.applyList old new (Keyed.plan old new) = new.toList := by
   unfold applyList
   refine place_correct new (fun i => (plan old new).move[i]!) _ h2 ?_ ?_ ?_
   · rw [List.Nodup, List.pairwise_map]
@@ -740,3 +1068,204 @@ theorem plan_correct (old new : Array String) (h1 : old.toList.Nodup) (h2 : new.
         exact Array.getElem_mem _
       have hk := List.mem_filter.1 ((mem_kept _).2 ⟨((plan_src_some h1 hi').1 hsrc).1, hmem⟩)
       exact ⟨List.mem_range.1 hk.1, hk.2⟩
+
+/-! ## The converse: what any correct choice of moves must satisfy -/
+
+/-- Moving `k` never changes the relative order of the other children. -/
+theorem filter_placeBefore {p : String → Bool} {k : String} {a : Option String}
+    {ys : List String} (hk : p k = false) :
+    (placeBefore k a ys).filter p = ys.filter p := by
+  obtain ⟨A, B, h1, h2⟩ := placeBefore_shape k a ys
+  rw [h1, List.filter_append, List.filter_cons_of_neg (by simp [hk]), ← List.filter_append, h2,
+    List.filter_filter]
+  apply List.filter_congr
+  intro x _
+  by_cases hx : p x = true
+  · have : x ≠ k := fun h => by simp [h, hk] at hx
+    simp [hx, this]
+  · simp [hx]
+
+/-- With duplicate-free keys, filtering `new` by the stable keys gives the stable keys. -/
+theorem filter_mem_stableBelow (new : Array String) (mv : Nat → Bool) (hN : new.toList.Nodup) :
+    new.toList.filter (· ∈ stableBelow new mv new.size) = stableBelow new mv new.size := by
+  conv => lhs; rw [← map_getElem!_range new]
+  rw [List.filter_map]
+  conv => rhs; rw [stableBelow]
+  congr 1
+  apply List.filter_congr
+  intro i hi
+  rw [List.mem_range] at hi
+  simp only [Function.comp_apply]
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, Bool.not_eq_true']
+  constructor
+  · intro hm
+    obtain ⟨i', hi', hm', he⟩ := mem_stableBelow hm
+    rw [getElem!_pos new i hi, getElem!_pos new i' hi'] at he
+    have := (hN.getElem_inj (i := i) (j := i') (hi := by simpa using hi)
+      (hj := by simpa using hi')).1 (by simpa using he)
+    subst this; exact hm'
+  · intro hm
+    simp only [stableBelow, List.mem_map, List.mem_filter, List.mem_range]
+    exact ⟨i, ⟨hi, by simp [hm]⟩, rfl⟩
+
+/-- **The converse of `place_correct`**: if visiting `n-1 … 0` with move flags `mv` turns `xs₀`
+into `new`, then the keys at the stable positions already appear in `xs₀` in the order `new`
+wants: children that are not moved never change their relative order. -/
+theorem stable_sublist_of_correct (new : Array String) (mv : Nat → Bool) (xs₀ : List String)
+    (hN : new.toList.Nodup) (h : (List.range new.size).foldr (step new mv) xs₀ = new.toList) :
+    stableBelow new mv new.size <+ xs₀ := by
+  let U := stableBelow new mv new.size
+  have key : ∀ t s, s + t = new.size →
+      ((List.range' s t).foldr (step new mv) xs₀).filter (· ∈ U) = xs₀.filter (· ∈ U) := by
+    intro t
+    induction t with
+    | zero => intro s _; rfl
+    | succ t ih =>
+      intro s hs
+      rw [List.range'_succ, List.foldr_cons, ← ih (s + 1) (by omega)]
+      unfold step
+      split
+      · rename_i hm
+        apply filter_placeBefore
+        rw [decide_eq_false_iff_not]
+        intro hmem
+        obtain ⟨i, hi, hm', he⟩ := mem_stableBelow hmem
+        rw [getElem!_pos new s (by omega), getElem!_pos new i hi] at he
+        have := (hN.getElem_inj (i := s) (j := i) (hi := by simp; omega)
+          (hj := by simpa using hi)).1 (by simpa using he)
+        subst this
+        rw [hm] at hm'; exact absurd hm' (by decide)
+      · rfl
+  have := key new.size 0 (by simp)
+  rw [← List.range_eq_range', h, filter_mem_stableBelow new mv hN] at this
+  rw [this]
+  exact List.filter_sublist
+
+/-- **Right-to-left placement is correct exactly when the stable keys are in order.** -/
+theorem place_correct_iff (new : Array String) (mv : Nat → Bool) (xs₀ : List String)
+    (hN : new.toList.Nodup) (hxs : xs₀.Nodup) (hsub : ∀ x ∈ xs₀, x ∈ new.toList) :
+    (List.range new.size).foldr (step new mv) xs₀ = new.toList ↔
+      stableBelow new mv new.size <+ xs₀ :=
+  ⟨stable_sublist_of_correct new mv xs₀ hN, place_correct new mv xs₀ hN hxs hsub⟩
+
+/-! ## Optimality: the plan moves the fewest children -/
+
+theorem map_inj_on {α β : Type} {f : α → β} {l₁ l₂ : List α} {S : α → Prop}
+    (hinj : ∀ a b, S a → S b → f a = f b → a = b) (h1 : ∀ a ∈ l₁, S a) (h2 : ∀ a ∈ l₂, S a)
+    (h : l₁.map f = l₂.map f) : l₁ = l₂ := by
+  induction l₁ generalizing l₂ with
+  | nil => cases l₂ with | nil => rfl | cons => simp at h
+  | cons a l₁ ih =>
+    cases l₂ with
+    | nil => simp at h
+    | cons b l₂ =>
+      simp only [List.map_cons, List.cons.injEq] at h
+      rw [hinj a b (h1 a (List.mem_cons_self ..)) (h2 b (List.mem_cons_self ..)) h.1,
+        ih (fun x hx => h1 x (List.mem_cons_of_mem _ hx)) (fun x hx => h2 x (List.mem_cons_of_mem _ hx)) h.2]
+
+/-- **No correct plan keeps more children in place than `plan` does.** Whatever `p` removes and
+moves, if applying it turns `old` into `new`, then `plan old new` leaves at least as many
+children untouched. -/
+theorem plan_keeps_most (old new : Array String) (h1 : old.toList.Nodup) (h2 : new.toList.Nodup)
+    (p : Plan) (hm : applyList old new p = new.toList) :
+    (List.range new.size).countP (fun i => !p.move[i]!) ≤
+      (List.range new.size).countP (fun i => !(plan old new).move[i]!) := by
+  unfold applyList at hm
+  have hS := stable_sublist_of_correct new (fun i => p.move[i]!) _ h2 hm
+  simp only [stableBelow] at hS
+  rw [List.countP_eq_length_filter, List.countP_eq_length_filter]
+  -- the alternative's stable positions `P`, and their old indices `L`
+  generalize hP : (List.range new.size).filter (fun i => !p.move[i]!) = P at hS
+  have hPmem : ∀ i ∈ P, i < new.size := fun i hi => by
+    rw [← hP, List.mem_filter, List.mem_range] at hi; exact hi.1
+  have hPsorted : P.Pairwise (· < ·) := hP ▸ List.pairwise_lt_range.filter _
+  -- every stable position of the alternative reuses an old child
+  have hreuse : ∀ i ∈ P, (plan old new).src[i]! = some (((plan old new).src[i]!).getD 0) := by
+    intro i hi
+    have hx : new[i]! ∈ ((List.range old.size).filter
+        (fun j => !(p.removed.contains j))).map (old[·]!) :=
+      hS.subset (List.mem_map_of_mem hi)
+    obtain ⟨j, hj, he⟩ := List.mem_map.1 hx
+    have hj' := List.mem_range.1 (List.mem_filter.1 hj).1
+    rw [getElem!_pos new i (hPmem i hi)] at he
+    rw [(plan_src_some h1 (hPmem i hi)).2 ⟨hj', he⟩]
+    rfl
+  let oi : Nat → Nat := fun i => ((plan old new).src[i]!).getD 0
+  have hold : ∀ i ∈ P, old[oi i]! = new[i]! := by
+    intro i hi
+    rw [((plan_src_some h1 (hPmem i hi)).1 (hreuse i hi)).2, getElem!_pos new i (hPmem i hi)]
+  have hoi_lt : ∀ i ∈ P, oi i < old.size := fun i hi =>
+    ((plan_src_some h1 (hPmem i hi)).1 (hreuse i hi)).1
+  -- `L` is a sublist of the reused old indices in new order …
+  have hLsub : P.map oi <+ (planReusedOld old new).toList := by
+    rw [planReusedOld, Array.toList_map]
+    apply List.Sublist.map
+    rw [planReusedPos, Array.toList_filter, Array.toList_range]
+    exact sublist_filter_range hPsorted fun i hi =>
+      ⟨hPmem i hi, by rw [hreuse i hi]; rfl⟩
+  -- … and strictly increasing, because the stable keys are in old order
+  have hLinc : (P.map oi).Pairwise (· < ·) := by
+    have hmap : P.map (new[·]!) = (P.map oi).map (old[·]!) := by
+      rw [List.map_map]
+      exact List.map_congr_left fun i hi => (hold i hi).symm
+    rw [hmap] at hS
+    obtain ⟨l', hl', he⟩ := List.sublist_map_iff.1 hS
+    have hkeep_lt : ∀ j ∈ (List.range old.size).filter
+        (fun j => !(p.removed.contains j)), j < old.size :=
+      fun j hj => List.mem_range.1 (List.mem_filter.1 hj).1
+    have := map_inj_on (S := fun j => j < old.size) (fun a b ha hb hab => by
+        have := (List.Nodup.getElem!_inj (xs := old.toList) (by simpa using ha)
+          (by simpa using hb) h1).1
+        exact this (by rw [Array.getElem!_toList, Array.getElem!_toList]; exact hab))
+      (fun j hj => by
+        obtain ⟨i, hi, rfl⟩ := List.mem_map.1 hj
+        exact hoi_lt i hi)
+      (fun j hj => hkeep_lt j (hl'.subset hj)) he
+    rw [this]
+    exact (List.pairwise_lt_range.filter _).sublist hl'
+  have hlis := lis_longest (planReusedOld old new) (P.map oi) hLsub hLinc
+  -- the plan keeps every position of `lis` in place
+  obtain ⟨hst, hstm⟩ := planStable_spec old new
+  have hplan : (planStable old new).toList <+
+      (List.range new.size).filter (fun i => !(plan old new).move[i]!) :=
+    sublist_filter_range (hst.imp fun h => h.1) fun i hi => by
+      have hi' := Array.mem_toList_iff.1 hi
+      refine ⟨(hstm i hi').1, ?_⟩
+      rw [plan_move, (markStable_spec (hstm i hi').1).2 hi']
+      rfl
+  have hsz : (planStable old new).toList.length = (lis (planReusedOld old new)).size := by
+    simp [planStable]
+  have := hplan.length_le
+  simp only [List.length_map] at hlis
+  omega
+
+/-- **The plan moves the fewest children**: every plan that turns `old` into `new` (whatever it
+removes and moves) inserts at least as many children as `plan old new` does. -/
+theorem plan_moves_fewest (old new : Array String) (h1 : old.toList.Nodup) (h2 : new.toList.Nodup)
+    (p : Plan) (hm : applyList old new p = new.toList) :
+    (List.range new.size).countP (fun i => (plan old new).move[i]!) ≤
+      (List.range new.size).countP (fun i => p.move[i]!) := by
+  have h := plan_keeps_most old new h1 h2 p hm
+  have e1 := List.length_eq_countP_add_countP (fun i => p.move[i]!) (l := List.range new.size)
+  have e2 := List.length_eq_countP_add_countP (fun i => (plan old new).move[i]!)
+    (l := List.range new.size)
+  have c1 : (List.range new.size).countP (fun i => ¬ p.move[i]! = true) =
+      (List.range new.size).countP (fun i => !p.move[i]!) :=
+    List.countP_congr fun i _ => by simp
+  have c2 : (List.range new.size).countP (fun i => ¬ (plan old new).move[i]! = true) =
+      (List.range new.size).countP (fun i => !(plan old new).move[i]!) :=
+    List.countP_congr fun i _ => by simp
+  omega
+
+/-! ## Axiom audit (checked on every build) -/
+
+/-- info: 'LeanUI.Proofs.Keyed.plan_correct' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms plan_correct
+/-- info: 'LeanUI.Proofs.Keyed.place_correct_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms place_correct_iff
+/-- info: 'LeanUI.Proofs.Keyed.plan_moves_fewest' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms plan_moves_fewest
+/-- info: 'LeanUI.Proofs.Keyed.lis_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms lis_spec
+
+end LeanUI.Proofs.Keyed

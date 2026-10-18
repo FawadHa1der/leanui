@@ -16,11 +16,15 @@ Everything here is written so it can be reasoned about: loops are structural or 
 recursion (no `partial`, no `while`), and `LeanUI.Proofs.Keyed` proves, with no `sorry` and only
 the standard axioms, that
 
-* `applyList old new (plan old new) = new.toList` whenever both key lists are duplicate-free;
-* `src` points at the old child with the same key, and `removed` is exactly the unused old
-  indices, in increasing order;
-* `lis` returns a strictly increasing subsequence that is *longest*, so the plan moves the fewest
-  children that any plan of this right-to-left shape can (`docs/PROOFS.md`).
+* `applyList old new (plan old new) = new.toList` whenever both key lists are duplicate-free
+  (`plan_correct`);
+* `src` points at the old child with the same key and never reuses one twice, and `removed` is
+  exactly the unused old indices, in increasing order (`plan_src_some`, `plan_src_inj`,
+  `mem_plan_removed_iff`, `plan_removed_sorted`);
+* `lis` returns a longest strictly increasing subsequence (`lis_spec`), so no plan that applies
+  correctly inserts fewer children than this one (`plan_moves_fewest`).
+
+`docs/PROOFS.md` says exactly what is proved, what is tested and what is assumed.
 -/
 @[expose] public section
 namespace LeanUI.Keyed
