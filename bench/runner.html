@@ -1,0 +1,59 @@
+<!doctype html><html><head><meta charset="utf-8"><title>LeanUI benchmark runner</title>
+<style>body { font: 13px ui-monospace, monospace; margin: 8px; } iframe { width: 1280px; height: 900px; border: 1px solid #ccc; display: block; }</style></head>
+<body><pre id="log"></pre><iframe id="f"></iframe>
+<script type="module">
+// Runs the keyed suite in whatever browser opens this page, with no automation attached: each run
+// loads the implementation fresh in the iframe, does the operation's warm-ups, times one click
+// (script) and a forced layout after it (layout), then posts every result to /result.
+// tests/browser/selfbench.mjs serves this page and launches release browsers on it.
+import { OPS } from "./ops.mjs";
+const q = new URLSearchParams(location.search);
+const impls = (q.get("impls") || "leanui,vanilla").split(",");
+const runs = +(q.get("runs") || 7);
+const only = q.get("only");
+const frame = document.getElementById("f");
+const logEl = document.getElementById("log");
+const log = (s) => { logEl.textContent += s + "\n"; };
+const median = (a) => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+const r2 = (x) => Math.round(x * 1000) / 1000;
+const load = (impl) => new Promise((ok, fail) => {
+  frame.onload = () => {
+    const w = frame.contentWindow, t0 = performance.now();
+    const wait = () => (w.__ready ? ok(w) : performance.now() - t0 > 30000 ? fail(new Error(impl + " did not start")) : setTimeout(wait, 5));
+    wait();
+  };
+  frame.src = `/${impl}/index.html?n=${Math.random()}`;
+});
+const settle = (w) => new Promise((r) => w.requestAnimationFrame(() => w.requestAnimationFrame(() => setTimeout(r, 30))));
+const click = (w, sel) => { const e = w.document.querySelector(sel); if (!e) throw new Error("no element " + sel); e.click(); };
+const memory64 = (() => { try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 4, 0])); } catch (e) { return false; } })();
+const results = { userAgent: navigator.userAgent, memory64, runs, cpu: {}, startup: {} };
+try {
+  for (const impl of impls) {
+    if (impl === "leanui" && !memory64) { log("no Memory64: skipping leanui"); continue; }
+    const ready = [];
+    for (let r = 0; r < runs; r++) { const w = await load(impl); ready.push(w.__ready); }
+    results.startup[impl] = { readyMs: r2(median(ready)) };
+  }
+  for (const op of OPS.filter((o) => !only || only.split(",").includes(o.name))) {
+    results.cpu[op.name] = {};
+    for (const impl of impls) {
+      if (impl === "leanui" && !memory64) continue;
+      const script = [], layout = [];
+      for (let r = 0; r < runs; r++) {
+        const w = await load(impl);
+        for (const sel of op.warm) { click(w, sel); await settle(w); }
+        const e = w.document.querySelector(op.click);
+        const t0 = w.performance.now(); e.click(); const t1 = w.performance.now();
+        w.document.body.offsetHeight; const t2 = w.performance.now();
+        script.push(t1 - t0); layout.push(t2 - t0);
+        await settle(w);
+      }
+      results.cpu[op.name][impl] = { script: r2(median(script)), layout: r2(median(layout)) };
+      log(`${op.name.padEnd(11)} ${impl.padEnd(8)} script ${median(script).toFixed(2)} ms  layout ${median(layout).toFixed(2)} ms`);
+    }
+  }
+} catch (e) { results.error = String(e && e.stack || e); log("error: " + results.error); }
+await fetch("/result", { method: "POST", body: JSON.stringify(results) });
+log("done");
+</script></body></html>

@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>wasm32 vs wasm64</title>
+<script src="rc32.js"></script><script src="rc64.js"></script>
+<script>
+// The same C workload (rc.c: allocate, compare and free small reference-counted trees, the shape of
+// Lean's runtime work) compiled for wasm32 and for wasm64 (Memory64). Median of 15 timed runs after
+// 5 warm-up runs, posted to /result for tests/browser/wasm64.mjs.
+(async () => {
+  const m32 = await M32(), m64 = await M64();
+  const med = (f) => { const a = []; for (let i = 0; i < 15; i++) a.push(f()); a.sort((x, y) => x - y); return a[7]; };
+  for (let w = 0; w < 5; w++) { m32._run(200); m64._run(200); }
+  const r = { wasm32: med(() => m32._run(200)), wasm64: med(() => m64._run(200)), userAgent: navigator.userAgent };
+  window.__result = r;
+  fetch("/result", { method: "POST", body: JSON.stringify(r) }).catch(() => {});
+})();
+</script>

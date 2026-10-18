@@ -55,9 +55,11 @@ end LeanUI.Op
 
 namespace LeanUI
 
-/-- UTF-16 length of a string, the unit the browser slices the string area in. -/
+/-- UTF-16 length of a string, the unit the browser slices the string area in. An ASCII string
+(byte size = character count, both stored in the string object) needs no walk. -/
 @[inline] def utf16Len (s : String) : UInt32 :=
-  s.foldl (fun n c => n + (if c.val < 0x10000 then 1 else 2)) 0
+  if s.utf8ByteSize == s.length then s.length.toUInt32
+  else s.foldl (fun n c => n + (if c.val < 0x10000 then 1 else 2)) 0
 
 @[inline] def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
   b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8

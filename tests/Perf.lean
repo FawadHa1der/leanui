@@ -34,10 +34,15 @@ def timeIt (p : Program Bench.Model Bench.Msg) (label : String) (reps : Nat) (st
 def loopSelect (n : Nat) : IO Unit := do
   let mut st := initState Bench.program "" "#app" false
   st := ((stepMsgs Bench.program #[.run]).run st).2
+  let mut t := ← IO.monoNanosNow
   for i in [0:n] do
     let cur := { st with diff := { st.diff with buf := st.diff.buf.reset } }
-    let rid := (cur.model.rows[i % 1000]?.map (·.id)).getD 0
+    let rid := (cur.model.rows[(2 + i % 2) % 1000]?.map (·.id)).getD 0
     st ← IO.lazyPure fun _ => ((stepMsgs Bench.program #[.select rid]).run cur).2
+    if (i + 1) % 1000 == 0 then
+      let t' ← IO.monoNanosNow
+      IO.println s!"  {i + 1}: {Float.ofNat (t' - t) / 1e9} ms per select, slots {st.diff.slots.size}, free slots {st.diff.freeSlots.size}, nodes {st.diff.nextNode}, free nodes {st.diff.freeNodes.size}, names {st.diff.buf.names.size}"
+      t := t'
   IO.println s!"looped {n}"
 
 /-- Split one no-op update into its parts: building the view, and diffing it. -/

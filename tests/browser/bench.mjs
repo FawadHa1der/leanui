@@ -13,7 +13,8 @@
 // "total" is their sum: the CPU time the click costs, without the wait for the next vsync (which
 // is up to a frame of idle time, the same for every implementation). Firefox has no trace access
 // here, so it reports in-page times: "script" (synchronous click) and "layout" (script plus a
-// forced layout).
+// forced layout). Do not use Playwright's Firefox build to judge wasm speed: it runs wasm about
+// 8x slower than release Firefox; tests/browser/selfbench.mjs measures release browsers.
 // Each run loads a fresh page, does the operation's setup and warm-ups, then measures once.
 import http from "node:http";
 import fs from "node:fs";
@@ -21,6 +22,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { OPS as ALL_OPS } from "../../bench/ops.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(process.env.LEANUI_PLAYWRIGHT_FROM || "/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
@@ -62,19 +64,9 @@ await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 const PAGES = { leanui: `${BASE}/leanui/index.html`, vanilla: `${BASE}/vanilla/index.html` };
 
-// ---------- the operations (js-framework-benchmark CPU suite, keyed) ----------
+// ---------- the operations (js-framework-benchmark CPU suite, keyed): bench/ops.mjs ----------
 const row = (i, cell) => `#tbody tr:nth-child(${i}) td:nth-child(${cell}) a`;
-const OPS = [
-  { name: "create1k", desc: "create 1,000 rows", warm: ["#run", "#clear", "#run", "#clear", "#run", "#clear", "#run", "#clear", "#run", "#clear"], click: "#run" },
-  { name: "replace1k", desc: "replace all 1,000 rows", warm: ["#run", "#run", "#run", "#run", "#run"], click: "#run" },
-  { name: "update10th", desc: "update every 10th of 1,000 rows", warm: ["#run", "#update", "#update", "#update"], click: "#update" },
-  { name: "select", desc: "highlight a row (of 1,000)", warm: ["#run", row(5, 2), row(6, 2), row(7, 2), row(8, 2), row(9, 2)], click: row(2, 2) },
-  { name: "swap", desc: "swap 2 of 1,000 rows", warm: ["#run", "#swaprows", "#swaprows", "#swaprows", "#swaprows", "#swaprows"], click: "#swaprows" },
-  { name: "remove", desc: "remove one of 1,000 rows", warm: ["#run", row(10, 3), row(9, 3), row(8, 3), row(7, 3), row(6, 3)], click: row(4, 3) },
-  { name: "create10k", desc: "create 10,000 rows", warm: ["#runlots", "#clear"], click: "#runlots" },
-  { name: "append1k", desc: "append 1,000 rows to 1,000", warm: ["#run", "#clear", "#run", "#clear", "#run"], click: "#add" },
-  { name: "clear1k", desc: "clear 1,000 rows", warm: ["#run", "#clear", "#run", "#clear", "#run"], click: "#clear" },
-].filter((o) => !ONLY || ONLY.split(",").includes(o.name));
+const OPS = ALL_OPS.filter((o) => !ONLY || ONLY.split(",").includes(o.name));
 
 const median = (a) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
 const r2 = (x) => Math.round(x * 100) / 100;

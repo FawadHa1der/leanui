@@ -5,3 +5,5 @@ work/
 *.o
 out/
 .claude/
+bench/wasm64/rc32.*
+bench/wasm64/rc64.*

@@ -5,7 +5,9 @@
 //   node tests/browser/profile.mjs <app-dir> [--engine chromium|firefox] [--op create1k] [--reps 30]
 //
 // <app-dir> is a build with function names (tools/build-app.sh BenchApp bench-prof --debug).
-// Firefox writes the raw profile (loadable at profiler.firefox.com) next to the summary.
+// Firefox writes the raw profile (loadable at profiler.firefox.com) next to the summary. Its
+// absolute times come from Playwright's Firefox build, which runs wasm about 8x slower than
+// release Firefox: use it for proportions, not speed.
 // Run it under the host browser lock.
 import http from "node:http";
 import fs from "node:fs";
