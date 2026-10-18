@@ -193,9 +193,9 @@ own induction principle: `lisSearch` (binary search, by `hi - lo`), `lisScan` (b
   DOM model (`LeanUI.Testing.Dom`) against the view after every edit, and checks
   `applyList old new (plan old new) = new.toList` on 20,000 random key lists.
 * **Real browsers.** `tests/browser/keyed-dom.mjs` takes the command buffers the real runtime emits
-  for 1,500 random keyed edits (`tests/KeyedDom.lean`, run natively), applies them with
-  `runtime/leanui.js` in Chromium and Firefox, and checks independently of Lean, after every
-  update, that the rows are in the model's order, that every surviving row is the same DOM node,
+  for 1,500 random keyed edits (`tests/KeyedDom.lean`, the `leanui-keyed-dom` executable),
+  applies them with `runtime/leanui.js` in Chromium and Firefox, and checks independently of
+  Lean, after every update, that the rows are in the model's order, that every surviving row is the same DOM node,
   and that the number of `insertBefore`/`appendChild` calls on the list is exactly
   `|new| - LIS(old positions of the kept rows)`. Measured on 2026-10-18 in Chromium 151 and
   Firefox 153: seed 1 (1,500 edits) gave 1,231 updates, 13,618 rows kept (each the same node) and

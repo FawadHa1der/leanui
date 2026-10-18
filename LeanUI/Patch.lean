@@ -72,8 +72,12 @@ bytes and bumps the size, with no call at all; otherwise it runs what the Lean b
 (`lean_byte_array_push`; `lean_string_to_utf8` and `lean_byte_array_copy_slice`), which copies or
 grows the array. Byte stores keep the layout little-endian on any host (the C compiler merges them
 into one store). The snippets are GNU statement expressions (`({ … })`), which clang (`leanc`,
-`emcc`) and GCC accept. Nothing evaluates these functions at compile time (the interpreter cannot
-run an inline C extern). -/
+`emcc`) and GCC accept.
+
+The interpreter cannot run an inline C extern, so code that writes a `Buf` (mounting, diffing,
+`LeanUI.Testing`) runs compiled only: in executables and in wasm, not under `#eval` or
+`lean --run` (which is why `tests/KeyedDom.lean` is an executable). Views and `Html.render` do
+not touch a `Buf` and stay interpretable. -/
 
 /-- Append a little-endian `u32`. -/
 @[extern c inline "({ lean_object *a_ = #1; uint32_t x_ = #2; size_t n_ = lean_sarray_size(a_); \
@@ -121,7 +125,7 @@ namespace Buf
   { b with ops := pushU32 (pushU32 b.ops b.units) n, strs := appendUtf8 b.strs str, units := b.units + n }
 
 /-- Define a new name: give it the next id and emit `INTERN id nm`. Out of line: it runs once per
-name and session, while `intern` is inlined into every command writer. -/
+name and session, while `named` is inlined into every command writer. -/
 @[noinline] def define (b : Buf) (nm : String) : Buf :=
   let id := b.nextName
   { b with names := b.names.insert nm id, nextName := id + 1 }.w Op.intern |>.w id |>.s nm
@@ -137,10 +141,10 @@ name without allocating an `Option`. -/
     (b.nextName - 1, b)
 
 /-- `k` applied to the buffer and the id of `nm`, interned first if new (`intern` in continuation
-form, which the command writers use). Each `k` below is a call to a writer that takes the id: the
-buffer then stays one object that every write updates in place. (When `k` writes the words itself,
-or goes through `intern`'s pair, the compiler takes the buffer apart where the two branches meet
-and allocates a new one for every command.) -/
+form, which the command writers use). Each `k` below is a call to an out-of-line writer that takes
+the id, so the buffer stays one object that every write updates in place. (When `k` writes the
+words itself, or through `intern`'s pair, the compiler takes the buffer apart where the two
+branches meet and allocates a new one for every command: 18 per benchmark row.) -/
 @[inline] def named (b : Buf) (nm : String) (k : Buf → UInt32 → Buf) : Buf :=
   let id := b.names.getD nm 0
   if id != 0 then k b id

@@ -104,6 +104,10 @@ built against. It was first written on 2026-10-18 from the research in
   `tests/browser/selfbench.mjs` (release browsers, no automation) for speed.
 - Lean binaries by absolute path: `~/.elan/toolchains/leanprover--lean4---v4.34.0/bin/{lake,lean,leanc}`
   (a bare `lean`/`lake` outside a `lean-toolchain` folder makes elan download a toolchain).
+- The command buffer's byte primitives (`pushU32`, `appendUtf8` in `LeanUI.Patch`) are
+  `@[extern c inline]` (2026-10-18): code that writes a `Buf` (mount, diff, `LeanUI.Testing`) runs
+  compiled only, in executables and wasm, never under `#eval` or `lean --run`. Views and
+  `Html.render` stay interpretable.
 - Archives: `LEANUI_TOOLCHAIN` (default `<repo>/.toolchain`).
 - Commits end with the session's `Co-Authored-By` line. Never `git push`. Never `npm install`.
   Kill processes by PID only.
