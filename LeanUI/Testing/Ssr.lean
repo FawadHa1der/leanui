@@ -33,6 +33,8 @@ inductive PNode where
   deriving Inhabited, Repr
 
 def rawTextTags : List String := ["script", "style", "xmp", "iframe", "noembed", "noframes"]
+/-- MathML text integration points: their element children are parsed as HTML. -/
+def mathTextPoints : List String := ["mi", "mo", "mn", "ms", "mtext"]
 def rcdataTags : List String := ["textarea", "title"]
 def lfDroppingTags : List String := ["pre", "listing", "textarea"]
 
@@ -221,9 +223,12 @@ partial def claims (ns : UInt32 := 0) (parentTag : String := "") (parent : Optio
     | .comment _ => acc
     | .text s => acc.push (.text s, parent)
     | .elem tag attrs kids =>
-      -- namespaces the way the HTML parser assigns them
-      let myNs : UInt32 := if ns == 0 then (if tag == "svg" then 1 else if tag == "math" then 2 else 0)
-        else if ns == 1 && parentTag == "foreignobject" then (if tag == "svg" then 1 else 0)
+      -- namespaces the way the HTML parser assigns them: HTML integration points (SVG
+      -- foreignObject/desc/title) and MathML text integration points (mi, mo, mn, ms, mtext)
+      -- parse their element children as HTML
+      let integration := (ns == 1 && ["foreignobject", "desc", "title"].contains parentTag) ||
+        (ns == 2 && mathTextPoints.contains parentTag && !["mglyph", "malignmark"].contains tag)
+      let myNs : UInt32 := if ns == 0 || integration then (if tag == "svg" then 1 else if tag == "math" then 2 else 0)
         else ns
       let me := acc.size
       claims myNs tag (some me) (acc.push (.elem myNs tag attrs, parent)) kids
@@ -276,10 +281,16 @@ def hydrateDom (sel : String) (cs : Array (Claim × Option Nat)) (view : Array C
 
 /-! ## The hazard lint -/
 
+/-- Start tags that close an open `<p>` in button scope (HTML tree construction, "in body"). -/
 def blockTags : List String :=
-  ["address", "article", "aside", "blockquote", "details", "div", "dl", "fieldset", "figure", "footer",
-   "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "main", "nav", "ol", "p", "pre",
-   "section", "table", "ul", "menu", "listing", "xmp", "plaintext"]
+  ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset",
+   "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr",
+   "main", "menu", "nav", "ol", "p", "pre", "search", "section", "summary", "table", "ul", "listing", "xmp",
+   "plaintext", "li", "dd", "dt"]
+
+/-- Elements that bound "button scope" (besides foreign content). -/
+def buttonScope : List String :=
+  ["button", "applet", "caption", "html", "table", "td", "th", "marquee", "object", "template"]
 
 /-- Reasons the HTML parser would not rebuild exactly the nodes `mount` allocates for `t`.
 `ancestors` are the tags above, nearest first. -/
@@ -316,8 +327,8 @@ partial def hazards (t : T) (ancestors : List (Ns × String) := []) : Array Stri
           if a == tg then return true
           if stop.contains a then return false
         return false
-      if tag == "p" || blockTags.contains tag then
-        if parent.any (fun (n, a) => n == .html && a == "p") then out := out.push s!"<{tag}> inside <p> closes it"
+      -- a block start tag closes any <p> open in button scope, not only a parent <p>
+      if blockTags.contains tag && inScope "p" buttonScope then out := out.push s!"<{tag}> inside <p> closes it"
       if tag == "a" && inScope "a" [] then out := out.push "<a> inside <a>"
       if tag == "button" && inScope "button" [] then out := out.push "<button> inside <button>"
       if tag == "li" && inScope "li" ["ul", "ol"] then out := out.push "<li> inside <li>"
@@ -328,12 +339,15 @@ partial def hazards (t : T) (ancestors : List (Ns × String) := []) : Array Stri
         out := out.push s!"<{tag}> has implied end tags or a special insertion mode"
       if parent.any (fun (n, a) => n == .svg && a != "foreignObject") then
         out := out.push s!"HTML <{tag}> inside SVG"
-      if parent.any (fun (n, _) => n == .mathml) then out := out.push s!"HTML <{tag}> inside MathML"
+      if parent.any (fun (n, a) => n == .mathml && !mathTextPoints.contains a) then out := out.push s!"HTML <{tag}> inside MathML"
     if ns == .svg && tag != "svg" && !(parent.any fun (n, _) => n == .svg) then
       out := out.push s!"SVG <{tag}> outside <svg>"
     if ns == .svg && tag == "svg" && parent.any (fun (n, _) => n == .svg) then pure ()
     if ns == .mathml && tag != "math" && !(parent.any fun (n, _) => n == .mathml) then
       out := out.push s!"MathML <{tag}> outside <math>"
+    if ns != .html && parent.any (fun (n, a) => n == .mathml && mathTextPoints.contains a) &&
+        !["mglyph", "malignmark"].contains tag then
+      out := out.push s!"<{tag}> inside a MathML text integration point (parsed as HTML)"
     if ns == .svg && ["foreignObject", "desc", "title"].contains tag then out := out.push s!"SVG HTML integration point <{tag}>"
     if (ns == .html && tag == "svg") || (ns == .html && tag == "math") then out := out.push s!"<{tag}> in the HTML namespace"
     if ns == .svg && tag == "svg" && parent.any (fun (n, _) => n == .html) then pure ()
@@ -414,3 +428,30 @@ def hydrate (c : IO.Ref Nat) (t : T) (recording := false) : IO (Session × Array
   return (s, fails, (r1 - r0) - want)
 
 end LeanUI.Testing.Session
+
+namespace LeanUI.Testing.Ssr
+
+/-- What the browser's parse of `Html.render t` must hold for the round trip to be exact, in
+`strictDom` form without listeners or properties: the nodes `mount` creates, with the
+attributes the server rendering writes. -/
+partial def ssrCanon : T → String
+  | .lazy _ b => ssrCanon b
+  | .text s => "#" ++ lp s
+  | .elem ns tag attrs kids =>
+    match expectedClaims (.elem ns tag attrs #[]) with
+    | #[.elem _ _ as] => canonElem ns.code tag as #[] #[] (String.join (kids.toList.map ssrCanon))
+    | _ => ""
+
+/-- The same form for what this module's parser model makes of `html` (the browser's parse
+is compared against both). -/
+def modelCanon (html : String) : Option String :=
+  match parse html with
+  | .error _ => none
+  | .ok nodes =>
+    let cs := claims 0 "" none #[] nodes
+    if cs.isEmpty then none
+    else
+      let (d, _) := hydrateDom "#app" cs #[]
+      some (strictDom d 1)
+
+end LeanUI.Testing.Ssr

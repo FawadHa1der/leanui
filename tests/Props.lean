@@ -617,8 +617,18 @@ def corpusSuite (o : Opts) (dir : String) : IO Outcome := do
     steps := steps + entries.size
     let html := if hyd then Corpus.json (Ssr.roundTrip c.t0).html else "null"
     lines := lines.push s!"\{\"case\":{i},\"chaos\":{i % 5 == 4},\"html\":{html},\"steps\":{Corpus.jsonArr entries}}"
+  -- parse checks: the browser's HTML parser against the parser model and the hazard lint
+  let mut parses := 0
+  for i in [0:400 * o.factor] do
+    let cfg : Config := if i % 3 == 0 then { hazards := true } else if i % 3 == 1 then Config.chaos else {}
+    let ((t, _), _) := (do let t ← genTree cfg; pure (t, ())).run' (Rng.ofCase (o.seed + 43) i)
+    let html := t.toHtml'.render
+    let model := match Ssr.modelCanon html with | some c => Corpus.json c | none => "null"
+    let hz := Corpus.jsonArr ((Ssr.hazards t).map Corpus.json)
+    lines := lines.push s!"\{\"case\":{i},\"parse\":{Corpus.json html},\"view\":{Corpus.json (Ssr.ssrCanon t)},\"model\":{model},\"hazards\":{hz}}"
+    parses := parses + 1
   IO.FS.writeFile (dir ++ "/corpus.jsonl") ("\n".intercalate lines.toList ++ "\n")
-  return { name := "corpus", ok := true, line := s!"{lines.size} sessions, {steps} buffers → {dir}/corpus.jsonl" }
+  return { name := "corpus", ok := true, line := s!"{lines.size - parses} sessions, {steps} buffers, {parses} parse checks → {dir}/corpus.jsonl" }
 
 /-! ## main -/
 

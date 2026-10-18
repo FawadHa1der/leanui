@@ -82,6 +82,9 @@ def Config.chaos (c : Config := {}) : Config := { c with dupAttrPct := 12, dupOn
 /-- Where a node sits, which decides which tags may appear. -/
 inductive Ctx where
   | flow | list | svg | math
+  /-- Inside a MathML token element (`mi`, `mo`, `mn`): text only, since the HTML parser parses
+  element children of these as HTML. -/
+  | mtext
   deriving BEq, Inhabited, Repr
 
 def flowTags : Array String := #["div", "span", "section", "b", "i", "em", "label", "article", "ul"]
@@ -187,6 +190,7 @@ def childCtx (ctx : Ctx) (tag : String) : Ctx :=
   match ctx with
   | .flow => if tag == "ul" then .list else if tag == "svg" then .svg else if tag == "math" then .math else .flow
   | .list => .flow
+  | .math => if tag == "mrow" then .math else .mtext
   | c => c
 
 /-- Make a child list keyed (unique keys), possibly with one duplicate or one missing key. -/
@@ -221,7 +225,8 @@ partial def genElem (cfg : Config) (ctx : Ctx) (depth : Nat) : G T := do
     return .elem .svg tag attrs (← genKids cfg .svg (depth + 1))
   | .math =>
     let tag ← pick mathTags
-    return .elem .mathml tag (← genAttrs cfg .math tag) (← genKids cfg .math (depth + 1))
+    return .elem .mathml tag (← genAttrs cfg .math tag) (← genKids cfg (childCtx .math tag) (depth + 1))
+  | .mtext => return .text (← genText cfg)
   | .flow =>
     if ← chance cfg.svgPct then
       return .elem .svg "svg" (← genAttrs cfg .svg "svg") (← genKids cfg .svg (depth + 1))
@@ -237,7 +242,7 @@ partial def genElem (cfg : Config) (ctx : Ctx) (depth : Nat) : G T := do
 
 partial def genLeafOrElem (cfg : Config) (ctx : Ctx) (depth : Nat) : G T := do
   let ok ← takeBudget
-  let t ← if !ok || depth ≥ cfg.maxDepth || (ctx != .list && (← chance cfg.textPct)) then
+  let t ← if !ok || depth ≥ cfg.maxDepth || ctx == .mtext || (ctx != .list && (← chance cfg.textPct)) then
       if ctx == .list then pure (.elem .html "li" #[] #[]) else pure (.text (← genText cfg))
     else genElem cfg ctx depth
   if ← chance cfg.lazyPct then
@@ -251,7 +256,7 @@ partial def genKids (cfg : Config) (ctx : Ctx) (depth : Nat) : G (Array T) := do
   let n ← genFanout cfg
   let mut kids := #[]
   for _ in [0:n] do kids := kids.push (← genLeafOrElem cfg ctx depth)
-  if kids.size ≥ 1 && (← chance cfg.keyedPct) then
+  if kids.size ≥ 1 && ctx != .mtext && (← chance cfg.keyedPct) then
     -- a keyed list holds elements only (texts have no key)
     let ns : Ns := if ctx == .svg then .svg else if ctx == .math then .mathml else .html
     let wrapTag := if ctx == .svg then "g" else if ctx == .math then "mrow" else "span"
@@ -303,7 +308,8 @@ def genSub (cfg : Config) (ctx : Ctx) (keyed : Bool) : G T := do
 def tagsFor (cfg : Config) (ctx : Ctx) (hasKids : Bool) : Array String :=
   match ctx with
   | .svg => svgTags
-  | .math => mathTags
+  | .math => if hasKids then #["mrow"] else mathTags
+  | .mtext => mathTags
   | .list => #["li"]
   | .flow => (if hasKids then flowTags.filter (· != "ul") else flowTags.filter (· != "ul") ++ voidTags) ++
       (if cfg.hazards then hazardTags else #[])
