@@ -283,8 +283,42 @@ def allocs : IO Unit := do
       s!"{(x * 100).round / 100}"
     IO.println s!"| {name} | {ph.update} | {ph.view} | {ph.render} | {ph.mount} | {ph.encode} | {ph.subs} | {ph.step} | {perRow} |"
 
+/-- `leanui-perf allocs-nodes`: small objects to mount one node of each shape (into a diff
+state that already knows every name, as in a running app), and to encode its commands. -/
+def allocsNodes : IO Unit := do
+  let (_, calib) ← smallObjects fun _ => ()
+  let names := ["tr", "td", "a", "span", "class", "aria-hidden", "click", "lbl"]
+  -- a fresh state for each measurement, built before it and handed over uniquely owned (the
+  -- closure holds the only reference), as a running app's state is; `seed` is a run-time value,
+  -- so that the compiler cannot make the state a shared constant
+  let seed := (← IO.monoNanosNow) % 1
+  let warm (_ : Unit) : IO (DiffState Bench.Msg) := IO.lazyPure fun _ =>
+    names.foldl (init := { nextNode := 1 + seed.toUInt32 }) fun s nm => { s with buf := (s.buf.setAttr 1 nm "").reset }
+  let shapes : List (String × Html Bench.Msg) := [
+    ("text", text "x"),
+    ("element", el "td" #[] #[]),
+    ("element + 1 attribute", el "td" #[Attr.cls "c"] #[]),
+    ("element + 2 attributes", el "span" #[Attr.cls "c", Attr.attr "aria-hidden" "true"] #[]),
+    ("element + listener", el "a" #[Attr.onClick (.select 1)] #[]),
+    ("element + attribute + listener", el "a" #[Attr.cls "lbl", Attr.onClick (.select 1)] #[]),
+    ("element + 1 text child", el "td" #[] #[text "x"]),
+    ("element + 2 text children", el "td" #[] #[text "x", text "y"]),
+    ("lazy (text)", .lazy (some "k") (.nat 1) fun _ => text "x"),
+    ("benchmark row (lazy)", (Bench.lazyRows { rows := #[{ id := 7, label := "a b c" }] })[0]!)]
+  IO.println "| shape | small objects to mount (encoding included) | of which encoding |"
+  IO.println "|---|--:|--:|"
+  for (name, v) in shapes do
+    let v ← prepare v
+    let w ← warm ()
+    let (r, n) ← smallObjects fun _ => (mount v).run w
+    let cs ← IO.lazyPure fun _ => decodeCommands r.2.buf
+    let w ← warm ()
+    let (_, e) ← smallObjects fun _ => replay w.buf cs
+    IO.println s!"| {name} | {n - calib} | {e - calib} |"
+
 def main (args : List String) : IO UInt32 := do
   if args == ["allocs"] then allocs; return 0
+  if args == ["allocs-nodes"] then allocsNodes; return 0
   if let ["loop-create", n] := args then loopCreate n.toNat!; return 0
   if args == ["parts"] then parts; return 0
   if args == ["split"] then split; return 0
