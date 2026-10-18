@@ -55,7 +55,7 @@ def nsPrefix : Ns → String
 /-- The exact structure of a view: everything except the handler functions. -/
 partial def shape {Msg : Type} : Html Msg → String
   | .text s => s.quote
-  | .lazy d r => s!"lazy[{d}]" ++ shape (r ())
+  | .lazy k d r => s!"lazy[{k}|{reprStr d}]" ++ shape (r ())
   | .elem ns tag as kids =>
     "<" ++ nsPrefix ns ++ tag ++ String.join (as.toList.map (" " ++ attrShape ·)) ++ ">" ++
       String.join (kids.toList.map shape) ++ "</" ++ tag ++ ">"
@@ -74,7 +74,7 @@ partial def findById {Msg : Type} (h : Html Msg) (i : String) : Option (Html Msg
   | .elem _ _ as kids =>
     if as.any (fun | .attr "id" v => v == i | _ => false) then some h
     else kids.findSome? (findById · i)
-  | .lazy _ r => findById (r ()) i
+  | .lazy _ _ r => findById (r ()) i
   | .text _ => none
 
 /-- Decode a payload with the `ev` listener of the element `#i` (`none`: no such listener). -/
