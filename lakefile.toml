@@ -1,9 +1,18 @@
 name = "leanui"
 version = "0.1.0"
-defaultTargets = ["LeanUI", "LeanUITesting", "leanui-tests"]
+defaultTargets = ["LeanUI", "LeanUITesting", "leanui-tests", "Examples"]
 
 [[lean_lib]]
 name = "LeanUI"
+
+[[lean_lib]]
+name = "LeanUIHost"
+roots = ["LeanUI.Host.Wasm"]
+
+[[lean_lib]]
+name = "Examples"
+srcDir = "examples"
+roots = ["Counter"]
 
 [[lean_lib]]
 name = "LeanUITesting"

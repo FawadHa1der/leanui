@@ -1,0 +1,33 @@
+// Browser smoke test for dist/counter: boots the wasm app, clicks and types, checks the DOM.
+// node tests/browser/counter.mjs [baseUrl] [chromium|firefox]   (run under the host browser lock)
+import { createRequire } from "node:module";
+const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
+const pw = require("playwright");
+const base = process.argv[2] || "http://127.0.0.1:5330/counter/plain-not-used";
+const engine = process.argv[3] || "chromium";
+const browser = await pw[engine].launch({ headless: true });
+const page = await browser.newPage();
+const errors = [];
+page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
+page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+await page.goto(process.argv[2] || "http://127.0.0.1:5330/plain/counter/index.html");
+await page.waitForFunction(() => window.__leanui, null, { timeout: 30000 });
+const read = () => page.$eval("#value", (e) => e.textContent);
+const results = { engine: browser.version(), boot: await page.evaluate(() => window.__leanui.bootMs), coi: await page.evaluate(() => crossOriginIsolated) };
+results.initial = await read();
+for (let i = 0; i < 3; i++) await page.click("#inc");
+results.after3inc = await read();
+await page.click("#dec");
+results.afterDec = await read();
+await page.fill("#box", "-7");
+results.afterInput = await read();
+results.negClass = await page.$eval("#value", (e) => e.className);
+await page.click("#reset");
+results.afterReset = await read();
+results.stats = await page.evaluate(() => window.__leanui.stats);
+results.errors = errors;
+await browser.close();
+const ok = results.initial === "0" && results.after3inc === "3" && results.afterDec === "2" && results.afterInput === "-7" && results.negClass === "neg" && results.afterReset === "0" && errors.length === 0;
+console.log(JSON.stringify(results, null, 1));
+console.log(ok ? "PASS" : "FAIL");
+process.exit(ok ? 0 : 1);

@@ -1,0 +1,56 @@
+#!/bin/bash
+# Build a LeanUI app to dist/<name>/: Lean -> C (native lake), then C -> wasm64 in the emsdk image,
+# linked against the single-threaded archives (toolchain/build-archives.sh) with mimalloc.
+#   tools/build-app.sh <Module> [name] [--debug]     e.g.  tools/build-app.sh Examples.Counter counter
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MOD="$1"; NAME="${2:-$(echo "$MOD" | tr '.' '-' | tr 'A-Z' 'a-z')}"; MODE="${3:-}"
+L="${LEAN_BIN:-$HOME/.elan/toolchains/leanprover--lean4---v4.34.0/bin}"
+. "$ROOT/toolchain/fork.lock"
+TC="$ROOT/.toolchain/wasm64"; [ -f "$TC/lib/libInit.a" ] || { echo "run toolchain/build-archives.sh first" >&2; exit 2; }
+OUT="$ROOT/dist/$NAME"; WORK="$ROOT/.lake/wasm/$NAME"
+rm -rf "$WORK" && mkdir -p "$WORK/obj" "$OUT"
+( cd "$ROOT" && "$L/lake" build "$MOD" 2>&1 | { grep -E "error|warning: " -A3 || true; } | head -40 )
+IR="$ROOT/.lake/build/ir"
+APPC="$IR/$(echo "$MOD" | tr '.' '/').c"; [ -f "$APPC" ] || { echo "no C for $MOD at $APPC (did lake build fail?)" >&2; exit 3; }
+SYM="runtime_initialize_$(grep -o 'LEAN_EXPORT lean_object\* runtime_initialize_[A-Za-z0-9_]*' "$APPC" | head -1 | sed 's/.*runtime_initialize_//')"
+cat > "$WORK/leanui_init.c" <<C
+#include <lean/lean.h>
+extern lean_object *$SYM(uint8_t builtin);
+lean_object *leanui_initialize_app(void) { return $SYM(1); }
+C
+# the framework's runtime modules and the app's own modules (everything under its top directory)
+TOP="$(echo "$MOD" | cut -d. -f1)"
+find "$IR/LeanUI" -name '*.c' ! -path '*/Testing/*' ! -path '*/Server*' ! -name 'Syntax*.c' > "$WORK/fw.list"
+echo "$IR/LeanUI.c" >> "$WORK/fw.list"
+: > "$WORK/app.list"; if [ -d "$IR/$TOP" ]; then find "$IR/$TOP" -name '*.c' >> "$WORK/app.list"; fi; if [ -f "$IR/$TOP.c" ]; then echo "$IR/$TOP.c" >> "$WORK/app.list"; fi
+FSFLAG="${LEANUI_FS:--sFILESYSTEM=0}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--profiling-funcs"
+CG="-m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -D LEAN_EMSCRIPTEN"
+map() { sed "s|^$ROOT|/proj|"; }
+docker run --rm -v "$ROOT":/proj -v "$ROOT/.toolchain/ccache":/root/.ccache -e EM_COMPILER_WRAPPER=ccache -w /proj "$image" bash -lc "
+  set -e
+  W=/proj/.lake/wasm/$NAME
+  cc1() { f=\$1; o=\$W/obj/\$(echo \$f | md5sum | cut -c1-12).o; emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c \$f -o \$o && echo \$o; }
+  export -f cc1; export W
+  cat \$W/fw.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/fw.objs
+  cat \$W/app.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/app.objs
+  emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c /proj/runtime/leanui_wasm.c -o \$W/obj/shim.o
+  emcc $OPT $CG -I /proj/.toolchain/wasm64/include -c \$W/leanui_init.c -o \$W/obj/init.o
+  rm -f \$W/libleanui.a && emar rcs \$W/libleanui.a \$(cat \$W/fw.objs)
+  emcc $OPT $CG $DBG \$W/obj/shim.o \$W/obj/init.o \$(cat \$W/app.objs) \$W/libleanui.a \
+    /proj/.toolchain/wasm64/lib/libStd.a /proj/.toolchain/wasm64/lib/libInit.a /proj/.toolchain/wasm64/lib/libleanrt.a /proj/.toolchain/wasm64/lib/libuv.a \
+    -sMALLOC=mimalloc -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16777216 -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
+    -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
+    -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=stringToNewUTF8 \
+    -o /proj/dist/$NAME/app.js
+" 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
+cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"
+if [ -f "$ROOT/examples/$NAME.html" ]; then cp "$ROOT/examples/$NAME.html" "$OUT/index.html"; else
+cat > "$OUT/index.html" <<HTML
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$NAME · LeanUI</title></head>
+<body><div id="app"></div><script src="leanui.js"></script><script>LeanUI.start({ glue: "app.js", selector: "#app" }).then((rt) => { window.__leanui = rt; console.log("LeanUI ready in", rt.bootMs.toFixed(1), "ms"); }, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });</script></body></html>
+HTML
+fi
+node -e '
+const fs=require("fs"),z=require("zlib"),d=process.argv[1];
+for (const f of ["app.wasm","app.js","leanui.js"]) { const b=fs.readFileSync(d+"/"+f); console.log(f.padEnd(10), "raw", String(b.length).padStart(9), "gzip", String(z.gzipSync(b,{level:9}).length).padStart(8), "brotli", String(z.brotliCompressSync(b,{params:{[z.constants.BROTLI_PARAM_QUALITY]:11}}).length).padStart(8)); }' "$OUT"
