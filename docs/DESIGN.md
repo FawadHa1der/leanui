@@ -58,7 +58,9 @@ built against. It was first written on 2026-10-18 from the research in
   `textarea` and `listing` (the parser drops one).
 - **Browser runtime** (`runtime/leanui.js`, about 5 KB brotli): applies buffers in one pass
   (a `class` attribute on an HTML element is written through `className`, which needs no name
-  lookup; a run of `REMOVE`s that empties a parent in order is one `replaceChildren()`); one
+  lookup; a run of `REMOVE`s that empties a parent in order is one `replaceChildren()`, the same
+  DOM, but page code sees one `MutationObserver` record for it, and custom elements'
+  `disconnectedCallback`s run after all the removals instead of after each one); one
   delegated listener per event type on the container, in the capture phase for events that do
   not bubble, which then reach their target's listener only; payloads extracted in the browser
   (`value`, `checked`, `key`, the `name=value` lines of the element's form); strings cross into
@@ -115,7 +117,7 @@ built against. It was first written on 2026-10-18 from the research in
 
 | Module / file | Role | Tests |
 |---|---|---|
-| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,depth}.mjs` |
+| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,depth,apply-semantics}.mjs` |
 | `LeanUI/Syntax.lean` | JSX-style templates (compile time only) | `leanui-syntax-tests` |
 | `LeanUI/Proofs/Keyed.lean` | machine-checked keyed reconciliation | `lake build` |
 | `LeanUI/Testing/*` | DOM model, harness, generators, reference model, protocol checker, SSR parser | `leanui-props` |

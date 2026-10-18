@@ -119,7 +119,10 @@
             // to last in order (clearing or replacing a list), becomes one replaceChildren():
             // the same DOM, without a removal per child (4-5% of applying a clear). Handles are
             // freed in order as the run is read and no other command runs in between, so no
-            // command can tell; a MutationObserver sees one record instead of one per child.
+            // command can tell. Page code can: a MutationObserver sees one record instead of one
+            // per child, and custom elements' disconnectedCallbacks (replaceChildren is a single
+            // [CEReactions] call) all run after the last removal instead of after each one, so
+            // each sees its old parent already empty (tests/browser/apply-semantics.mjs).
             const el = N[w[i + 1]];
             i += 2;
             const p = el.parentNode;
