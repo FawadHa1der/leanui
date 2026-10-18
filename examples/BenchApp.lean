@@ -1,3 +1,4 @@
 module
 public import Bench
--- wasm entry point: `leanui_app Bench.program` (examples lane)
+public import LeanUI.Host.Wasm
+leanui_app Bench.program

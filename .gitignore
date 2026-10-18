@@ -4,3 +4,4 @@ dist/
 work/
 *.o
 out/
+.claude/

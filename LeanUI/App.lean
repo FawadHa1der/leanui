@@ -131,16 +131,18 @@ def stepMsgs (p : Program Model Msg) (msgs : Array Msg) : RunM Model Msg Unit :=
       next ← execCmd cmd next
       fuel := fuel - 1
     queue := next
-  let s ← get
-  let (tree, diff) := (patch 0 s.tree (p.view s.model)).run s.diff
-  set { s with tree, diff }
-  syncSubs (p.subscriptions s.model)
+  -- take the tree and diff state out of the state first, so the diff owns them uniquely and
+  -- updates its arrays in place instead of copying them
+  let (tree, diff, model) ← modifyGet fun s => ((s.tree, s.diff, s.model), { s with tree := default, diff := {} })
+  let (tree, diff) := (patch 0 tree (p.view model)).run diff
+  modify fun s => { s with tree, diff }
+  syncSubs (p.subscriptions model)
 
 /-- Count the DOM nodes a view produces (what hydration claims). -/
 partial def countNodes : Html Msg → Nat
   | .text _ => 1
   | .elem _ _ _ kids => kids.foldl (fun n k => n + countNodes k) 1
-  | .lazy _ r => countNodes (r ())
+  | .lazy _ _ r => countNodes (r ())
 
 /-- The first state: mount (or hydrate) the initial view into `selector` and run `init`'s
 commands. -/

@@ -204,7 +204,7 @@ end Dom
 /-- Canonical HTML of a view (the same format as `Dom.canon`). -/
 partial def canonHtml {Msg : Type} : Html Msg → String
   | .text s => s
-  | .lazy _ r => canonHtml (r ())
+  | .lazy _ _ r => canonHtml (r ())
   | .elem _ tag attrs kids =>
     let kv : Array (String × String) := attrs.filterMap fun
       | .attr k v => some (k, v)

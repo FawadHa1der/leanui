@@ -42,27 +42,41 @@ inductive LMsg | setRows (rows : Array Nat) | pick (k : Nat)
 structure LModel where
   rows : Array Nat := #[]
   picked : Option Nat := none
-def listView (keyed : Bool) (m : LModel) : Html LMsg :=
+/-- How the test list renders its rows. -/
+inductive ListMode | positional | keyed | keyedLazy
+  deriving BEq
+
+def ListMode.name : ListMode → String
+  | .positional => "positional" | .keyed => "keyed" | .keyedLazy => "keyed lazy"
+
+def rowView (keyed : Bool) (picked : Bool) (k : Nat) : Html LMsg :=
+  el "li" ((if keyed then #[Attr.key (toString k)] else #[]) ++
+    #[cls (if picked then "picked" else "row"), onClick (.pick k)])
+    #[text s!"row {k}", el "b" #[] #[text (toString (k * 7 % 13))]]
+
+def listView (mode : ListMode) (m : LModel) : Html LMsg :=
   el "ul" #[id "list"] (m.rows.map fun k =>
-    el "li" ((if keyed then #[Attr.key (toString k)] else #[]) ++
-      #[cls (if m.picked == some k then "picked" else "row"), onClick (.pick k)])
-      #[text s!"row {k}", el "b" #[] #[text (toString (k * 7 % 13))]])
-def listProg (keyed : Bool) : Program LModel LMsg where
+    let picked := m.picked == some k
+    match mode with
+    | .positional => rowView false picked k
+    | .keyed => rowView true picked k
+    | .keyedLazy => keyed (toString k) (lazy (k, picked) fun _ => rowView false picked k))
+def listProg (mode : ListMode) : Program LModel LMsg where
   init _ := ({}, .none)
   update m s := match m with | .setRows rs => ({ s with rows := rs }, .none) | .pick k => ({ s with picked := some k }, .none)
-  view := listView keyed
+  view := listView mode
 
 def decodeRows (s : String) : Option LMsg :=
   some (.setRows ((s.splitOn ",").filterMap String.toNat? |>.toArray))
 
 /-- Drive a list through random edits. A hidden control button carries the next row list in its
 event payload, so every edit goes through the same event path the browser uses. -/
-def testLists (keyed : Bool) (iters : Nat) : IO Unit := do
-  let mut rng : Rng := ⟨if keyed then 7 else 11⟩
-  let p : Program LModel LMsg := { listProg keyed with
+def testLists (mode : ListMode) (iters : Nat) : IO Unit := do
+  let mut rng : Rng := ⟨if mode == .keyed then 7 else if mode == .keyedLazy then 3 else 11⟩
+  let p : Program LModel LMsg := { listProg mode with
     view := fun m => el "div" #[] #[
       el "button" #[id "go", Attr.on "click" { payload := .value, decode := decodeRows }] #[],
-      listView keyed m] }
+      listView mode m] }
   let r ← run p
   let mut model : LModel := {}
   let mut pool : Array Nat := #[]
@@ -85,7 +99,7 @@ def testLists (keyed : Bool) (iters : Nat) : IO Unit := do
     else rows := #[]
     model := { model with rows }
     r.fire (← r.find "id" "go") "click" (",".intercalate (rows.toList.map toString))
-    r.check (p.view model) s!"{if keyed then "keyed" else "positional"} iteration {it}"
+    r.check (p.view model) s!"{mode.name} iteration {it}"
     -- click a row to exercise slot routing after reorders
     if rows.size > 0 && it % 3 == 0 then
       let k := rows[it % rows.size]!
@@ -94,7 +108,7 @@ def testLists (keyed : Bool) (iters : Nat) : IO Unit := do
       match li with
       | some h => r.fire h "click"; model := { model with picked := some k }; r.check (p.view model) s!"pick {k} at {it}"
       | none => throw (IO.userError s!"row {k} not found")
-  IO.println s!"  {if keyed then "keyed" else "positional"} lists, {iters} random edits: ok"
+  IO.println s!"  {mode.name} lists, {iters} random edits: ok"
 
 /-! ## The planner's list model -/
 def testPlanner (iters : Nat) : IO Unit := do
@@ -139,7 +153,8 @@ def main : IO UInt32 := do
   testPlanner 20000
   testCounter
   testLazy
-  testLists true 400
-  testLists false 400
+  testLists .keyed 400
+  testLists .positional 400
+  testLists .keyedLazy 400
   IO.println "all passed"
   return 0

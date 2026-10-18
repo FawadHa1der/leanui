@@ -35,7 +35,7 @@ private def renderAttrs (acc : String) (attrs : Array (Attr Msg)) : String :=
 partial def Html.renderInto {Msg : Type} (acc : String) : Html Msg → String
   | .text "" => acc ++ "<!--t-->"
   | .text s => escapeHtml false acc s
-  | .lazy _ r => (r ()).renderInto acc
+  | .lazy _ _ r => (r ()).renderInto acc
   | .elem _ tag attrs kids =>
     let acc := renderAttrs (acc ++ "<" ++ tag) attrs ++ ">"
     if voidElements.contains tag then acc

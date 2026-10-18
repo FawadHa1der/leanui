@@ -17,12 +17,12 @@ event on a node carrying slot `s` calls `handlerOf s`.
 public section
 namespace LeanUI
 
-/-- A mounted node: the view it came from, its handle, and its listener slots. -/
+/-- A mounted node: the view it came from, its handle, its key (cached), and its listener slots. -/
 inductive Node (Msg : Type) where
   | text (h : UInt32) (s : String)
-  | elem (h : UInt32) (ns : Ns) (tag : String) (attrs : Array (Attr Msg))
+  | elem (h : UInt32) (ns : Ns) (tag : String) (key : Option String) (attrs : Array (Attr Msg))
       (listeners : Array (String × UInt32)) (kids : Array (Node Msg))
-  | lazy (deps : UInt64) (inner : Node Msg)
+  | lazy (key : Option String) (deps : Dep) (inner : Node Msg)
 
 instance : Inhabited (Node Msg) := ⟨.text 0 ""⟩
 
@@ -30,16 +30,16 @@ namespace Node
 def handle : Node Msg → UInt32
   | .text h _ => h
   | .elem h .. => h
-  | .lazy _ n => n.handle
+  | .lazy _ _ n => n.handle
 def key? : Node Msg → Option String
-  | .elem _ _ _ attrs _ _ => attrs.findSome? fun | .key k => some k | _ => none
-  | .lazy _ n => n.key?
+  | .elem _ _ _ k .. => k
+  | .lazy k _ _ => k
   | _ => none
 /-- Number of DOM nodes (elements and texts) in the subtree. -/
 partial def size : Node Msg → Nat
   | .text .. => 1
-  | .elem _ _ _ _ _ kids => kids.foldl (fun n k => n + k.size) 1
-  | .lazy _ n => n.size
+  | .elem _ _ _ _ _ _ kids => kids.foldl (fun n k => n + k.size) 1
+  | .lazy _ _ n => n.size
 end Node
 
 structure DiffState (Msg : Type) where
@@ -77,11 +77,21 @@ def freeSlot (i : UInt32) : DiffM Msg Unit :=
 /-- Forget a whole mounted subtree: free its handles and slots. The caller detaches its root. -/
 partial def release : Node Msg → DiffM Msg Unit
   | .text h _ => do emit (·.free h); modify fun s => { s with freeNodes := s.freeNodes.push h }
-  | .elem h _ _ _ ls kids => do
+  | .elem h _ _ _ _ ls kids => do
     for k in kids do release k
     for (_, sl) in ls do freeSlot sl
     emit (·.free h); modify fun s => { s with freeNodes := s.freeNodes.push h }
-  | .lazy _ n => release n
+  | .lazy _ _ n => release n
+
+/-- The `key` attribute, if any (scanned once per node). -/
+@[inline] def attrsKey (attrs : Array (Attr Msg)) : Option String :=
+  attrs.findSome? fun | .key k => some k | _ => none
+
+/-- The key of a view node (a lazy node carries its own, so it is read without rendering). -/
+@[inline] def viewKey : Html Msg → Option String
+  | .elem _ _ attrs _ => attrsKey attrs
+  | .lazy k _ _ => k
+  | _ => none
 
 /-! ## Attributes -/
 
@@ -94,7 +104,7 @@ private def setOne (h : UInt32) : Attr Msg → DiffM Msg Unit
 attributes are already in the server-rendered HTML, so only properties and listeners are sent. -/
 def mountAttrs (h : UInt32) (attrs : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
   let hydrating := (← get).hydrating
-  let mut ls := #[]
+  let mut ls := Array.mkEmpty 2
   for a in attrs do
     match a with
     | .on ev hd =>
@@ -122,26 +132,38 @@ private def findOn (e : String) (as : Array (Attr Msg)) : Option (Handler Msg) :
   as.findSome? fun | .on f hd => if f == e then some hd else none | _ => none
 
 /-- Update one listener in place: same event, so keep the slot and swap the handler; re-send the
-listener only if what the browser extracts or does changed. -/
-private def updateListener (h : UInt32) (ev : String) (sl : UInt32) (old new : Handler Msg) : DiffM Msg Unit := do
+listener only if what the browser extracts or does changed (and report that as a change). -/
+private def updateListener (h : UInt32) (ev : String) (sl : UInt32) (old new : Handler Msg) : DiffM Msg Bool := do
   setSlot sl new
   if old.payload != new.payload || old.flags != new.flags then
-    emit (·.setListener h ev sl new.payload new.flags)
+    emit (·.setListener h ev sl new.payload new.flags); return true
+  return false
 
+/-- Diff attributes. Returns the listener table and whether anything other than a handler's
+message changed; when nothing did, the caller keeps the old attribute array (handlers live in
+their slots, and only payload and flags are ever compared). -/
 def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt32))
-    (new : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32)) := do
-  if old.size == new.size && (old.zip new).all fun (a, b) => sameShape a b then
-    -- fast path: same attributes in the same order
-    for (a, b) in old.zip new do
-      match a, b with
-      | .attr _ v, .attr n w => if v != w then emit (·.setAttr h n w)
-      | .prop _ v, .prop n w => if v != w then emit (·.setProp h n w)
+    (new : Array (Attr Msg)) : DiffM Msg (Array (String × UInt32) × Bool) := do
+  let n := old.size
+  let mut same := n == new.size
+  let mut i := 0
+  while same && i < n do
+    same := sameShape old[i]! new[i]!
+    i := i + 1
+  if same then
+    -- fast path: same attributes in the same order (index loop, no allocation)
+    let mut changed := false
+    for j in [0:n] do
+      match old[j]!, new[j]! with
+      | .attr _ v, .attr nm w => if v != w then emit (·.setAttr h nm w); changed := true
+      | .prop _ v, .prop nm w => if v != w then emit (·.setProp h nm w); changed := true
       | .on ev ho, .on _ hn =>
         match ls.find? (·.1 == ev) with
-        | some (_, sl) => updateListener h ev sl ho hn
+        | some (_, sl) => if ← updateListener h ev sl ho hn then changed := true
         | none => pure ()
+      | .key a, .key b => if a != b then changed := true
       | _, _ => pure ()
-    return ls
+    return (ls, changed)
   -- general path: attribute lists are short, so linear scans
   for a in old do
     match a with
@@ -156,7 +178,7 @@ def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt
   let mut out := #[]
   for (ev, sl) in ls do
     match findOn ev new, findOn ev old with
-    | some hn, some ho => updateListener h ev sl ho hn; out := out.push (ev, sl)
+    | some hn, some ho => let _ ← updateListener h ev sl ho hn; out := out.push (ev, sl)
     | some hn, none => setSlot sl hn; out := out.push (ev, sl)
     | none, _ => emit (·.removeListener h ev); freeSlot sl
   for b in new do
@@ -167,7 +189,105 @@ def patchAttrs (h : UInt32) (old : Array (Attr Msg)) (ls : Array (String × UInt
         emit (·.setListener h ev sl hd.payload hd.flags)
         out := out.push (ev, sl)
     | _ => pure ()
-  return out
+  -- the attribute list changed shape: always store the new one
+  return (out, true)
+
+/-! ## Unchanged subtrees
+
+Most of a re-render is unchanged. `sameF` decides, purely and without allocating, that showing a
+view where a node is mounted needs no command at all; `rebind` then re-points the subtree's
+listener slots at the new handlers (their messages may differ even when nothing visible does).
+The diff consults this before doing any monadic work, so an unchanged subtree costs comparisons
+and one state update, and returns the *same* mounted node. -/
+
+/-- Pure attribute equality, exactly as `patchAttrs` judges it: names and values, listener
+events, payloads and flags (never the handlers' messages), keys. -/
+@[inline] private def attrEq : Attr Msg → Attr Msg → Bool
+  | .attr n v, .attr m w => n == m && v == w
+  | .prop n v, .prop m w => n == m && v == w
+  | .on e h, .on f g => e == f && h.payload == g.payload && h.flags == g.flags
+  | .key a, .key b => a == b
+  | _, _ => false
+
+private def attrsSame (a b : Array (Attr Msg)) (i : Nat := 0) : Bool :=
+  if h : i < a.size then
+    if h' : i < b.size then attrEq a[i] b[i] && attrsSame a b (i + 1) else false
+  else true
+termination_by a.size - i
+
+/-- The slot of the first listener for `ev` (0, never a real slot, if none). -/
+def slotOf (ls : Array (String × UInt32)) (ev : String) (i : Nat := 0) : UInt32 :=
+  if h : i < ls.size then (if ls[i].1 == ev then ls[i].2 else slotOf ls ev (i + 1)) else 0
+termination_by ls.size - i
+
+/-- How many nodes one `sameF` call may look at. Bounding it keeps re-checking linear: a subtree
+too big to check in one go is patched node by node and its children are checked instead, so no
+node is examined by more than one failed check per patched ancestor within this budget. -/
+def sameBudget : Nat := 256
+
+mutual
+/-- `sameF f n v` is 0 if showing `v` where `n` is mounted needs a command, or if deciding that
+would take more than `f` nodes; otherwise the fuel left (at least 1). -/
+partial def sameF (f : Nat) (n : Node Msg) (v : Html Msg) : Nat :=
+  if f ≤ 1 then 0 else
+  match n, v with
+  | .text _ s, .text t => if s == t then f - 1 else 0
+  | .lazy k d _, .lazy k' e _ => if k == k' && d == e then f - 1 else 0
+  | .elem _ ns tag _ attrs _ kids, .elem ns' tag' attrs' kids' =>
+    if ns == ns' && tag == tag' && kids.size == kids'.size && attrs.size == attrs'.size &&
+        attrsSame attrs attrs' then
+      kidsSameF (f - 1) kids kids' 0
+    else 0
+  | _, _ => 0
+
+partial def kidsSameF (f : Nat) (ks : Array (Node Msg)) (vs : Array (Html Msg)) (i : Nat) : Nat :=
+  if f == 0 then 0
+  else if i < ks.size then kidsSameF (sameF f ks[i]! vs[i]!) ks vs (i + 1)
+  else f
+end
+
+mutual
+/-- Re-point the listener slots of an unchanged subtree (`sameF` succeeded) at the new view's
+handlers, in the order `patchAttrs` would. Lazy subtrees with equal dependencies keep theirs. -/
+partial def rebind (sl : Array (Option (Handler Msg))) : Node Msg → Html Msg → Array (Option (Handler Msg))
+  | .elem _ _ _ _ _ ls kids, .elem _ _ attrs' kids' =>
+    let sl := attrs'.foldl (init := sl) fun sl a => match a with
+      | .on ev hn => let s := slotOf ls ev; if s == 0 then sl else sl.set! s.toNat (some hn)
+      | _ => sl
+    rebindKids sl kids kids' 0
+  | _, _ => sl
+
+partial def rebindKids (sl : Array (Option (Handler Msg))) (ks : Array (Node Msg)) (vs : Array (Html Msg))
+    (i : Nat) : Array (Option (Handler Msg)) :=
+  if i < ks.size && i < vs.size then rebindKids (rebind sl ks[i]! vs[i]!) ks vs (i + 1) else sl
+end
+
+/-- First index `j ≥ i` whose child is not unchanged (or `old.size`). -/
+private partial def runSame (old : Array (Node Msg)) (new : Array (Html Msg)) (i : Nat) : Nat :=
+  if i < old.size && i < new.size && sameF sameBudget old[i]! new[i]! != 0 then runSame old new (i + 1) else i
+
+private partial def rebindRange (sl : Array (Option (Handler Msg))) (old : Array (Node Msg))
+    (new : Array (Html Msg)) (i j : Nat) : Array (Option (Handler Msg)) :=
+  if i < j then rebindRange (rebind sl old[i]! new[i]!) old new (i + 1) j else sl
+
+/-- Does mounted `n` carry the key that view `v` asks for? (No allocation.) -/
+private def firstKeyIs (attrs : Array (Attr Msg)) (k : String) (i : Nat := 0) : Bool :=
+  if h : i < attrs.size then
+    match attrs[i] with
+    | .key k' => k' == k
+    | _ => firstKeyIs attrs k (i + 1)
+  else false
+termination_by attrs.size - i
+
+private def keyIs (n : Node Msg) (v : Html Msg) : Bool :=
+  match n.key?, v with
+  | some k, .elem _ _ attrs _ => firstKeyIs attrs k
+  | some k, .lazy (some k') _ _ => k == k'
+  | _, _ => false
+
+/-- Every child pair carries the same key, in order. -/
+private partial def keysAligned (old : Array (Node Msg)) (new : Array (Html Msg)) (i : Nat) : Bool :=
+  if i < old.size && i < new.size then keyIs old[i]! new[i]! && keysAligned old new (i + 1) else true
 
 /-! ## Trees -/
 
@@ -200,25 +320,42 @@ partial def mount (v : Html Msg) : DiffM Msg (Node Msg) := do
       let n ← mount k
       if !hydrating then emit (·.appendChild h n.handle)
       ks := ks.push n
-    return .elem h ns tag attrs ls ks
-  | .lazy deps r => return .lazy deps (← mount (r ()))
+    return .elem h ns tag (attrsKey attrs) attrs ls ks
+  | .lazy k deps r => return .lazy k deps (← mount (r ()))
 
 /-- Update `old` (a child of `parent`) to show `new`; returns the updated mounted node. -/
-partial def patch (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) := do
+partial def patch (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) :=
+  return (← patchC parent old new).1
+
+/-- `patch`, also reporting whether the mounted node changed. An unchanged subtree returns the
+*same* mounted node, so a no-op re-render costs comparisons only. -/
+partial def patchC (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg × Bool) := do
+  if sameF sameBudget old new != 0 then
+    modify fun s => { s with slots := rebind s.slots old new }
+    return (old, false)
+  patchNode parent old new
+
+/-- The node-by-node diff (`patchC` without the unchanged-subtree check). -/
+partial def patchNode (parent : UInt32) (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg × Bool) := do
   match old, new with
-  | .lazy d o, .lazy e r => if d == e then return old else return .lazy e (← patch parent o (r ()))
-  | .lazy _ o, _ => patch parent o new
-  | _, .lazy e r => return .lazy e (← patch parent old (r ()))
+  | .lazy k d o, .lazy k' e r =>
+    if k == k' && d == e then return (old, false)
+    let (n, _) ← patchC parent o (r ())
+    return (.lazy k' e n, true)
+  | .lazy _ _ o, _ => let (n, _) ← patchC parent o new; return (n, true)
+  | _, .lazy k e r => let (n, _) ← patchC parent old (r ()); return (.lazy k e n, true)
   | .text h s, .text t =>
-    if s != t then emit (·.setText h t)
-    return .text h t
-  | .elem h ns tag attrs ls kids, .elem ns' tag' attrs' kids' =>
-    if ns == ns' && tag == tag' && old.key? == (Html.elem ns' tag' attrs' kids').key? then
-      let ls ← patchAttrs h attrs ls attrs'
-      let ks ← patchKids h kids kids'
-      return .elem h ns tag attrs' ls ks
-    else replaceNode old new
-  | _, _ => replaceNode old new
+    if s == t then return (old, false)
+    emit (·.setText h t)
+    return (.text h t, true)
+  | .elem h ns tag k attrs ls kids, .elem ns' tag' attrs' kids' =>
+    if ns == ns' && tag == tag' && k == attrsKey attrs' then
+      let (ls', ac) ← patchAttrs h attrs ls attrs'
+      let (ks, kc) ← patchKidsC h kids kids'
+      if !ac && !kc then return (old, false)
+      return (.elem h ns tag k (if ac then attrs' else attrs) ls' ks, true)
+    else return (← replaceNode old new, true)
+  | _, _ => return (← replaceNode old new, true)
 
 partial def replaceNode (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg) := do
   let n ← mount new
@@ -226,58 +363,96 @@ partial def replaceNode (old : Node Msg) (new : Html Msg) : DiffM Msg (Node Msg)
   release old
   return n
 
-/-- Diff a child list. Keyed when every child on both sides has a unique key; positional otherwise. -/
+/-- Diff a child list. Keyed when every child on both sides has a key (keys cached in mounted
+nodes; new keys scanned once); positional otherwise. Keyed lists trim the common prefix and
+suffix first, and only the remaining middle is checked for unique keys and planned, so a list
+that did not change shape costs one key comparison per child. -/
 partial def patchKids (parent : UInt32) (old : Array (Node Msg)) (new : Array (Html Msg)) :
-    DiffM Msg (Array (Node Msg)) := do
-  if old.isEmpty && new.isEmpty then return old
-  let keyed := !old.isEmpty && !new.isEmpty &&
-    uniqueKeys (old.map Node.key?) && uniqueKeys (new.map Html.key?)
-  if !keyed then
-    -- positional
-    let common := min old.size new.size
-    let mut out := Array.mkEmpty new.size
-    for i in [0:common] do
-      out := out.push (← patch parent old[i]! new[i]!)
-    for i in [common:new.size] do
-      let n ← mount new[i]!
-      emit (·.appendChild parent n.handle)
-      out := out.push n
-    for i in [common:old.size] do
-      emit (·.remove old[i]!.handle)
-      release old[i]!
-    return out
-  -- keyed: trim the common prefix and suffix, plan the middle
-  let ok := old.map fun n => n.key?.getD ""
-  let nk := new.map fun n => n.key?.getD ""
-  let mut pre := 0
-  while pre < old.size && pre < new.size && ok[pre]! == nk[pre]! do pre := pre + 1
-  let mut suf := 0
-  while suf < old.size - pre && suf < new.size - pre && ok[old.size - 1 - suf]! == nk[new.size - 1 - suf]! do
-    suf := suf + 1
-  let mut out : Array (Node Msg) := Array.replicate new.size default
-  for i in [0:pre] do
-    out := out.set! i (← patch parent old[i]! new[i]!)
-  for j in [0:suf] do
-    out := out.set! (new.size - 1 - j) (← patch parent old[old.size - 1 - j]! new[new.size - 1 - j]!)
-  let oldMid := old.extract pre (old.size - suf)
-  let newMid := new.extract pre (new.size - suf)
-  let p := Keyed.plan (ok.extract pre (old.size - suf)) (nk.extract pre (new.size - suf))
-  for j in p.removed do
-    emit (·.remove oldMid[j]!.handle)
-    release oldMid[j]!
-  -- right to left, so the anchor (the node after i) is already final
-  let mut i := newMid.size
-  while i > 0 do
-    i := i - 1
-    let n ← match p.src[i]! with
-      | some j => patch parent oldMid[j]! newMid[i]!
-      | none => mount newMid[i]!
-    out := out.set! (pre + i) n
-    if p.move[i]! then
-      let nxt := pre + i + 1
-      if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
-      else emit (·.appendChild parent n.handle)
-  return out
+    DiffM Msg (Array (Node Msg)) :=
+  return (← patchKidsC parent old new).1
+
+partial def patchKidsC (parent : UInt32) (old : Array (Node Msg)) (new : Array (Html Msg)) :
+    DiffM Msg (Array (Node Msg) × Bool) := do
+  if old.isEmpty && new.isEmpty then return (old, false)
+  -- cheap test first: a list is keyed only if its first children are
+  let maybeKeyed := !old.isEmpty && !new.isEmpty && old[0]!.key?.isSome && (viewKey new[0]!).isSome
+  -- the common case, allocation-free: same length and (if keyed) the same keys in the same order
+  if old.size == new.size && (!maybeKeyed || keysAligned old new 0) then
+    return (← patchSame parent old new)
+  let nk := if maybeKeyed then new.map viewKey else #[]
+  let keyed := maybeKeyed && old.all (·.key?.isSome) && nk.all (·.isSome)
+  if keyed then
+    let ok := old.map fun n => n.key?.getD ""
+    let nk := nk.map (·.getD "")
+    let mut pre := 0
+    while pre < old.size && pre < new.size && ok[pre]! == nk[pre]! do pre := pre + 1
+    let mut suf := 0
+    while suf < old.size - pre && suf < new.size - pre && ok[old.size - 1 - suf]! == nk[new.size - 1 - suf]! do
+      suf := suf + 1
+    let okMid := ok.extract pre (old.size - suf)
+    let nkMid := nk.extract pre (new.size - suf)
+    -- duplicate keys in the part to be planned fall back to positional diffing
+    if uniqueKeys (okMid.map some) && uniqueKeys (nkMid.map some) then
+      if okMid.isEmpty && nkMid.isEmpty then
+        -- same keys in the same order: patch in place, allocate only if a child changed
+        return (← patchSame parent old new)
+      let mut out : Array (Node Msg) := Array.replicate new.size default
+      for i in [0:pre] do
+        out := out.set! i (← patch parent old[i]! new[i]!)
+      for j in [0:suf] do
+        out := out.set! (new.size - 1 - j) (← patch parent old[old.size - 1 - j]! new[new.size - 1 - j]!)
+      let oldMid := old.extract pre (old.size - suf)
+      let newMid := new.extract pre (new.size - suf)
+      let p := Keyed.plan okMid nkMid
+      for j in p.removed do
+        emit (·.remove oldMid[j]!.handle)
+        release oldMid[j]!
+      -- right to left, so the anchor (the node after i) is already final
+      let mut i := newMid.size
+      while i > 0 do
+        i := i - 1
+        let n ← match p.src[i]! with
+          | some j => patch parent oldMid[j]! newMid[i]!
+          | none => mount newMid[i]!
+        out := out.set! (pre + i) n
+        if p.move[i]! then
+          let nxt := pre + i + 1
+          if nxt < new.size then emit (·.insertBefore parent n.handle out[nxt]!.handle)
+          else emit (·.appendChild parent n.handle)
+      return (out, true)
+  if old.size == new.size then return (← patchSame parent old new)
+  -- positional, different lengths
+  let common := min old.size new.size
+  let mut out := Array.mkEmpty new.size
+  for i in [0:common] do
+    out := out.push (← patch parent old[i]! new[i]!)
+  for i in [common:new.size] do
+    let n ← mount new[i]!
+    emit (·.appendChild parent n.handle)
+    out := out.push n
+  for i in [common:old.size] do
+    emit (·.remove old[i]!.handle)
+    release old[i]!
+  return (out, true)
+
+/-- Pairwise patch of two equally long child lists. Runs of unchanged children are found purely
+and rebound with one state update; only the others go through `patchNode`. Returns the old array
+itself until a child changes. -/
+partial def patchSame (parent : UInt32) (old : Array (Node Msg)) (new : Array (Html Msg)) :
+    DiffM Msg (Array (Node Msg) × Bool) := do
+  let mut out := old
+  let mut changed := false
+  let mut i := 0
+  while i < old.size do
+    let j := runSame old new i
+    if j > i then modify fun s => { s with slots := rebindRange s.slots old new i j }
+    if j < old.size then
+      let (n, c) ← patchNode parent old[j]! new[j]!
+      if c then
+        changed := true
+        out := out.set! j n
+    i := j + 1
+  return (out, changed)
 
 end
 

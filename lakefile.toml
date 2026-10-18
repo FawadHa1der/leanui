@@ -2,7 +2,7 @@ name = "leanui"
 version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
-  "leanui-server-tests", "leanui", "leanui-demo-server"]
+  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf"]
 
 # The runtime core every app links.
 [[lean_lib]]
@@ -72,3 +72,7 @@ root = "tests.Server"
 name = "leanui-demo-server"
 srcDir = "examples"
 root = "ServerDemo"
+
+[[lean_exe]]
+name = "leanui-perf"
+root = "tests.Perf"

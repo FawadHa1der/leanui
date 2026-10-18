@@ -89,12 +89,52 @@ def Attr.map (f : α → β) : Attr α → Attr β
   | .on e h => .on e (h.map f)
   | .key k => .key k
 
-/-- A view. `lazy` skips both rendering and diffing of a subtree while its `deps` hash is
-unchanged; `deps` must change whenever the subtree's output would. -/
+/-- What a `lazy` subtree depends on. Dependencies are compared exactly (structurally, strings
+by pointer first), never by hash, so reusing a subtree is never a guess. `ToDep` builds one from
+ordinary values. -/
+inductive Dep where
+  | unit
+  | bool (b : Bool)
+  | nat (n : Nat)
+  | int (i : Int)
+  | u64 (n : UInt64)
+  | str (s : String)
+  | opt (d : Option Dep)
+  | pair (a b : Dep)
+  | list (ds : List Dep)
+  deriving BEq, Inhabited, Repr
+
+instance : OfNat Dep n := ⟨.nat n⟩
+
+/-- Values a lazy subtree can depend on. -/
+class ToDep (α : Type) where
+  toDep : α → Dep
+
+export ToDep (toDep)
+
+instance : ToDep Dep := ⟨id⟩
+instance : ToDep Unit := ⟨fun _ => .unit⟩
+instance : ToDep Bool := ⟨.bool⟩
+instance : ToDep Nat := ⟨.nat⟩
+instance : ToDep Int := ⟨.int⟩
+instance : ToDep UInt64 := ⟨.u64⟩
+instance : ToDep UInt32 := ⟨fun n => .u64 n.toUInt64⟩
+instance : ToDep Char := ⟨fun c => .nat c.toNat⟩
+instance : ToDep String := ⟨.str⟩
+instance [ToDep α] : ToDep (Option α) := ⟨fun o => .opt (o.map toDep)⟩
+instance [ToDep α] [ToDep β] : ToDep (α × β) := ⟨fun (a, b) => .pair (toDep a) (toDep b)⟩
+instance [ToDep α] : ToDep (List α) := ⟨fun xs => .list (xs.map toDep)⟩
+instance [ToDep α] : ToDep (Array α) := ⟨fun xs => .list (xs.toList.map toDep)⟩
+
+/-- A view. -/
 inductive Html (Msg : Type) where
   | text (s : String)
   | elem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids : Array (Html Msg))
-  | lazy (deps : UInt64) (render : Unit → Html Msg)
+  /-- A subtree rendered only when needed: while `deps` equals the mounted subtree's, both its
+  rendering and its diff are skipped, handlers included. So `render` must be determined by
+  `deps`, including the messages its handlers send. `key` is its reconciliation key among
+  siblings, since that cannot be read off the subtree without rendering it. -/
+  | lazy (key : Option String) (deps : Dep) (render : Unit → Html Msg)
 
 instance : Inhabited (Html Msg) := ⟨.text ""⟩
 
@@ -103,17 +143,18 @@ namespace Html
 /-- The reconciliation key of a node, if it has one. -/
 def key? : Html Msg → Option String
   | .elem _ _ attrs _ => attrs.findSome? fun | .key k => some k | _ => none
+  | .lazy k _ _ => k
   | _ => none
 
 /-- Change the message type of a view, for composing components. -/
 partial def map (f : α → β) : Html α → Html β
   | .text s => .text s
   | .elem ns tag attrs kids => .elem ns tag (attrs.map (Attr.map f)) (kids.map (map f))
-  | .lazy deps r => .lazy deps fun _ => map f (r ())
+  | .lazy k deps r => .lazy k deps fun _ => map f (r ())
 
 /-- Force `lazy` nodes (used where a concrete tree is needed, e.g. server rendering). -/
 partial def force : Html Msg → Html Msg
-  | .lazy _ r => force (r ())
+  | .lazy _ _ r => force (r ())
   | h => h
 
 end Html
@@ -127,7 +168,18 @@ end Html
   .elem .svg tag attrs kids
 @[inline] def mathml (tag : String) (attrs : Array (Attr Msg) := #[]) (kids : Array (Html Msg) := #[]) : Html Msg :=
   .elem .mathml tag attrs kids
-@[inline] def lazy (deps : UInt64) (render : Unit → Html Msg) : Html Msg := .lazy deps render
+/-- A lazy subtree: `render` runs, and is diffed, only when `deps` differs from last time. -/
+@[inline] def lazy [ToDep α] (deps : α) (render : Unit → Html Msg) : Html Msg :=
+  .lazy none (toDep deps) render
+/-- `memo a f` shows `f a`, recomputing it only when `a` changes. -/
+@[inline] def memo [ToDep α] (a : α) (f : α → Html Msg) : Html Msg :=
+  .lazy none (toDep a) fun _ => f a
+/-- Give a node a reconciliation key among its siblings (lazy nodes included; text cannot be
+keyed). -/
+def keyed (k : String) : Html Msg → Html Msg
+  | .elem ns tag attrs kids => .elem ns tag (#[.key k] ++ attrs.filter fun | .key _ => false | _ => true) kids
+  | .lazy _ d r => .lazy (some k) d r
+  | h => h
 
 namespace Attr
 @[inline] def cls (c : String) : Attr Msg := .attr "class" c

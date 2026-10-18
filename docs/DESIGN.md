@@ -18,7 +18,10 @@ the codebase is built against. It was written on 2026-10-18 from the research in
                                                                       effects, hydration
 ```
 
-- **View** (`LeanUI.Html`): `Html Msg` = text | elem (ns, tag, attrs, kids) | lazy (deps, thunk).
+- **View** (`LeanUI.Html`): `Html Msg` = text | elem (ns, tag, attrs, kids) |
+  lazy (key?, deps : Dep, thunk). `Dep` is a closed, exactly compared value (`ToDep` builds one
+  from naturals, strings, booleans, options, pairs, lists), never a hash; a lazy node carries its
+  own key so keyed lists of lazy rows reconcile without rendering them (`keyed k h`).
   Attributes: `.attr` (setAttribute), `.prop` (DOM property), `.on event handler`, `.key`.
   A `Handler` says which part of the event the browser extracts (`Payload`) and decodes that
   string to `Option Msg`.
@@ -27,8 +30,12 @@ the codebase is built against. It was written on 2026-10-18 from the research in
   session (`INTERN` is emitted before the command that first uses a name).
 - **Diff** (`LeanUI.Diff`): pure `StateM`. Positional children unless every child on both sides
   has a unique key; keyed children trim prefix/suffix and use `LeanUI.Keyed.plan` (LIS stable
-  set), applied right to left. `lazy` skipped while `deps` is unchanged. Hydration mode mounts
-  without creating (claims pre-order nodes).
+  set), applied right to left. `lazy` skipped (not rendered, not diffed, handlers kept) while
+  key and `deps` are equal. Before any monadic work, a pure fuel-bounded check (`sameF`, at most
+  `sameBudget` nodes per call) recognises subtrees that need no command; they keep the *same*
+  mounted node and only have their listener slots re-pointed (`rebind`), runs of such siblings in
+  one state update. The bound keeps total re-checking linear. Hydration mode mounts without
+  creating (claims pre-order nodes).
 - **Runtime** (`LeanUI.App`): `start p host flags selector hydrate : IO Instance`. State lives in
   a ref created in `start` and is taken out (unique) for each step; never in an `initialize`d
   global (persistent refs mark contents multi-threaded; MT objects are never exclusive, so every
