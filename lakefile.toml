@@ -2,7 +2,8 @@ name = "leanui"
 version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
-  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests"]
+  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests",
+  "leanui-editor-tests"]
 
 # The runtime core every app links.
 [[lean_lib]]
@@ -41,7 +42,9 @@ roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness", "LeanUI.Testing.Gen"]
 [[lean_lib]]
 name = "Examples"
 srcDir = "examples"
-roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp", "Pixels", "PixelsApp"]
+roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp", "Pixels", "PixelsApp",
+  "Editor.Image", "Editor.Adjust", "Editor.Filter", "Editor.Geometry", "Editor.Composite", "Editor.Paint", "Editor.Png", "Editor.Core",
+  "Editor.Doc", "Editor.Ops", "Editor", "EditorApp"]
 
 [[lean_exe]]
 name = "leanui-tests"
@@ -89,3 +92,12 @@ root = "SiteServer"
 [[lean_exe]]
 name = "leanui-notes-tests"
 root = "tests.Notes"
+
+# The photo editor's image-processing core (examples/Editor): tests, and a native benchmark.
+[[lean_exe]]
+name = "leanui-editor-tests"
+root = "tests.Editor"
+
+[[lean_exe]]
+name = "leanui-editor-perf"
+root = "tests.EditorPerf"
