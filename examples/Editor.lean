@@ -125,8 +125,8 @@ structure Model where
   sharpRadius : Nat := 2
   pending : Option Pending := none
   job : Option Job := none
-  /-- Pixels of work per animation frame for jobs; adapted to the frame times. -/
-  budget : Nat := 1500000
+  /-- Work units per animation frame for jobs (`Job.cost`), adapted to the frame times. -/
+  budget : Nat := 500000
   lastFrame : Float := 0
   /-- `none`: fit to the window. -/
   zoom : Option Float := none
@@ -220,6 +220,16 @@ def Pending.op (m : Model) : Pending → Op
   | .blur => .blur m.blurRadius
   | .sharpen => .sharpen m.sharpAmount m.sharpRadius
 
+/-- The histogram of the canvas from every fourth row: the panel shows its shape (each group
+scaled to its peak), and the canvas changes on every slider input. -/
+def previewHistogram (img : Image) : Array Nat := Id.run do
+  let mut t : Array UInt32 := Array.replicate 1024 0
+  let mut y := 0
+  while y < img.height do
+    t := histogramRows img y (y + 1) t
+    y := y + 4
+  return t.map (·.toNat)
+
 def bitmap (i : Image) : Bitmap := { width := i.width, height := i.height, data := i.data }
 
 def showCanvas (m : Model) : Cmd Msg := .drawBitmap "#canvas" (bitmap m.comp)
@@ -237,7 +247,7 @@ def recomposite (m : Model) : Model :=
       | some p => (d.layerIndex? m.active).map fun i => (i, (p.op m).preview d.scale d.layers[i]!.preview)
       | none => none
     let comp := d.composite swap
-    { m with comp, compVersion := m.compVersion + 1, hist := histogram comp }
+    { m with comp, compVersion := m.compVersion + 1, hist := previewHistogram comp }
 
 def refresh (m : Model) : Model × Cmd Msg :=
   let m := recomposite m
@@ -374,7 +384,7 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       | some d =>
         let label := if m.tool == .eraser then "Eraser" else "Brush"
         let m := push m label (d.width * d.height * 4)
-        ({ m with hist := histogram m.comp, compVersion := m.compVersion + 1 }, .none)
+        ({ m with hist := previewHistogram m.comp, compVersion := m.compVersion + 1 }, .none)
       | none => (m, .none)
     else ({ m with drag := none, cropFrom := none }, .none)
   | .wheel p =>
@@ -401,11 +411,13 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match job? with
     | none => (m, .none)
     | some job =>
-      -- adapt the slice to the frame time: about 25 ms of work per frame
+      -- adapt the slice to the frame time, in proportion: about 25 ms between frames (the
+      -- browser's own frame work included), the change limited to 4x either way per frame
       let gap := t - m.lastFrame
-      let budget := if m.lastFrame == 0 then m.budget
-        else if gap > 40 then max 100000 (m.budget * 2 / 3)
-        else if gap < 24 then min 50000000 (m.budget * 5 / 4) else m.budget
+      let budget := if m.lastFrame == 0 || gap ≤ 0 then m.budget
+        else
+          let b := (Float.ofNat m.budget * 25 / gap).toUInt64.toNat
+          max 50000 (min 100000000 (max (m.budget / 4) (min (m.budget * 4) b)))
       let job := job.run budget
       match job.finished? with
       | none => ({ m with job := some job, budget, lastFrame := t }, .nextFrame .frame)
