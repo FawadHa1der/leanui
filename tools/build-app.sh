@@ -18,6 +18,8 @@ L="${LEAN_BIN:-$HOME/.elan/toolchains/leanprover--lean4---v4.34.0/bin}"
 TC="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}/wasm64"; [ -f "$TC/lib/libInit.a" ] || { echo "run toolchain/build-archives.sh first" >&2; exit 2; }
 OUT="$ROOT/dist/$NAME"; WORK="$ROOT/.lake/wasm/$NAME"
 rm -rf "$WORK" && mkdir -p "$WORK/obj" "$OUT"
+# precompressed siblings of an earlier build (leanui build --compress) would be served instead
+rm -f "$OUT"/{app.wasm,app.js,leanui.js}.{br,gz}
 ( cd "$ROOT" && "$L/lake" build "$MOD" 2>&1 | { grep -E "error|warning: " -A3 || true; } | head -40 )
 IR="$ROOT/.lake/build/ir"
 APPC="$IR/$(echo "$MOD" | tr '.' '/').c"; [ -f "$APPC" ] || { echo "no C for $MOD at $APPC (did lake build fail?)" >&2; exit 3; }
@@ -48,7 +50,7 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
   W=/proj/.lake/wasm/$NAME
   cc1() { f=\$1; o=\$W/obj/\$(echo \$f | md5sum | cut -c1-12).o; emcc $OPT $CG -I /tc/wasm64/include -c \$f -o \$o && echo \$o; }
   export -f cc1; export W
-  cat \$W/fw.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/fw.objs
+  cat \$W/fw.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' | sort > \$W/fw.objs
   cat \$W/app.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/app.objs
   emcc $OPT $CG -I /tc/wasm64/include -c /proj/runtime/leanui_wasm.c -o \$W/obj/shim.o
   emcc $OPT $CG -I /tc/wasm64/include -c \$W/leanui_init.c -o \$W/obj/init.o

@@ -167,12 +167,8 @@ def buildCmd (mod : String) (name : Option String) (debug : Bool) (compress : Bo
   if code != 0 then
     IO.eprintln s!"[leanui] build failed (exit {code})"; return code
   IO.println s!"[leanui] built dist/{name}/ in {dt / 1000}.{(dt % 1000) / 100}s; try: leanui serve {root / "dist" / name}"
+  -- (build-app.sh removes the precompressed siblings of an earlier build)
   if compress then return ← compressBuild (root / "dist" / name)
-  -- stale siblings would be served instead of the new build
-  for f in compressible do
-    for ext in [".br", ".gz"] do
-      let p : System.FilePath := (root / "dist" / name / f).toString ++ ext
-      if ← p.pathExists then IO.FS.removeFile p
   return 0
 
 /-! ## new -/
