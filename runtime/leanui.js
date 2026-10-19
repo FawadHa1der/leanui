@@ -102,7 +102,9 @@
           case 3: {
             // On an HTML element, `className = v` is the same attribute write as
             // setAttribute("class", v), and cheaper (no name to look up): 7-9% of applying a
-            // create-1,000-rows buffer (tests/browser/apply-bench.mjs)
+            // create-1,000-rows buffer before templates (tests/browser/apply-bench.mjs). A CLONE's
+            // copy brings its template's classes, so it now pays on subtrees mounted node by node,
+            // a copy whose class differs from its template's, and class changes.
             const h = w[i + 1], nm = w[i + 2], v = S(i + 3);
             if (isClass[nm] === true && K[h] === 0) N[h].className = v; else N[h].setAttribute(names[nm], v);
             i += 5; break;

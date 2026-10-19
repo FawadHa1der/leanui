@@ -12,7 +12,7 @@ page says what the wasm64 side is built from, why it is single-threaded, and how
 | `libleanui.a` | every LeanUI module except tests, CLI, `Testing`, `Server` | archived per app, so the linker keeps only what the app reaches |
 | the app module | `lake build <Module>`'s C | the one object linked directly |
 | `runtime/leanui_wasm.c` | the C shim | `leanui_boot`, `leanui_event`, `leanui_callback`, and the flush import |
-| `runtime/leanui.js` | the browser runtime | dependency-free, about 4 KB brotli |
+| `runtime/leanui.js` | the browser runtime | dependency-free, about 6 KB brotli |
 
 Compile flags for every object: `-O3 -m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1
 -D LEAN_EMSCRIPTEN`. Link: `-sMALLOC=dlmalloc -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16MiB

@@ -166,8 +166,9 @@ of a history matters (`select`, `textarea`, `option`, media and resource element
 repeats an attribute name), so a copy never re-sets an attribute there. The second subtree of a
 shape becomes the template, later ones are clones; shapes are compared exactly, never by hash
 alone. Candidates are the children a patch mounts and, in a new subtree, children with a
-neighbouring sibling of the same tag (list rows). `LeanUI/Testing/Dom.lean` models both commands
-(the model's copy carries attributes and texts, not properties).
+neighbouring sibling of their kind: the same tag, or both lazy (list rows; for a lazy child, the
+subtree it renders). `LeanUI/Testing/Dom.lean` models both commands (the model's copy carries
+attributes and texts, not properties).
 
 What a copy can still do differently from a mount: a custom element's callbacks run in another
 order (its attributes arrive while it is copied, before its children), and a property on a leaf

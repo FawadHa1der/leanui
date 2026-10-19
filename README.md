@@ -32,7 +32,7 @@ def program : Program Int Msg where
 
 | | |
 |---|---|
-| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, delegated events with browser-extracted payloads, commands (fetch, timers, storage, history, focus, title, animation frames) and subscriptions, all as commands in one buffer per update |
+| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, repeated subtrees created by cloning DOM templates, delegated events with browser-extracted payloads, commands (fetch, timers, storage, history, focus, title, animation frames) and subscriptions, all as commands in one buffer per update |
 | **Templates** (`LeanUI.Syntax`, [docs/SYNTAX.md](docs/SYNTAX.md)) | JSX-style syntax with components, fragments, conditional children, class/style parts, SVG and MathML namespaces, precise compile errors; the generated C equals the hand-written view's |
 | **Kit** (`LeanUI.Json`, `LeanUI.Router`) | JSON on `Init` alone with exact numbers and `deriving ToJson, FromJson`; typed bidirectional routes (path or fragment) whose links cannot drift from the parser |
 | **Server** (`LeanUI.Server`) | a native `Std.Http` server: static files, server-side rendering with hydration, server-driven sessions, the `leanui` command (`serve`, `build`, `new`) |
@@ -51,7 +51,7 @@ flowchart LR
   app -->|"lake"| c["C code"]
   c -->|"Emscripten, in Docker,<br/>at build time"| wasm["app.wasm + app.js<br/>the app as wasm64"]
   app -->|"lake, native"| server["Server binary<br/>optional"]
-  rt["runtime/leanui.js<br/>about 5 KB, the same for every app"]
+  rt["runtime/leanui.js<br/>about 6 KB, the same for every app"]
   wasm --> browser(("Browser"))
   rt --> browser
   server -.->|"serves pages and files"| browser
@@ -84,7 +84,7 @@ sequenceDiagram
       J->>W: leanui_event(listener slot, payload)
       W->>W: update, view, diff
       W-->>J: command buffer, read in place from wasm memory
-      J->>B: DOM calls: create, set attribute, insert, remove
+      J->>B: DOM calls: create or clone, set attribute, insert, remove
       opt the update asked for an effect, such as fetch
         J->>S: GET /data/benchmarks.json
         S-->>J: response
@@ -121,25 +121,25 @@ memory, startup and the profiles.
 
 | operation | Chromium 151 (script + render) | Chrome 155 (script + layout) | Firefox 158 (script + layout) |
 |---|--:|--:|--:|
-| create 1,000 rows | 1.27× | 1.28× | 1.54× |
-| replace all 1,000 rows | 1.42× | 1.47× | 1.89× |
-| update every 10th of 1,000 rows | 1.21× | 1.30× | 1.75× |
-| highlight a row (of 1,000) | 1.46× | 8.00× | 3.00× |
-| swap 2 of 1,000 rows | 1.17× | 1.35× | 1.30× |
-| remove one of 1,000 rows | 1.11× | 1.30× | 1.11× |
-| create 10,000 rows | 1.45× | 1.31× | 1.52× |
-| append 1,000 rows to 1,000 | 1.34× | 1.34× | 1.81× |
-| clear 1,000 rows | 1.65× | 1.72× | 1.53× |
-| **geometric mean** | **1.33×** | **1.68×** | **1.66×** |
+| create 1,000 rows | 1.10× | 1.03× | 1.15× |
+| replace all 1,000 rows | 1.18× | 1.17× | 1.49× |
+| update every 10th of 1,000 rows | 1.19× | 1.35× | 1.27× |
+| highlight a row (of 1,000) | 1.35× | 5.00× | 5.70× |
+| swap 2 of 1,000 rows | 1.14× | 1.25× | 1.17× |
+| remove one of 1,000 rows | 1.07× | 1.26× | 1.12× |
+| create 10,000 rows | 1.18× | 1.11× | 1.17× |
+| append 1,000 rows to 1,000 | 1.21× | 1.18× | 1.36× |
+| clear 1,000 rows | 1.33× | 1.47× | 1.50× |
+| **geometric mean** | **1.19×** | **1.43×** | **1.50×** |
 
 Chrome's `performance.now()` has 0.1 ms steps on pages without cross-origin isolation, so its
-"highlight a row" cell (LeanUI 0.8 ms, vanilla rounding to 0.1 ms) mostly measures resolution;
-without it Chrome's mean is 1.38×, and the traced Chromium column (microsecond timestamps)
-gives 1.46× for that operation.
+"highlight a row" cell (LeanUI 0.5 ms, vanilla rounding to 0.1 ms) mostly measures resolution;
+without it Chrome's mean is 1.22×, and the traced Chromium column (microsecond timestamps)
+gives 1.35× for that operation.
 
-Natively, Lean selects a row in 0.12 ms (update, view, diff and encoding) and re-renders 1,000
-unchanged rows in 0.06 ms. The benchmark app is ready about 25 ms after navigation in Chromium
-and weighs 155 KB with brotli (wasm, glue and runtime).
+Natively, Lean selects a row in 0.08 ms and creates 1,000 rows in 0.63 ms (update, view, diff
+and encoding). The benchmark app is ready about 25 ms after navigation in Chromium and weighs
+168 KB with brotli (wasm, glue and runtime).
 
 ## Writing apps
 

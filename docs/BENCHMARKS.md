@@ -5,28 +5,33 @@ keyed operations, against a hand-written vanilla JavaScript implementation, in C
 traces), in release Chrome and Firefox, and natively. This page gives the results, the method,
 and what was learned getting there.
 
-Measured at commit `9a4c9c6` (2026-10-18). All numbers: an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26, headless
-browsers, medians. Each browser measurement loads a fresh page, does the operation's warm-up
-clicks, busy-waits 30 ms (so the click does not land on an efficiency core; see below) and times
-one click.
+Measured at commit `93b8470` (2026-10-18); sections that compare two builds name the build they
+compare against. All numbers: an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26,
+headless browsers, medians. Each browser measurement loads a fresh page, does the operation's
+warm-up clicks, busy-waits 30 ms (so the click does not land on an efficiency core; see below)
+and times one click.
 
 ## Summary
 
-- **Against hand-written JavaScript**, LeanUI's keyed-suite CPU time is **1.33×** vanilla's in
-  Chromium (geometric mean over the nine operations, script and rendering), **1.68×** in
-  release Chrome (1.38× without "highlight a row", a 0.8 ms operation that Chrome's 0.1 ms timer
-  steps distort) and **1.66×** in release Firefox (script and layout). Rendering work is the
-  same for both (identical DOM); the difference is script: Lean's update, view and diff in wasm,
-  and applying the command buffer.
-- **Natively**, selecting a row costs Lean 0.12 ms (update, view, diff, encoding), and
-  re-rendering 1,000 unchanged rows 0.06 ms.
+- **Against hand-written JavaScript**, LeanUI's keyed-suite CPU time is **1.19×** vanilla's in
+  Chromium (geometric mean over the nine operations, script and rendering), **1.43×** in
+  release Chrome (1.22× without "highlight a row", a 0.5 ms operation that Chrome's 0.1 ms timer
+  steps distort) and **1.50×** in release Firefox (script and layout). Rendering work is about
+  the same for both (identical DOM; creating 10,000 rows renders 9% longer for LeanUI); the
+  difference is script: Lean's update, view and diff in wasm, and applying the command buffer.
+- **The create path** (template cloning, cheaper encoding, a faster applier, fewer allocations;
+  `3db6ac9` → `93b8470`) took creating 1,000 rows from 7.10 to 3.81 ms of script in Chromium and
+  from 1.90 to 0.63 ms natively; no operation got slower in the Chromium A/B, and release Firefox's
+  small clicks moved within its timer noise (see "The create path").
+- **Natively**, selecting a row costs Lean 0.08 ms (update, view, diff, encoding), and creating
+  1,000 rows 0.63 ms.
 - **Memory**: 16 MB of wasm memory at load,
-  34.13 MB after creating 10,000 rows (wasm memory never shrinks);
-  the JavaScript heap stays within 2.5 MB of vanilla's.
-- **Startup**: ready 25.3 ms after navigation (vanilla
-  4.8 ms), of which 20.2 ms is
+  27.75 MB after creating 10,000 rows (wasm memory never shrinks);
+  the JavaScript heap stays within 3.01 MB of vanilla's.
+- **Startup**: ready 25 ms after navigation (vanilla
+  4.7 ms), of which 20.3 ms is
   compiling and instantiating the wasm, initializing Lean and the first render;
-  154.6 KB over the wire with brotli.
+  168.36 KB over the wire with brotli.
 
 ## Results
 
@@ -34,124 +39,207 @@ one click.
 
 | operation | LeanUI total | script | render | vanilla total | script | render | LeanUI ÷ vanilla |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| create 1,000 rows | 22.61 ms | 7.21 | 15.57 | 17.83 ms | 1.87 | 15.95 | **1.27×** |
-| replace all 1,000 rows | 26.70 ms | 10.59 | 16.02 | 18.79 ms | 3.48 | 15.44 | **1.42×** |
-| update every 10th of 1,000 rows | 3.66 ms | 0.98 | 2.68 | 3.03 ms | 0.10 | 2.93 | **1.21×** |
-| highlight a row (of 1,000) | 1.14 ms | 0.40 | 0.72 | 0.78 ms | 0.03 | 0.75 | **1.46×** |
-| swap 2 of 1,000 rows | 4.16 ms | 0.87 | 3.29 | 3.56 ms | 0.05 | 3.50 | **1.17×** |
-| remove one of 1,000 rows | 4.64 ms | 0.55 | 4.10 | 4.18 ms | 0.05 | 4.13 | **1.11×** |
-| create 10,000 rows | 242.58 ms | 64.52 | 177.91 | 166.83 ms | 17.47 | 149.20 | **1.45×** |
-| append 1,000 rows to 1,000 | 25.42 ms | 8.18 | 17.26 | 18.96 ms | 1.74 | 17.26 | **1.34×** |
-| clear 1,000 rows | 3.24 ms | 2.99 | 0.24 | 1.96 ms | 1.72 | 0.24 | **1.65×** |
+| create 1,000 rows | 19.67 ms | 3.77 | 15.88 | 17.84 ms | 1.90 | 15.93 | **1.10×** |
+| replace all 1,000 rows | 21.62 ms | 6.46 | 15.16 | 18.30 ms | 3.26 | 15.06 | **1.18×** |
+| update every 10th of 1,000 rows | 3.29 ms | 0.81 | 2.49 | 2.76 ms | 0.08 | 2.68 | **1.19×** |
+| highlight a row (of 1,000) | 1.00 ms | 0.34 | 0.66 | 0.74 ms | 0.03 | 0.72 | **1.35×** |
+| swap 2 of 1,000 rows | 3.90 ms | 0.78 | 3.12 | 3.42 ms | 0.05 | 3.37 | **1.14×** |
+| remove one of 1,000 rows | 4.56 ms | 0.53 | 4.03 | 4.27 ms | 0.05 | 4.23 | **1.07×** |
+| create 10,000 rows | 186.13 ms | 32.41 | 154.01 | 157.65 ms | 16.82 | 140.83 | **1.18×** |
+| append 1,000 rows to 1,000 | 22.10 ms | 5.77 | 16.35 | 18.24 ms | 1.79 | 16.46 | **1.21×** |
+| clear 1,000 rows | 2.61 ms | 2.41 | 0.20 | 1.96 ms | 1.74 | 0.21 | **1.33×** |
 
-Geometric mean of the ratios: **1.33×**.
+Geometric mean of the ratios: **1.19×**.
 
 ### Firefox 158 (release, no automation): script and layout per click (median of 9 fresh loads)
 
 | operation | LeanUI layout | script | vanilla layout | script | LeanUI ÷ vanilla |
 |---|--:|--:|--:|--:|--:|
-| create 1,000 rows | 17.00 ms | 8.40 | 11.02 ms | 2.10 | **1.54×** |
-| replace all 1,000 rows | 23.40 ms | 15.52 | 12.36 ms | 4.20 | **1.89×** |
-| update every 10th of 1,000 rows | 3.36 ms | 1.20 | 1.92 ms | 0.12 | **1.75×** |
-| highlight a row (of 1,000) | 0.78 ms | 0.56 | 0.26 ms | 0.06 | **3.00×** |
-| swap 2 of 1,000 rows | 6.18 ms | 1.18 | 4.74 ms | 0.18 | **1.30×** |
-| remove one of 1,000 rows | 5.86 ms | 0.90 | 5.30 ms | 0.16 | **1.11×** |
-| create 10,000 rows | 177.06 ms | 81.56 | 116.12 ms | 24.62 | **1.52×** |
-| append 1,000 rows to 1,000 | 23.42 ms | 11.72 | 12.92 ms | 1.94 | **1.81×** |
-| clear 1,000 rows | 3.94 ms | 3.74 | 2.58 ms | 2.38 | **1.53×** |
+| create 1,000 rows | 14.20 ms | 5.26 | 12.36 ms | 2.46 | **1.15×** |
+| replace all 1,000 rows | 18.26 ms | 10.78 | 12.28 ms | 4.12 | **1.49×** |
+| update every 10th of 1,000 rows | 2.86 ms | 1.08 | 2.26 ms | 0.12 | **1.27×** |
+| highlight a row (of 1,000) | 1.14 ms | 0.84 | 0.20 ms | 0.04 | **5.70×** |
+| swap 2 of 1,000 rows | 6.38 ms | 1.12 | 5.44 ms | 0.10 | **1.17×** |
+| remove one of 1,000 rows | 6.28 ms | 0.74 | 5.62 ms | 0.06 | **1.12×** |
+| create 10,000 rows | 121.14 ms | 39.34 | 103.44 ms | 21.72 | **1.17×** |
+| append 1,000 rows to 1,000 | 16.90 ms | 7.82 | 12.46 ms | 2.10 | **1.36×** |
+| clear 1,000 rows | 3.72 ms | 3.60 | 2.48 ms | 2.34 | **1.50×** |
 
-Geometric mean: **1.66×**. Ready after navigation: LeanUI 25.44 ms, vanilla 2.76 ms.
+Geometric mean: **1.50×**. Ready after navigation: LeanUI 16.54 ms, vanilla 2.2 ms.
 
 ### Chrome 155 (release, no automation): script and layout per click (median of 9 fresh loads)
 
 | operation | LeanUI layout | script | vanilla layout | script | LeanUI ÷ vanilla |
 |---|--:|--:|--:|--:|--:|
-| create 1,000 rows | 18.20 ms | 6.30 | 14.20 ms | 1.80 | **1.28×** |
-| replace all 1,000 rows | 21.20 ms | 9.70 | 14.40 ms | 3.30 | **1.47×** |
-| update every 10th of 1,000 rows | 3.00 ms | 1.20 | 2.30 ms | 0.20 | **1.30×** |
-| highlight a row (of 1,000) | 0.80 ms | 0.60 | 0.10 ms | 0.00 | **8.00×** |
-| swap 2 of 1,000 rows | 2.30 ms | 0.70 | 1.70 ms | 0.00 | **1.35×** |
-| remove one of 1,000 rows | 3.00 ms | 0.70 | 2.30 ms | 0.00 | **1.30×** |
-| create 10,000 rows | 172.70 ms | 57.90 | 131.70 ms | 15.90 | **1.31×** |
-| append 1,000 rows to 1,000 | 20.10 ms | 7.10 | 15.00 ms | 1.70 | **1.34×** |
-| clear 1,000 rows | 3.10 ms | 3.10 | 1.80 ms | 1.80 | **1.72×** |
+| create 1,000 rows | 15.60 ms | 3.50 | 15.20 ms | 1.90 | **1.03×** |
+| replace all 1,000 rows | 16.60 ms | 6.20 | 14.20 ms | 3.20 | **1.17×** |
+| update every 10th of 1,000 rows | 2.30 ms | 0.80 | 1.70 ms | 0.00 | **1.35×** |
+| highlight a row (of 1,000) | 0.50 ms | 0.30 | 0.10 ms | 0.00 | **5.00×** |
+| swap 2 of 1,000 rows | 2.50 ms | 0.80 | 2.00 ms | 0.00 | **1.25×** |
+| remove one of 1,000 rows | 2.40 ms | 0.50 | 1.90 ms | 0.00 | **1.26×** |
+| create 10,000 rows | 132.40 ms | 28.00 | 119.50 ms | 14.70 | **1.11×** |
+| append 1,000 rows to 1,000 | 17.50 ms | 4.40 | 14.80 ms | 1.70 | **1.18×** |
+| clear 1,000 rows | 2.80 ms | 2.70 | 1.90 ms | 1.80 | **1.47×** |
 
-Geometric mean: **1.68×**. Ready after navigation: LeanUI 8.8 ms, vanilla 3.4 ms.
+Geometric mean: **1.43×**. Ready after navigation: LeanUI 8.2 ms, vanilla 2.6 ms.
 
 ### Memory (Chromium, after a full GC)
 
 | after | LeanUI JS heap | LeanUI wasm memory | vanilla JS heap | DOM nodes |
 |---|--:|--:|--:|--:|
-| load | 1.48 MB | 16 MB | 1.06 MB | 47 |
-| creating 1,000 rows | 1.89 MB | 16 MB | 1.24 MB | 11047 |
-| 5 updates of every 10th row | 1.9 MB | 16 MB | 1.26 MB | 11047 |
-| 5 create/clear cycles | 1.6 MB | 16 MB | 1.11 MB | 47 |
-| creating 10,000 rows | 5.12 MB | 34.13 MB | 2.6 MB | 110047 |
+| load | 1.5 MB | 16 MB | 1.06 MB | 47 |
+| creating 1,000 rows | 1.97 MB | 16 MB | 1.24 MB | 11057 |
+| 5 updates of every 10th row | 1.98 MB | 16 MB | 1.26 MB | 11057 |
+| 5 create/clear cycles | 1.68 MB | 16 MB | 1.11 MB | 57 |
+| creating 10,000 rows | 5.61 MB | 27.75 MB | 2.6 MB | 110057 |
+
+DOM nodes are LeanUI's page, as the DevTools protocol counts them. From the first rows on they
+include the runtime's template, a detached copy of one row (10 nodes;
+[`docs/PROTOCOL.md`](PROTOCOL.md), section 7): before templates the same sequences gave 11047,
+47 and 110047 (at `9a4c9c6`). Vanilla's page, whose markup differs, has 76 nodes at load and
+11076 with 1,000 rows.
 
 ### Startup and size (Chromium)
 
 | | LeanUI | vanilla |
 |---|--:|--:|
-| ready after navigation | 25.3 ms | 4.8 ms |
-| of which wasm instantiation + Lean init + first render | 20.2 ms | |
-| transferred (uncompressed) | 1087.6 KB | 5.94 KB |
-| brotli | 154.6 KB | 2.06 KB |
+| ready after navigation | 25 ms | 4.7 ms |
+| of which wasm instantiation + Lean init + first render | 20.3 ms | |
+| transferred (uncompressed) | 1220.33 KB | 5.94 KB |
+| brotli | 168.36 KB | 2.06 KB |
 
 ### Native Lean (update, view, diff, encoding; no DOM)
 
 | operation | lazy rows | eager rows | command words |
 |---|--:|--:|--:|
-| create 1,000 rows | 1.99 ms | 1.97 ms | 122000 |
-| replace all 1,000 rows | 2.63 ms | 2.69 ms | 144999 |
-| update every 10th of 1,000 rows | 0.26 ms | 0.68 ms | 400 |
-| highlight a row (of 1,000) | 0.12 ms | 0.55 ms | 8 |
-| swap 2 of 1,000 rows | 0.32 ms | 0.82 ms | 8 |
-| remove one of 1,000 rows | 0.21 ms | 0.71 ms | 22 |
-| create 10,000 rows | 20.40 ms | 20.05 ms | 1220000 |
-| append 1,000 rows to 1,000 | 2.30 ms | 2.72 ms | 122999 |
-| clear 1,000 rows | 0.49 ms | 0.47 ms | 22000 |
+| create 1,000 rows | 0.63 ms | 0.63 ms | 36000 |
+| replace all 1,000 rows | 1.03 ms | 1.02 ms | 58999 |
+| update every 10th of 1,000 rows | 0.19 ms | 0.51 ms | 400 |
+| highlight a row (of 1,000) | 0.08 ms | 0.45 ms | 8 |
+| swap 2 of 1,000 rows | 0.24 ms | 0.61 ms | 8 |
+| remove one of 1,000 rows | 0.14 ms | 0.52 ms | 22 |
+| create 10,000 rows | 6.76 ms | 6.71 ms | 359996 |
+| append 1,000 rows to 1,000 | 0.82 ms | 1.14 ms | 36999 |
+| clear 1,000 rows | 0.28 ms | 0.26 ms | 22000 |
+
+Each time is the median of seven runs of `leanui-perf`.
+
+## The create path
+
+Four pieces of work on creating rows landed between `3db6ac9` and `93b8470`: template cloning
+("What template cloning changed" below), cheaper encoding (inline C stores, allocation-free
+interning: "What made encoding cheap"), a faster applier (`className` for an HTML `class`, one
+`replaceChildren()` per emptied list: "The runtime alone"), and fewer allocations (`keyedLazy`,
+shared constants, state-passing mount, clone and release: "Allocations"). Measured A/B, the two
+commits in one quiet session. Native: median of seven alternating runs of `leanui-perf`, lazy
+rows. Chromium 151 traced, LeanUI only: three alternating rounds of nine fresh loads, the median
+of the three rounds' medians.
+
+| operation | native before | after | Chromium script before | after | Chromium total before | after |
+|---|--:|--:|--:|--:|--:|--:|
+| create 1,000 rows | 1.899 ms | 0.632 ms (−67%) | 7.10 ms | 3.81 ms (−46%) | 22.52 ms | 19.59 ms (−13%) |
+| replace all 1,000 rows | 2.607 | 1.026 (−61%) | 9.95 | 6.26 (−37%) | 24.84 | 21.17 (−15%) |
+| update every 10th of 1,000 rows | 0.235 | 0.191 (−19%) | 0.83 | 0.79 (−5%) | 3.33 | 3.30 (−1%) |
+| highlight a row (of 1,000) | 0.117 | 0.080 (−32%) | 0.38 | 0.36 (−5%) | 1.05 | 1.04 (−1%) |
+| swap 2 of 1,000 rows | 0.326 | 0.240 (−26%) | 0.86 | 0.79 (−8%) | 3.99 | 3.93 (−2%) |
+| remove one of 1,000 rows | 0.207 | 0.144 (−31%) | 0.57 | 0.52 (−9%) | 4.64 | 4.56 (−2%) |
+| create 10,000 rows | 19.826 | 6.764 (−66%) | 59.76 | 32.70 (−45%) | 229.32 | 188.17 (−18%) |
+| append 1,000 rows to 1,000 | 2.190 | 0.823 (−62%) | 7.74 | 5.89 (−24%) | 23.84 | 22.35 (−6%) |
+| clear 1,000 rows | 0.492 | 0.285 (−42%) | 2.93 | 2.44 (−17%) | 3.15 | 2.65 (−16%) |
+
+A created row now writes about 36 command words instead of 122: create 1,000 rows 122,000 →
+36,000, replace 144,999 → 58,999, create 10,000 rows 1,220,000 → 359,996, append 122,999 →
+36,999; the other operations write as many words as before. Natively, eager rows gain as much
+on create and replace (create 1,000 rows 1.889 → 0.628 ms), 55% on append and 9 to 15% on the
+small updates. Rendering is unchanged within ±2.1% except for create 10,000 rows (169.21 →
+155.28 ms, −8.2%), so in total CPU time creating and replacing rows gain 13 to 18%, append 6%,
+clear 16%.
+
+Select and update every 10th did not get slower: their script went from 0.38 to 0.36 ms and from
+0.83 to 0.79 ms, and natively they take 32% and 19% less. The 8–14% and 2–6% higher fresh-page
+figures measured during the state-passing work ("State passing in mount, clone and release")
+were against `492772a`, which already had templates, the encoding and applier work and most of
+the allocation work; "Heap history" explains why such a click moves on a fresh page when its own
+code does not change.
+
+In release Firefox 158 (selfbench, LeanUI only, three alternating rounds of fifteen fresh loads,
+the median of the rounds' medians), the small clicks moved within the noise of its timer: select
+0.72 → 0.80 ms script (rounds 0.60–0.74 against 0.68–0.86), update every 10th 1.28 → 1.22, swap
+1.26 → 1.18. The Results table's Firefox "highlight a row" (1.14 ms with layout) is higher than
+at `9a4c9c6` (0.78 ms) mostly between sessions: in this A/B the `3db6ac9` build itself measured
+0.94 ms with layout, the final one 1.06 (raw: `work/bench/final3/ff-*.json`).
 
 ## Where LeanUI's time goes
 
 Sampled CPU profiles of the synchronous click in Chromium, on a build with function names
-(`tools/build-app.sh BenchApp bench-prof --debug`, `tests/browser/profile.mjs`):
+(`tools/build-app.sh BenchApp bench-prof --debug`, `tests/browser/profile.mjs`; the create
+profile also samples the clear that precedes each click):
 
-| | create 1,000 rows (6.7 ms per click) | select a row (0.22 ms per click) |
+| | create 1,000 rows (3.72 ms per click) | select a row (0.18 ms per click) |
 |---|--:|--:|
-| Lean, in wasm | 59% | 76% |
-| the browser's DOM work | 25% | 4% |
-| LeanUI's JavaScript runtime (applying commands, events) | 8% | 1.5% |
-| other (engine, GC) | 8% | 18% |
+| Lean, in wasm | 48% | 74% |
+| the browser's DOM work | 24% | 2% |
+| LeanUI's JavaScript runtime (applying commands, events) | 15% | 3% |
+| other (engine, GC) | 13% | 21% |
 
-- **Creating rows** costs most in the DOM calls themselves (`appendChild` 9%, `setAttribute` 6%,
-  `createElement` 5%), in `mount` (8.5%), in writing the command buffer a byte at a time
-  (`lean_byte_array_push`, 7.5%), and in the allocator (14%, part of it freeing the previous rows
-  during the setup's clear). The hand-written reference clones a template row instead of
-  creating its ten nodes one by one, which is most of its advantage on this operation.
-- **Small updates** are dominated by allocation: building the new view (one lazy node, its
-  closure, its key and its dependencies per row: four small objects, the closure and the key's
-  string) and freeing the old one is about a quarter of the time (`malloc`/`free`), followed by
-  `patchNode`, comparing dependencies and the pure check. The DOM work is a few percent.
+- **Creating rows** costs most in copying the template (`cloneNode`, 16.5%) and attaching the
+  copies (`appendChild`, 4.3%), in the runtime's walk that binds each copy's handles (`clone`,
+  8.3%) and its dispatch loop (`apply`, 4.6%), in Lean's side of the clone (`cloneWalk` 5.7%,
+  `TplShape.matches` 4.6%, which checks that a row has the template's shape, `cloneAttrs` 2.2%),
+  and in the allocator (`free` 6.0%, `lean_dec_ref_cold` 3.7%, `malloc` 3.6%; part of it, with
+  `freeNodeS` 2.9% and `releaseS` 2.0%, frees the previous rows during the setup's clear, as does
+  that clear's `replaceChildren`, 3.2%). `createElement` and `setAttribute` are no longer among
+  the top functions (none of them takes more than 0.2%).
+- **Small updates** are dominated by allocation: building the new view (per row, the keyed lazy
+  node, its key and its dependencies; a select allocates 4,107 small objects in all, 6,054 times
+  in wasm) and freeing the old one is about a quarter of the time (`free` 10.9%,
+  `lean_dec_ref_cold` 7.6%, `malloc` 5.7%), followed by `patchNode` (7.4%), the view itself
+  (`Bench.view`, 5.6%), comparing (`sameF` 3.8%, `Dep` equality 3.0%) and the cached sizes
+  (`Node.size`, 3.7%). The DOM work is 2%.
 - **The runtime alone** ([`tests/browser/apply-bench.mjs`](../tests/browser/apply-bench.mjs)
-  replays the app's recorded buffers through `Runtime.apply`, with no Lean): applying the
-  create-1,000-rows buffer (30,000 commands) costs about 2.2–2.4 ms in Chromium 151 and
-  3.4–3.5 ms in Playwright's Firefox, three quarters of it in the DOM calls themselves (Chromium:
-  `appendChild` about a third, the class writes a fifth, `createElement` a sixth); the dispatch
-  loop runs at 2–5 ns per command once optimized. Two changes took about a tenth off it: on a hot
-  page in Chromium, 2.38 → 2.18 and 2.55 → 2.28 ms in two sessions (ratios 0.92 and 0.89); in
-  Playwright's Firefox, on fresh pages, 3.66–3.76 → 3.38–3.52 ms (0.92–0.94). On fresh pages in
-  Chromium the old runtime's figure depends on the session (2.4 or 2.9 ms, see "The JIT state of a
-  fresh page" below), so the fresh ratio ranged from 0.80 to 0.91. Writing `class` through
-  `className` saved 7–9% of the apply, folding a list's removals into one `replaceChildren()`
-  4–5% of a clear's. End to end in traced Chromium, the create-1,000-rows click's script went down
-  2–7% (7.1 → 6.6, 6.9 → 6.5 and 6.6 → 6.5 ms in three sessions), replace 3–4%, clear 2–4%,
-  append unchanged; release Firefox within noise. Caching attribute strings, cloning elements
-  from a per-tag prototype (within noise in Chromium, 2–4% in Firefox), building rows in a
-  `DocumentFragment` and skipping repeated `delegate` calls did not pay.
-- **Next steps** this suggests: writing the command buffer a word at a time (done since: see
-  "What made encoding cheap"); cloning static subtrees from templates (the template syntax
-  knows which parts of a view are static); avoiding the per-row view allocation altogether for
-  rows whose model did not change.
+  replays the app's recorded buffers through `Runtime.apply`, with no Lean): the
+  create-1,000-rows buffer is 6,000 commands (`CLONE` 1,000, `SET_TEXT` 2,000, `SET_LISTENER`
+  2,000, `APPEND_CHILD` 1,000; 36,000 words), and applying it on a fresh page costs 1.745 ms in
+  Chromium 151 and 2.260 ms in Playwright's Firefox (median of 25; create 10,000 rows 15.985 and
+  24.060 ms, clear 1,000 rows 1.225 and 2.820 ms). Before templates, when that buffer was 30,000
+  commands, it cost 2.2–2.4 ms in Chromium 151 and 3.4–3.5 ms in Playwright's Firefox, three
+  quarters of it in the DOM calls themselves (Chromium: `appendChild` about a third, the class
+  writes a fifth, `createElement` a sixth), and the dispatch loop ran at 2–5 ns per command once
+  optimized. On that buffer (the applier work, against `0a415c1`), two changes took about a
+  tenth off the apply: on a hot page in Chromium, 2.38 → 2.18 and 2.55 → 2.28 ms in two sessions
+  (ratios 0.92 and 0.89); in Playwright's Firefox, on fresh pages, 3.66–3.76 → 3.38–3.52 ms
+  (0.92–0.94). On fresh pages in Chromium the old runtime's figure depends on the session (2.4 or
+  2.9 ms, see "The JIT state of a fresh page" below), so the fresh ratio ranged from 0.80 to
+  0.91. Writing `class` through `className` saved 7–9% of that apply, folding a list's removals
+  into one `replaceChildren()` 4–5% of a clear's. End to end in traced Chromium (the applier work
+  against `0a415c1`, before templates), the create-1,000-rows click's script went down 2–7%
+  (7.1 → 6.6, 6.9 → 6.5 and 6.6 → 6.5 ms in three sessions), replace 3–4%, clear 2–4%, append
+  unchanged; release Firefox within noise. Caching attribute strings, cloning elements from a
+  per-tag prototype (within noise in Chromium, 2–4% in Firefox), building rows in a
+  `DocumentFragment` and skipping repeated `delegate` calls did not pay. A clone now brings its
+  classes from the template, so the benchmark's create buffers have no `SET_ATTR`, and the
+  `className` gain applies to classes written by `SET_ATTR`: subtrees mounted node by node, a
+  copy whose class differs from its template's, and class changes (select's `danger`); the clear
+  buffer is the same as before.
+- **Next steps.** Two that this list first named are done: writing the command buffer a word
+  at a time ("What made encoding cheap") and cloning repeated subtrees from templates ("What
+  template cloning changed"). What the profiles and counts still point at:
+  - the view's array literals: in `Bench.row`'s generated C, four single-child arrays start from
+    one shared empty array and two attribute arrays from constants, so five pushes per row copy
+    an array (`lean_copy_expand_array` under `Bench.row`: 83 of the 3,114 samples of a native
+    create-and-clear loop, taken during the state-passing work, just before `43e20b3` was
+    committed; the binary is not recorded);
+  - one pair per element with children while mounting (6 of the 21 small objects that mounting
+    a row allocates, see "Allocations");
+  - growing the command buffer: in the same native sample `memmove` is 5% (158 samples), but
+    most of it is the benchmark's own label building (88, `lean_string_append` in `Bench.build`)
+    and turning ids into strings (22); copying texts into the buffer is 24, and growing its byte
+    arrays (`lean_copy_sarray`, in the `Buf` writers of `LeanUI/Patch.lean` and in Diff's
+    `pushHandles`) 23;
+  - the fresh-page cost of a click that mostly compares, such as "highlight a row", which depends
+    on where earlier clicks left the objects it reads ("Heap history" below);
+  - as before, not building the view of rows whose model did not change (4,003 of a select's
+    4,107 small objects are the view).
 
 ### Allocations
 
@@ -159,10 +247,10 @@ Every allocation is countable: `leanui-perf allocs` counts the *small objects* (
 thunks: what Lean's heartbeat counter counts) of each benchmark operation natively, by phase, and
 `tests/browser/allocs.mjs` counts every `malloc` and `free` of one click in a wasm build linked
 with `tools/alloc-count.c`. Both are exact and deterministic, so two builds compare without noise.
-Creating a benchmark row (at commit `43e20b3`) takes 41 small objects natively and 62 allocations
-in wasm (small objects included); before mounting, cloning and releasing were rewritten in
-state-passing style (below; at `492772a`, templates and inline encoding already in) it took 67
-and 89 (at `5c6d926`, before templates and inline encoding: 123 and 154):
+Creating a benchmark row (at commit `93b8470`, as since `43e20b3`) takes 41 small objects natively
+and 62 allocations in wasm (small objects included); before mounting, cloning and releasing were
+rewritten in state-passing style (below; at `492772a`, templates and inline encoding already in)
+it took 67 and 89 (at `5c6d926`, before templates and inline encoding: 123 and 154):
 
 | phase (`leanui-perf allocs`, create 1,000 rows) | small objects per created row, before | after |
 |---|--:|--:|
@@ -227,9 +315,10 @@ templates and without) are identical to those of the build before, and every sui
 natively and in Chromium and Firefox; the nesting limit is unchanged (1,050 levels in Chromium,
 1,700 in Firefox).
 
-Measured A/B against `492772a` on the same machine and session. Native: median of seven
-alternating runs of `leanui-perf`, lazy rows (min–max). Chromium 151 traced script time: median
-of three alternating rounds of nine fresh loads each (the three rounds' medians):
+Measured A/B against `492772a` (after: the code of `43e20b3`, which `93b8470` changes only in
+comments) on the same machine and session. Native: median of seven alternating runs of
+`leanui-perf`, lazy rows (min–max). Chromium 151 traced script time: median of three alternating
+rounds of nine fresh loads each (the three rounds' medians):
 
 | operation | native before | after | Chromium script before | after |
 |---|--:|--:|--:|--:|
@@ -265,13 +354,15 @@ pages they are within 1%. On a fresh page they are dominated by first
 touches of the memory they read, the 1,000 rows' keys and dependencies that the create made
 (a sampled profile of the measured click over 60 fresh pages puts the extra time in comparing
 them), and where those objects lie depends on everything allocated before them; see
-"Heap history" below.
+"Heap history" below. Against `3db6ac9`, before any of the create path, neither click is slower
+(0.38 → 0.36 and 0.83 → 0.79 ms of script; "The create path").
 
 ## What made the diff fast
 
 The first working diff spent 1.65 ms re-rendering 1,000 unchanged rows natively, almost all of it
-allocating and freeing. Five changes took it to 0.06 ms; each is tested by the randomized list
-tests and the property suites against an independent reference model.
+allocating and freeing. Five changes took it to 0.06 ms by `9a4c9c6` (this section's figures are
+from before the create path); each is tested by the randomized list tests and the property
+suites against an independent reference model.
 
 1. **Change tracking.** `patch` reports whether a node changed. An unchanged node is returned as
    the *same* object, so unchanged parents are not rebuilt either.
@@ -291,11 +382,36 @@ tests and the property suites against an independent reference model.
 5. **Cheap strings.** The UTF-16 length of an ASCII string is read from the string object
    (byte size equals length) instead of walking it.
 
+## What template cloning changed
+
+Before templates a benchmark row was 30 commands and 122 words: a `CREATE_ELEMENT` or
+`CREATE_TEXT` per node, a `SET_ATTR` per attribute, its two listeners and an `APPEND_CHILD` per
+node. Now Lean mounts the first row of a shape node by node, builds the second as a prototype and
+sends `TEMPLATE`, and every later row is a `CLONE` of it followed by what differs
+([`docs/PROTOCOL.md`](PROTOCOL.md), section 7). After the warm-up every row of the measured click
+is a clone: the create-1,000-rows buffer is `CLONE` 1,000, `SET_TEXT` 2,000 (id and label),
+`SET_LISTENER` 2,000 and `APPEND_CHILD` 1,000, 36,000 words instead of 122,000. The classes come
+with the copy, so there is no `SET_ATTR`, and the only names are the two events. In the browser
+a row is one `cloneNode(true)` and a walk that binds the copy's ten handles; the runtime keeps
+each template as a detached copy of its prototype (the 10 extra DOM nodes under "Memory").
+
+The A/B in "The create path" is all four pieces together. Templates alone were measured by the
+integration review at `195e344` (the templates, encoding, applier and allocation lanes merged,
+before state passing), with templates turned off in a scratch edit and as committed, Chromium
+151 traced script, the median of three alternating rounds of nine fresh loads: create 1,000
+rows 5.48 → 4.16 ms (−24%), create 10,000 rows 51.96 → 37.69 ms (−27%), replace all 1,000 rows
+8.67 → 7.21 ms (−17%). These figures are from the review's own run, not from this page's final
+measurements (raw: `work/lanes/integration-review/browser-ab/{notpl,head}.{1,2,3}.json`). The
+hand-written reference clones a template
+row too; with both cloning, its create-1,000-rows script is 1.90 ms against LeanUI's 3.77
+(Results). The rest of LeanUI's is Lean's update, view and diff, and finishing each copy (the
+profile under "Where LeanUI's time goes").
+
 ## What made encoding cheap
 
-Creating 1,000 rows writes 122,000 words and 10,000 strings into the command buffer and names a
-tag, attribute or event 18,000 times. Two changes in `LeanUI/Patch.lean`, with no change to the
-protocol:
+Before templates, creating 1,000 rows wrote 122,000 words and 10,000 strings into the command
+buffer and named a tag, attribute or event 18,000 times (with templates: 36,000 words, 2,000
+strings and 2,000 event names). Two changes in `LeanUI/Patch.lean`, with no change to the protocol:
 
 1. **Inline stores.** A word was four calls to `lean_byte_array_push`, and a string was copied
    twice (`String.toUTF8`, then appended). `pushU32` and `appendUtf8` keep their Lean bodies as
@@ -353,28 +469,32 @@ wasm), and keeping the buffers' storage across updates in `reset` (no change in 
   does; the remaining overhead is Lean's allocation pattern and the DOM calls.
 - **The allocator.** dlmalloc and mimalloc are equally fast here (single-threaded), but mimalloc
   reserves more: wasm memory 26.6 MB at load (dlmalloc: 16 MB, the initial size) and 67 MB after
-  10,000 rows (dlmalloc: 34 MB). LeanUI builds with dlmalloc.
+  10,000 rows (dlmalloc: 34 MB; both before the create path, after which dlmalloc's figure is
+  27.75 MB). LeanUI builds with dlmalloc.
 - **The JIT state of a fresh page.** Each measured click comes after a few warm-up clicks on a
   fresh page, so `Runtime.apply` runs in whatever state the engine has reached by then, and that
-  state is not the same from one session to the next. In Chromium, the old runtime applied the
-  create-1,000-rows buffer replayed on fresh pages in 2.85–2.95 ms (against 2.4–2.55 ms on a hot
-  page) in some sessions and in 2.44 ms (against 2.38) in another, with the same files and command;
-  within one run the samples stay close together (2.84–3.14 ms), and making V8 optimize
-  synchronously (`--js-flags=--no-concurrent-recompilation`) changes nothing. Small code changes
-  move the fresh figure by several percent too. `apply-bench` measures on fresh pages by default,
-  as the benchmark runs, and interleaves the variants so that a run's ratio is fair; for a figure
-  that holds across sessions use `--mode hot` (the steady state), and believe a fresh-page
-  difference only when it holds in more than one session. A forced GC (`gc()`) right before a
+  state is not the same from one session to the next. In Chromium, before templates, the old
+  runtime applied the create-1,000-rows buffer replayed on fresh pages in 2.85–2.95 ms (against
+  2.4–2.55 ms on a hot page) in some sessions and in 2.44 ms (against 2.38) in another, with the
+  same files and command; within one run the samples stay close together (2.84–3.14 ms), and
+  making V8 optimize synchronously (`--js-flags=--no-concurrent-recompilation`) changes nothing.
+  Small code changes move the fresh figure by several percent too. `apply-bench` measures on
+  fresh pages by default, as the benchmark runs, and interleaves the variants so that a run's
+  ratio is fair; for a figure that holds across sessions use `--mode hot` (the steady state), and
+  believe a fresh-page difference only when it holds in more than one session. A forced GC (`gc()`) right before a
   measurement deoptimized the apply loop once in Chromium (18 ns per command instead of 2):
   measure after the warm-up, not right after a GC.
-- **Heap history.** A click that mostly compares (highlight a row: 0.4 ms on a fresh page,
-  0.15 ms on a hot one) depends on where the objects it reads were allocated, and so on what
-  every earlier click allocated and freed. Changing what creating rows allocates (the click
-  itself runs almost the same code, see "State passing in mount, clone and release") moved the
-  fresh-page "highlight a row" by −3 to +14% depending on the build and the warm-up sequence
-  (the standard one; `#run #clear` before it; `#runlots #clear` before it), which also reorders
-  the builds. Believe a fresh-page difference in such an operation only when its own code
-  changed, or when it holds on a hot page too.
+- **Heap history.** A click that mostly compares (highlight a row: 0.34–0.36 ms of script on a
+  fresh page at `93b8470`, about 0.15 ms on a hot one during the state-passing work) depends on
+  where the objects it reads were allocated, and so on what every earlier click allocated and
+  freed. Changing what creating rows allocates (the click itself runs almost the same code, see
+  "State passing in mount, clone and release") moved the fresh-page "highlight a row" by −3 to
+  +14% depending on the build and the warm-up sequence (the standard one; `#run #clear` before
+  it; `#runlots #clear` before it), which also reorders the builds. Believe a fresh-page
+  difference in such an operation only when its own code changed, or when it holds on a hot page
+  too. Measured against `3db6ac9`, before the create path, the same click went from 0.38 to 0.36
+  ms of script (update every 10th: 0.83 to 0.79) in the final A/B; the +8–14% seen during the
+  state-passing work was against `492772a`.
 - **Fresh loads, not warm pages.** Chrome's optimizing tier changes nothing measurable for
   LeanUI after the first second (a 12-second warm-up probe stays flat once the core scheduling
   effect is removed).
@@ -383,7 +503,8 @@ wasm), and keeping the buffers' storage across updates in `reset` (no change in 
 
 **The apps.** [`examples/Bench.lean`](../examples/Bench.lean) is the standard benchmark app: the same
 buttons, ids, table structure and class names, keyed rows (`keyedLazy`: keyed by id, lazy on label and
-selection), and labels from a 64-bit LCG instead of `Math.random`.
+selection), and labels from a 64-bit LCG instead of `Math.random`; LeanUI creates the rows from
+a template of its own ([`docs/PROTOCOL.md`](PROTOCOL.md), section 7).
 [`bench/vanilla/index.html`](../bench/vanilla/index.html) is the reference: template cloning,
 direct node references and event delegation, the usual fastest hand-written approach, with the
 same markup and the same LCG, so **both build identical tables** (the harness checks this before
@@ -419,10 +540,12 @@ view, diff, command encoding, no DOM), on the same app, with lazy rows and with 
 
 ```bash
 tools/build-app.sh BenchApp bench                       # dist/bench (the page is examples/bench.html)
-node tests/browser/bench.mjs --runs 7 --json out.json   # Chromium traces, memory, startup
-node tests/browser/selfbench.mjs /Applications/Firefox.app/Contents/MacOS/firefox firefox
-node tests/browser/selfbench.mjs "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" chromium
-./.lake/build/bin/leanui-perf                           # native, lazy and eager rows
+node tests/browser/bench.mjs --runs 9 --json out.json   # Chromium traces, memory, startup
+node tests/browser/selfbench.mjs /Applications/Firefox.app/Contents/MacOS/firefox firefox --runs 9 --json firefox.json
+node tests/browser/selfbench.mjs "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" chromium --runs 9 --json chrome.json
+./.lake/build/bin/leanui-perf > native.txt              # native, lazy and eager rows (the Results
+                                                        # take the per-operation median of seven runs)
+node tools/bench-tables.mjs out.json firefox.json chrome.json native.txt   # the Results tables; with --readme first, the README's
 ./.lake/build/bin/leanui-perf allocs                    # small objects per operation, by phase
 ./.lake/build/bin/leanui-perf allocs-nodes              # small objects to mount one node of each shape
 LEANUI_COUNT_ALLOCS=1 LEANUI_PAGE=examples/bench.html tools/build-app.sh BenchApp bench-allocs
@@ -430,7 +553,8 @@ node tests/browser/allocs.mjs dist/bench-allocs [dist/other-allocs]   # every ma
 LEANUI_PAGE=examples/bench.html tools/build-app.sh BenchApp bench-prof --debug
 node tests/browser/profile.mjs dist/bench-prof --op create1k   # where the script time goes
 node tests/browser/apply-bench.mjs --variants dist/bench-base/leanui.js,runtime/leanui.js --engines chromium,firefox
-                                                        # the JS runtime alone, A/B (the reference first)
+                                                        # the JS runtime alone, A/B (the reference first;
+                                                        # both runtimes must know TEMPLATE and CLONE)
 node tests/browser/bench.mjs --impls leanui --leanui-dir dist/<build> --cpu-only   # A/B of builds
 bench/wasm64/build.sh && node tests/browser/wasm64.mjs <browser-binary> <firefox|chromium>
 ```

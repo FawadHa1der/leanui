@@ -64,7 +64,7 @@ built against. It was first written on 2026-10-18 from the research in
   for empty texts, so the browser's pre-order walk meets exactly the nodes `mount` allocates;
   only the last of repeated attributes, `\r` as `&#13;`, a doubled leading newline in `pre`,
   `textarea` and `listing` (the parser drops one).
-- **Browser runtime** (`runtime/leanui.js`, about 5 KB brotli): applies buffers in one pass
+- **Browser runtime** (`runtime/leanui.js`, about 6 KB brotli): applies buffers in one pass
   (a `class` attribute on an HTML element is written through `className`, which needs no name
   lookup; a run of `REMOVE`s that empties a parent in order is one `replaceChildren()`, the same
   DOM, but page code sees one `MutationObserver` record for it, and custom elements'
@@ -155,7 +155,7 @@ built against. It was first written on 2026-10-18 from the research in
 - **Nesting**: a view nests about 1,050 levels in Chromium and 1,700 in Firefox before an update
   overflows the browser's native stack (the diff recurses once per level); the app then stops
   with a `leanui:error` event.
-- **Memory**: wasm memory never shrinks. The benchmark app uses 16 MB at load and about 34 MB
+- **Memory**: wasm memory never shrinks. The benchmark app uses 16 MB at load and about 28 MB
   after creating 10,000 rows (dlmalloc); see `docs/BENCHMARKS.md`.
 - **Server**: Lean 4.34's `Std.Http` serves about 2,000–3,000 requests per second; a
   server-driven event costs about 1–2 ms round trip on localhost.

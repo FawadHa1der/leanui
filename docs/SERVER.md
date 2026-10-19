@@ -238,7 +238,11 @@ handler (404, 400 for refused paths, 500 for exceptions, logged). Handlers run i
 they can await tasks without blocking a thread.
 
 `serve cfg route (onShutdown)` binds (`Config.host`, `port`; `0` picks a port, `boundPort` reports
-it), logs one line per request (`log`, `logSessions`), and stops on `SIGINT`/`SIGTERM`.
+it), logs one line per request (`log`, `logSessions`), and stops on `SIGINT`/`SIGTERM`. Every
+response gets a `Date` header in GMT unless the route sets one. LeanUI writes it itself from fixed
+UTC rules, with `Std.Http`'s own (`generateDate`) off: that one looks "UTC" up in the time zone
+database, and on a system without one (a minimal container image) the lookup throws and the
+connection closes without a response.
 
 ## The `leanui` command
 
@@ -322,15 +326,24 @@ itself and stops them with `SIGTERM` (checking they exit cleanly), then in Chrom
 
 ### Measured on localhost (M4 Max)
 
+Two runs of `tests/browser/server.mjs` on the Lean code of `93b8470` (the second with
+`241a6d8`'s `tools/build-app.sh`; the boot figures from the second only: the first was served a
+stale precompressed `app.wasm` and failed only its precompressed checks, the case
+`tools/build-app.sh` now prevents):
+
 | | Chromium 151 | Firefox 153 |
 |---|---|---|
-| server-driven round trip, click → DOM updated (200 clicks) | median 1.2 to 1.5 ms, p95 1.4 to 2.0 ms | median 2 ms, p95 2 to 3 ms (1 ms timer resolution) |
-| of which in the session (`Server-Timing`) | 0.02 to 0.03 ms | 0.02 to 0.05 ms |
-| wasm boot + hydration of the counter | 38 to 51 ms | 51 to 62 ms |
-| `app.wasm` on the wire with `--compress` (both send `br` to `127.0.0.1`) | 150 KB of 1034 KB | 150 KB of 1034 KB |
+| server-driven round trip, click → DOM updated (200 clicks) | median 1.2 ms, p95 1.5 to 1.7 ms | median 2 ms, p95 2 ms (1 ms timer resolution) |
+| of which in the session (`Server-Timing`) | 0.02 ms | 0.02 ms |
+| wasm boot + hydration of the counter | 33 ms | 51 ms |
 
-Over HTTP with keep-alive: about 0.3 ms per request for a static file or a small route (curl), 0.5
-to 0.7 ms per session event (ApacheBench, one connection, 1500 to 2200 events/s). `Std.Http` in Lean
-4.34 tops out near 2000 to 3000 requests/s on this machine whatever the concurrency (the bare
-research prototype server: 3200/s sequential, 2500/s at 32 connections); 32 concurrent sessions
-over HTTP reach about 1500 events/s.
+The counter's `app.wasm` is 1,142,600 bytes (the second run's build). With `--compress` both
+browsers fetch it as `br` from `127.0.0.1`: 150 KB of 1034 KB when that was last measured (commit
+`3f78206`).
+
+Over HTTP with keep-alive (at `3f78206`): about 0.3 ms per request for a static file or a small
+route (curl), 0.5 to 0.7 ms per session event (ApacheBench, one connection, 1500 to 2200
+events/s). `Std.Http` in Lean 4.34 tops out near 2000 to 3000 requests/s on this machine whatever
+the concurrency (the bare research prototype server: 3200/s sequential, 2500/s at 32
+connections). 32 concurrent sessions over HTTP, each a hydration and 100 events, reach 1746
+and 1764 requests/s (the two runs above; about 1500 events/s at `3f78206`).
