@@ -583,9 +583,15 @@ Medians of 5 runs (3 for operations over 1.5 s), Chromium 141, 12 MP (4000×3000
 | 4 MP (2304×1728) | 0.72× | 0.76× | 1.34× | 64 MB |
 | 12 MP (4000×3000) | 0.71× | 0.80× | 1.32× | 186 MB |
 
-Firefox (Playwright's build on GitHub's runners, which runs wasm several times slower than
-release Firefox, see "Findings about measuring"): see the `editor-bench` artifact of a CI run with
-the `bench` label; the ratios are summarised below once measured.
+**On GitHub's runners** (CI run 39325442746 at `58384f8`, an `ubuntu-24.04` runner, the
+`editor-bench` artifact): Chromium 151 gives Lean ÷ JS **0.53×, 0.62× and 0.60×** (geometric mean
+at 1, 4 and 12 MP; total time 0.60–0.70×) and Lean ÷ canvas 1.19–1.26×, the same picture as
+above with Lean further ahead. **Firefox** (Playwright's Firefox 153, 1 MP): Lean ÷ JS **2.46×**
+(18 operations; crop is under the 1 ms timer), Lean ÷ canvas 4.8×. Firefox's JavaScript is as fast
+as or faster than Chromium's here (the lookup table 8 ms, a blur of radius 2 68 ms), while
+Playwright's Firefox build runs wasm several times slower than release Firefox ("Findings about
+measuring": about 8×), so this ratio says more about that build than about Lean in Firefox; release
+Firefox, self-driven as in "Method", is still to be measured on the reference Mac.
 
 **What the Lean side does.** Lean's code is the obvious algorithm written for the compiler: pixel
 loops are tail-recursive functions over a uniquely owned `ByteArray` (updated in place), with
@@ -629,6 +635,10 @@ next animation frame after it. Medians of 8 inputs; Chromium 141:
 | brush: a move, median / longest | 1.5 / 3.5 ms | 7.4 / 13 ms | 10 / 17 ms |
 | brush: stroke start (copies the layer once) | 13 ms | 24 ms | 60 ms |
 
+On GitHub's Chromium 151 runner the same rows read 15–16 ms for the point-operation sliders,
+54–71 ms for the blur preview, 66–86 ms for sharpen and 0.8–5.5 ms for a brush move; in
+Playwright's Firefox (1 MP) 58–71 ms, 289 ms, 372 ms and 6 ms.
+
 A slider's preview costs one preview-sized operation, a composite of the layers' previews, a
 histogram of every fourth row, and showing the result; the image's size matters only for opening
 it and for the work below.
@@ -649,7 +659,8 @@ meanwhile:
 | export PNG (5.2 MB at 12 MP) | 254 ms, 100 ms | 909 ms, 217 ms | 1,668 ms, 317 ms |
 
 Before the work was sliced, the same machine froze for 6.0 s exporting a 12 MP PNG and 1.3 s
-rotating it.
+rotating it. On GitHub's Chromium runner, a 12 MP blur takes 1.6 s (longest frame 67 ms) and an
+export 0.97 s (233 ms); in Playwright's Firefox at 1 MP every job's longest frame is 50–66 ms.
 
 ### UI scaling: layers and history
 
