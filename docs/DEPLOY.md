@@ -40,7 +40,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
 
 - The **container** runs `leanui-site` (examples/SiteServer.lean, built on the runner) from
   `ubuntu:24.04`, as `nobody`, with no outbound network. It renders every page (SSR), serves the
-  wasm build, and runs server-driven sessions for browsers without Memory64 (Safari).
+  wasm build, and runs server-driven sessions for browsers without Memory64 (Safari). It also
+  serves the photo editor as its own page, `/editor/` (`dist/editor`, a client-side wasm app with
+  no server rendering: browsers without Memory64 get a message instead).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
   accept them (`Content-Encoding`, `Vary: Accept-Encoding`), and Cloudflare passes encoded bodies
   through. Brotli at quality 11 is smaller than what the edge would produce on the fly (the site's

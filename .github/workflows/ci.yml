@@ -134,6 +134,8 @@ jobs:
           curl -fsS -o /dev/null http://127.0.0.1:8080/site.css
           curl -fsS -o /dev/null -D "$RUNNER_TEMP/wasm.headers" -H 'accept-encoding: br, gzip' http://127.0.0.1:8080/assets/site/app.wasm
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/wasm.headers"
+          curl -fsS http://127.0.0.1:8080/editor/ | grep -q "LeanUI Photo"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/editor/app.wasm
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

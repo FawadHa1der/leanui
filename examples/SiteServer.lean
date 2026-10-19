@@ -11,6 +11,9 @@ HTML by this server, so it is complete before any script runs. Then the browser 
 life: with WebAssembly Memory64, the site's wasm build (`dist/site`, from
 `tools/build-app.sh SiteApp site`) hydrates the page; without it (Safari), a native session on
 this server runs the program and drives the page. `?mode=wasm|server|ssr|auto` picks a mode.
+
+`/editor/` is the photo editor (`examples/Editor.lean`), a client-side app served as its own page
+from `dist/editor` (`tools/build-app.sh EditorApp editor`), so the site's pages do not grow.
 -/
 public section
 open LeanUI LeanUI.Server
@@ -58,6 +61,7 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Static.file "/site.css" "examples/site/site.css",
     Static.file "/data/benchmarks.json" "examples/site/benchmarks.json",
     Route.under "/assets/site" (Static.route { root := dist }),
+    Route.under "/editor" (Static.route { root := o.dist / "editor" }),
     sessions.route "/leanui",
     pageRoute sessions wasm]
 
