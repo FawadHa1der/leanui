@@ -79,9 +79,9 @@ inductive Cmd (Msg : Type) where
   /-- A file decoded by the browser's image decoders (PNG, JPEG, WebP, GIF's first frame, …) to
   RGBA pixels, or why it could not be. -/
   | decodeImage (file : Nat) (k : Except String Bitmap → Msg)
-  /-- The frame a `<video>` (the first match of `video`) shows now, as RGBA pixels, with the
-  frame's timestamp in milliseconds (WebCodecs' `VideoFrame.timestamp`: the same for as long as
-  the video shows the same frame), or why there is none (no video, no frame yet). -/
+  /-- The frame a `<video>` (the first match of `video`) shows now, as RGBA pixels (WebCodecs'
+  `VideoFrame`), with its media time in milliseconds (the same for as long as the video shows the
+  same frame), or why there is none (no video, no frame yet). -/
   | grabFrame (video : String) (k : Except String (Bitmap × Nat) → Msg)
   /-- A URL for a file the browser holds (an object URL), for a `<video>` or `<img>` to load it. -/
   | fileUrl (file : Nat) (k : String → Msg)

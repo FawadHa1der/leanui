@@ -339,16 +339,23 @@
         this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
       } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
     }
-    // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". WebCodecs'
-    // VideoFrame gives the frame's own timestamp (currentTime moves between frames) and converts to
-    // RGBA; a 2D canvas draws the frame where that conversion is not available.
+    // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". While the
+    // video plays, the time is the presented frame's media time, which requestVideoFrameCallback
+    // reports (VideoFrame's timestamp is 0 in Firefox; currentTime moves between frames); while it
+    // is paused (or without that callback), currentTime, which then names the frame shown.
+    // WebCodecs' VideoFrame converts to RGBA; a 2D canvas draws the frame where it cannot.
     async grabFrame(cb, sel) {
       let f = null;
       try {
         const v = document.querySelector(sel);
         if (!v || !(v.readyState >= 2) || !v.videoWidth) throw new Error("no video frame");
+        if (v.requestVideoFrameCallback && v.__leanuiFrameMs === undefined) {
+          v.__leanuiFrameMs = -1;
+          const seen = (now, md) => { v.__leanuiFrameMs = Math.round(md.mediaTime * 1000); v.requestVideoFrameCallback(seen); };
+          v.requestVideoFrameCallback(seen);
+        }
+        const t = !v.paused && v.__leanuiFrameMs >= 0 ? v.__leanuiFrameMs : Math.round(v.currentTime * 1000);
         if (typeof VideoFrame === "function") { try { f = new VideoFrame(v); } catch (e) { f = null; } }
-        const t = Math.round(f ? f.timestamp / 1000 : v.currentTime * 1000);
         let w = f ? f.displayWidth : v.videoWidth, h = f ? f.displayHeight : v.videoHeight, px = null;
         if (f && f.visibleRect.width === w && f.visibleRect.height === h) {
           try { const buf = new Uint8Array(4 * w * h); await f.copyTo(buf, { format: "RGBA" }); px = buf; } catch (e) { px = null; }
