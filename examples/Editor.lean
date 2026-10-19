@@ -5,10 +5,11 @@ public import Editor.Ops
 /-!
 # LeanUI Photo: an image editor
 
-Everything after the browser hands over pixels runs in Lean: the layer model, adjustments,
-filters, geometry, painting, compositing, the histogram, undo history and PNG export
-(`Editor.Core`). The browser decodes JPEG and PNG files (`Cmd.decodeImage`) and shows pixels
-(`Cmd.putImage`, straight from wasm memory).
+Everything after the browser hands over a file runs in Lean: the layer model, adjustments,
+filters, geometry, painting, compositing, the histogram, undo history, PNG export and PNG import
+(`Editor.Core`; a PNG Lean's decoder declines, 16-bit or interlaced, goes to the browser's). The
+browser decodes JPEG and the other formats (`Cmd.decodeImage`) and shows pixels (`Cmd.putImage`,
+straight from wasm memory).
 
 **Two resolutions.** Each layer keeps its full-resolution image and a preview (at most
 `Editor.previewMax` pixels on its longest side). The canvas shows the composite of the previews,
@@ -152,6 +153,9 @@ structure Model where
 inductive Msg where
   | files (fs : Array FileInfo)
   | decoded (name : String) (r : Except String Bitmap)
+  /-- A PNG file's bytes, to decode in Lean (`file`: its id, for the browser's decoder if Lean's
+  declines it). -/
+  | pngBytes (file : Nat) (name : String) (r : Except String ByteArray)
   | newImage (mp : Nat)
   | dragOver
   | dragLeave
@@ -335,8 +339,18 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
   match msg with
   | .files fs =>
     match fs[0]? with
-    | some f => ({ m with dropping := false, status := s!"Decoding {f.name}…" }, .decodeImage f.id (.decoded f.name))
+    | some f =>
+      let m := { m with dropping := false, status := s!"Decoding {f.name}…" }
+      -- PNG files are decoded in Lean (Editor.Png), anything else by the browser
+      if f.type == "image/png" || f.name.endsWith ".png" then (m, .readFile f.id (.pngBytes f.id f.name))
+      else (m, .decodeImage f.id (.decoded f.name))
     | none => ({ m with dropping := false }, .none)
+  | .pngBytes file name (.ok bytes) =>
+    match Png.decode bytes with
+    | .ok img => openDoc m (Doc.ofImage img "Background") "Open" ((name.splitOn ".").head!)
+    -- a PNG Lean's decoder does not take (16-bit, interlaced): the browser's
+    | .error _ => (m, .decodeImage file (.decoded name))
+  | .pngBytes _ name (.error e) => ({ m with status := s!"{name}: {e}" }, .none)
   | .decoded name (.ok b) =>
     let base := (name.splitOn ".").head!
     openDoc m (Doc.ofImage { width := b.width, height := b.height, data := b.data } "Background") "Open" base

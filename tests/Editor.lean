@@ -912,10 +912,24 @@ def testProgram : T Unit := do
   r.fire canvas "pointerup" "400 300 1152 864 0 0 1 0 0 0 400 300"
   r.click "id" "crop-apply"
   expectEq "crop" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "300", some "200")
+  -- open a PNG: its bytes come back to Lean, which decodes them
+  let png := Png.encode (testImage 40 30) 1
+  r.fire (← r.find "id" "open") "change" "9\t100\timage/png\tsmall.png"
+  let effs := (← r.dom.get).effects
+  let cb := ((effs.reverse.find? (·.startsWith "readFile cb=")).getD "").drop "readFile cb=".length |>.toString |>.takeWhile Char.isDigit
+  r.inst.callbackBytes cb.toString.toNat!.toUInt32 true "" png
+  expectEq "open PNG (Lean decoder)" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height"), (← steps r)) (some "40", some "30", #["Open"])
+  -- a file Lean's decoder declines goes to the browser's
+  r.fire (← r.find "id" "open") "change" "10\t5\timage/png\tbad.png"
+  let effs := (← r.dom.get).effects
+  let cb := ((effs.reverse.find? (·.startsWith "readFile cb=")).getD "").drop "readFile cb=".length |>.toString |>.takeWhile Char.isDigit
+  r.inst.callbackBytes cb.toString.toNat!.toUInt32 true "" (ByteArray.mk #[1, 2, 3, 4, 5])
+  expect "undecodable PNG: the browser's decoder" (((← r.dom.get).effects.back?.getD "").startsWith "decodeImage cb=") s!"{(← r.dom.get).effects.back?}"
+  r.click "id" "undo"
   -- export: a download of a PNG of the document's size
   r.click "id" "export"
   let _ ← frames r
-  expect "export: download" (((← r.dom.get).effects.back?.getD "").startsWith "download test-1152x864.png image/png") s!"{(← r.dom.get).effects.back?}"
+  expect "export: download" (((← r.dom.get).effects.back?.getD "").startsWith "download small.png image/png") s!"{(← r.dom.get).effects.back?}"
   let d ← r.dom.get
   expect "protocol" d.errors.isEmpty s!"{d.errors}"
 where
