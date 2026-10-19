@@ -617,6 +617,15 @@ in `Float` (3.9×).
 - *Showing pixels costs the same as in JavaScript:* `Cmd.putImage` hands the browser a view of wasm
   memory, and `putImageData` from it is as fast as from a JavaScript array.
 
+**Allocations** ([`tests/browser/editor-allocs.mjs`](../tests/browser/editor-allocs.mjs), on builds
+that count every `malloc` and `free`, `LEANUI_COUNT_ALLOCS=1`): no operation allocates per pixel.
+A run costs 41–222 allocations (its output image and temporaries, plus about 40 for the event's
+update, view and diff), the same at 1 and 4 MP; the lookup-table adjustment about 3,900 (its
+256-entry table) and the histogram about 1,650, both also independent of the size. PNG encoding
+allocates per row (2,200 allocations at 1 MP, 8,660 at 4 MP), not per pixel. In the editor, a
+slider input costs about 8,000 allocations, most of them the histogram's SVG path strings, and a
+brush move about 1,000.
+
 ### The editor: input to pixels
 
 [`tests/browser/editor-perf.mjs`](../tests/browser/editor-perf.mjs) drives the editor with
@@ -719,6 +728,9 @@ tools/build-app.sh EditorBenchApp editor-bench && tools/build-app.sh EditorApp e
 node tests/browser/editor-bench.mjs http://127.0.0.1:5331/ chromium --sizes 1,4,12 --runs 5
 node tests/browser/editor-perf.mjs http://127.0.0.1:5331/editor/index.html chromium --out perf.json
 node bench/editor/check-goldens.mjs     # the JavaScript port against the Lean goldens
+LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorBenchApp editor-bench-allocs
+LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorApp editor-allocs
+node tests/browser/editor-allocs.mjs http://127.0.0.1:5331/   # allocations per operation and event
 ```
 
 CI runs both (Chromium at 1, 4 and 12 MP; Firefox at 1 MP) on a pull request with the `bench`
