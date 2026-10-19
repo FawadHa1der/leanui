@@ -22,6 +22,13 @@ namespace Editor
 /-- The longest side of a preview. -/
 def previewMax : Nat := 1280
 
+/-- The largest image the editor takes (pixels): opened, decoded or produced by a resize. A
+failed allocation ends a Lean program, so sizes are checked before anything is allocated. -/
+def maxImagePixels : Nat := 50000000
+
+/-- The most bytes a geometry job may allocate for its results (one image per layer). -/
+def maxJobBytes : Nat := 1536 * 1024 * 1024
+
 structure Layer where
   id : Nat
   name : String

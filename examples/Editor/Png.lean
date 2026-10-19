@@ -890,15 +890,19 @@ partial def expandRows (raw : @& ByteArray) (pal : @& ByteArray) (out : ByteArra
   if y < h then expandRows raw pal (expandLoop raw pal out ct key (y * (rb + 1) + 1) (4 * w * y) 0 w) ct key (y + 1) h w rb
   else out
 
-/-- Decode a PNG file (8-bit gray, gray + alpha, RGB, RGBA or palette, non-interlaced) to RGBA8. -/
-def decode (bytes : ByteArray) : Except String Image := do
+/-- Decode a PNG file (8-bit gray, gray + alpha, RGB, RGBA or palette, non-interlaced) to RGBA8.
+The file is untrusted: an image of more than `maxPixels` pixels is refused before anything is
+allocated for it (a failed allocation would end the program). -/
+def decode (bytes : ByteArray) (maxPixels : Nat := 50000000) : Except String Image := do
   if bytes.size < 8 || bytes.extract 0 8 != signature then throw "not a PNG file"
   let mut pos := 8
   let mut ihdr : Option (Nat × Nat × Nat × Nat × Nat) := none  -- width, height, depth, colour type, interlace
   let mut pal : ByteArray := fillPixels 256 0 0 0 255
   let mut palSize := 0
   let mut trns : Option ByteArray := none
-  let mut idat : ByteArray := .empty
+  -- where the IDAT chunks' data is: joined once at the end (joining as they come copies all the
+  -- data so far for every chunk)
+  let mut idats : Array (Nat × Nat) := #[]
   let mut ended := false
   while !ended do
     if pos + 12 > bytes.size then throw "truncated PNG file"
@@ -920,7 +924,7 @@ def decode (bytes : ByteArray) : Except String Image := do
         pal := pal.set! (4 * i) (bytes.get! (dataAt + 3 * i)) |>.set! (4 * i + 1) (bytes.get! (dataAt + 3 * i + 1))
           |>.set! (4 * i + 2) (bytes.get! (dataAt + 3 * i + 2))
     | "tRNS" => trns := some (bytes.extract dataAt (dataAt + len))
-    | "IDAT" => idat := bytes.copySlice dataAt idat idat.size len
+    | "IDAT" => idats := idats.push (dataAt, len)
     | "IEND" => ended := true
     | _ =>
       -- an unknown critical chunk (upper-case first letter) cannot be skipped
@@ -928,6 +932,10 @@ def decode (bytes : ByteArray) : Except String Image := do
     pos := dataAt + len + 4
   let some (w, h, depth, ct, interlace) := ihdr | throw "missing IHDR chunk"
   if w == 0 || h == 0 then throw "empty image"
+  -- untrusted sizes: a failed allocation would end the program
+  if w * h > maxPixels then throw s!"{w}×{h} is too large (at most {maxPixels} pixels)"
+  let idat := idats.foldl (init := ByteArray.emptyWithCapacity (idats.foldl (fun n (_, l) => n + l) 0))
+    fun acc (at_, len) => bytes.copySlice at_ acc acc.size len
   if depth != 8 then throw s!"unsupported bit depth {depth} (only 8 is supported)"
   if interlace != 0 then throw "interlaced PNG files are not supported"
   let channels ← match ct with

@@ -871,6 +871,14 @@ def testJobs : T Unit := do
     | .error e => expect "export decodes" false e
   | _ => expect "export finishes" false
   expect "progress" ((Job.layer (.blur 2) 1 img).progress == 0)
+  -- an untrusted header that asks for a huge image is refused before allocating it
+  let small := Png.encode (testImage 4 3) 0
+  let huge := Png.setU32BE (Png.setU32BE small 16 100000) 20 100000
+  let huge := Png.setU32BE huge 29 (Png.crc32 huge 12 29)
+  expect "a 100000×100000 header is refused" (match Png.decode huge with | .error e => e.endsWith "pixels)" | .ok _ => false)
+    s!"{match Png.decode huge with | .error e => e | .ok _ => "decoded"}"
+  expect "the CRC was right (else another error)" ((Png.decode (Png.setU32BE huge 29 0)) matches .error "bad CRC in IHDR chunk")
+  expectEq "base names keep inner dots" (baseName "my.photo.jpg", baseName "photo", baseName "a.b.c.png") ("my.photo", "photo", "a.b.c")
   -- a layer larger than a preview: the job's last pass makes the new preview, sliced like the rest
   let big := testImage 1500 700
   for (op, budget) in [(Op.blur 3, 30000), (Op.adjust { Adjust.identity with brightness := 20 }, 1)] do
@@ -940,7 +948,7 @@ def testProgram : T Unit := do
   let n ← frames r
   expect "apply: took frames" (n ≥ 1) s!"{n}"
   expectEq "apply: step" (← steps r) #["New 1152×864", "Adjustments"]
-  expectEq "apply: sliders reset" ((← r.dom.get).get (← r.find "id" "adj-brightness")).props (#[("value", "0")])
+  expectEq "apply: sliders reset" ((((← r.dom.get).get (← r.find "id" "adj-brightness")).props.find? (·.1 == "value")).map (·.2)) (some "0")
   -- a filter, then paint a stroke: its moves send dirty rectangles only
   r.fire (← r.find "id" "blur-radius") "input" "2"
   r.click "id" "blur-apply"
@@ -994,6 +1002,20 @@ def testProgram : T Unit := do
   r.inst.callbackBytes cb.toString.toNat!.toUInt32 true "" (ByteArray.mk #[1, 2, 3, 4, 5])
   expect "undecodable PNG: the browser's decoder" (((← r.dom.get).effects.back?.getD "").startsWith "decodeImage cb=") s!"{(← r.dom.get).effects.back?}"
   r.click "id" "undo"
+  -- review fixes: an oversized resize is refused before anything is allocated
+  r.fire (← r.find "id" "resize-w") "change" "400000"
+  r.click "id" "resize"
+  expect "huge resize refused, no job" ((← textOf r "status").contains "too large" && !(← r.dom.get).effects.back?.any (·.startsWith s!"op{LeanUI.Op.frame} ")) s!"{← textOf r "status"}"
+  -- an export leaves a pending adjustment alone; layer edits wait while it runs
+  r.fire (← r.find "id" "adj-brightness") "input" "30"
+  let layer ← r.find "class" "layers"
+  let first := ((← r.dom.get).get layer).kids[0]!
+  r.click "id" "export"
+  r.fire ((← r.dom.get).get first).kids[0]! "change" "false"
+  let _ ← frames r
+  expect "export keeps the adjustment" ((((← r.dom.get).get (← r.find "id" "adj-brightness")).props.find? (·.1 == "value")).map (·.2) == some "30")
+  expect "no layer edit during the job" (!(← steps r).contains "Visibility") s!"{← steps r}"
+  r.click "id" "adj-reset"
   -- export: a download of a PNG of the document's size
   r.click "id" "export"
   let _ ← frames r

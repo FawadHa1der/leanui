@@ -133,8 +133,11 @@ structure Model where
   zoom : Option Float := none
   panX : Float := 0
   panY : Float := 0
-  /-- The canvas's displayed width the last time a pointer event reported it. -/
+  /-- The canvas's displayed width in fit mode, when a pointer event on it reported it. -/
   boxW : Float := 0
+  /-- The viewport's size, when a pointer event on it reported it (to compute the fit scale). -/
+  viewW : Float := 0
+  viewH : Float := 0
   /-- The last stroke position, in document pixels. -/
   stroke : Option (Float × Float) := none
   /-- A hand drag: pointer and pan at its start. -/
@@ -168,6 +171,7 @@ inductive Msg where
   | move (p : Pointer)
   | up (p : Pointer)
   | wheel (p : Pointer)
+  | viewport (p : Pointer)
   | zoomBy (factor : Float)
   | zoomFit
   | zoom100
@@ -269,7 +273,7 @@ def push (m : Model) (label : String) (cost : Nat) : Model :=
 def openDoc (m : Model) (d : Doc) (label name : String) : Model × Cmd Msg :=
   let active := (d.layers.back?.map (·.id)).getD 0
   let m := { m with doc := some d, history := #[], cursor := 0, active, pending := none, job := none,
-                    crop := none, zoom := none, panX := 0, panY := 0, stroke := none,
+                    crop := none, zoom := none, panX := 0, panY := 0, boxW := 0, stroke := none,
                     resizeW := d.width, resizeH := d.height, fileName := name,
                     status := s!"{name}: {d.width}×{d.height}" }
   let m := push m label (d.width * d.height * 4)
@@ -278,7 +282,7 @@ def openDoc (m : Model) (d : Doc) (label name : String) : Model × Cmd Msg :=
 /-- Replace the document (keeping the active layer if it still exists) and record a step. -/
 def commit (m : Model) (d : Doc) (label : String) (cost : Nat) : Model × Cmd Msg :=
   let active := if (d.layerIndex? m.active).isSome then m.active else (d.layers.back?.map (·.id)).getD 0
-  refresh (push { m with doc := some d, active, pending := none, resizeW := d.width, resizeH := d.height } label cost)
+  refresh (push { m with doc := some d, active, resizeW := d.width, resizeH := d.height } label cost)
 
 def busy (m : Model) : Bool := m.job.isSome
 
@@ -320,11 +324,29 @@ def paintTo (m : Model) (p : Pointer) : Model × Cmd Msg :=
 def zoomTo (m : Model) (z : Float) : Model :=
   { m with zoom := some (max 0.05 (min 32 z)) }
 
+/-- The scale of the canvas in fit mode: what the stylesheet's limits (the viewport less 40 px)
+give, from the viewport's size when known, else from the canvas's last reported width. -/
+def fitScale (m : Model) (d : Doc) : Float :=
+  let (pw, ph) := (Float.ofNat d.pw, Float.ofNat d.ph)
+  if m.viewW > 0 && m.viewH > 0 then min 1 (min ((m.viewW - 40) / pw) ((m.viewH - 40) / ph))
+  else if m.boxW > 0 then m.boxW / pw else 1
+
 def currentZoom (m : Model) : Float :=
   match m.zoom, m.doc with
   | some z, _ => z
-  | none, some d => if m.boxW > 0 then m.boxW / Float.ofNat d.pw else 1
+  | none, some d => fitScale m d
   | none, none => 1
+
+/-- `name` without its last extension (`my.photo.jpg` → `my.photo`). -/
+def baseName (name : String) : String :=
+  match name.splitOn "." with
+  | [n] => n
+  | parts => ".".intercalate (parts.take (parts.length - 1))
+
+/-- Refuse an image too large to edit (`maxImagePixels`), with a status message. -/
+def tooLarge (m : Model) (name : String) (w h : Nat) : Option (Model × Cmd Msg) :=
+  if w * h > maxImagePixels then some ({ m with status := s!"{name}: {w}×{h} is too large (at most {maxImagePixels / 1000000} MP)" }, .none)
+  else none
 
 /-! ## Update -/
 
@@ -339,13 +361,14 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       else (m, .decodeImage f.id (.decoded f.name))
     | none => ({ m with dropping := false }, .none)
   | .pngBytes file name (.ok bytes) =>
-    match Png.decode bytes with
-    | .ok img => openDoc m (Doc.ofImage img "Background") "Open" ((name.splitOn ".").head!)
+    match Png.decode bytes maxImagePixels with
+    | .ok img => openDoc m (Doc.ofImage img "Background") "Open" (baseName name)
     -- a PNG Lean's decoder does not take (16-bit, interlaced): the browser's
     | .error _ => (m, .decodeImage file (.decoded name))
   | .pngBytes _ name (.error e) => ({ m with status := s!"{name}: {e}" }, .none)
   | .decoded name (.ok b) =>
-    let base := (name.splitOn ".").head!
+    if let some r := tooLarge m name b.width b.height then r else
+    let base := baseName name
     openDoc m (Doc.ofImage { width := b.width, height := b.height, data := b.data } "Background") "Open" base
   | .decoded name (.error e) => ({ m with status := s!"{name}: {e}" }, .none)
   | .newImage mp =>
@@ -363,7 +386,7 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | none => (m, .none)
     | some d =>
-      let m := { m with boxW := p.width }
+      let m := if m.zoom.isNone then { m with boxW := p.width } else m
       match m.tool with
       | .hand => ({ m with drag := some (p.clientX, p.clientY, m.panX, m.panY), zoom := some (currentZoom m) }, .none)
       | .crop => ({ m with cropFrom := some (docPoint d p), crop := none }, .none)
@@ -395,21 +418,23 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       | none => (m, .none)
     else ({ m with drag := none, cropFrom := none }, .none)
   | .wheel p =>
+    -- the wheel listens on the viewport: its size gives the fit scale
+    let m := { m with viewW := p.width, viewH := p.height }
     if m.doc.isNone then (m, .none)
-    else
-      let f := Float.exp (-p.deltaY / 500)
-      (zoomTo m (currentZoom { m with boxW := if m.zoom.isNone then p.width else m.boxW } * f), .none)
+    else (zoomTo m (currentZoom m * Float.exp (-p.deltaY / 500)), .none)
+  | .viewport p => (if m.viewW == p.width && m.viewH == p.height then m else { m with viewW := p.width, viewH := p.height }, .none)
   | .zoomBy f => (zoomTo m (currentZoom m * f), .none)
   | .zoomFit => ({ m with zoom := none, panX := 0, panY := 0 }, .none)
   | .zoom100 =>
     match m.doc with
     | some d => (zoomTo m (Float.ofNat d.width / Float.ofNat d.pw), .none)
     | none => (m, .none)
-  | .setAdjust a => refresh { m with adjust := a, pending := if a == {} then none else some .adjust }
-  | .setBlur r => refresh { m with blurRadius := r, pending := some .blur }
-  | .setSharpen a r => refresh { m with sharpAmount := a, sharpRadius := r, pending := some .sharpen }
-  | .preview p => refresh { m with pending := some p }
-  | .cancelPending => refresh { m with pending := none, adjust := {} }
+  -- the panels' settings do not change while a job runs (they are disabled meanwhile)
+  | .setAdjust a => if busy m then (m, .none) else refresh { m with adjust := a, pending := if a == {} then none else some .adjust }
+  | .setBlur r => if busy m then (m, .none) else refresh { m with blurRadius := r, pending := some .blur }
+  | .setSharpen a r => if busy m then (m, .none) else refresh { m with sharpAmount := a, sharpRadius := r, pending := some .sharpen }
+  | .preview p => if busy m then (m, .none) else refresh { m with pending := some p }
+  | .cancelPending => if busy m then (m, .none) else refresh { m with pending := none, adjust := {} }
   | .apply p => if busy m then (m, .none) else startJob { m with pending := some p } (p.op m)
   | .filter op => if busy m then (m, .none) else startJob { m with pending := none } op
   | .frame t =>
@@ -429,14 +454,20 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       match job.finished? with
       | none => ({ m with job := some job, budget, lastFrame := t }, .nextFrame .frame)
       | some result =>
-        let m := { m with job := none, budget, lastFrame := 0, adjust := if m.pending == some Pending.adjust then {} else m.adjust }
+        -- the preview the finished operation applied is done; other settings stay as they are
+        let m := { m with job := none, budget, lastFrame := 0 }
+        let m := match job.kind with
+          | .layer (.adjust _) _ => { m with adjust := {}, pending := if m.pending == some Pending.adjust then none else m.pending }
+          | .layer (.blur _) _ => { m with pending := if m.pending == some Pending.blur then none else m.pending }
+          | .layer (.sharpen ..) _ => { m with pending := if m.pending == some Pending.sharpen then none else m.pending }
+          | _ => m
         match result, m.doc with
         | .layer lid img prev, some d =>
           let (m, c) := commit m (d.setLayerImage lid img prev) job.label (img.width * img.height * 4)
           ({ m with status := s!"{job.label} done" }, c)
         | .doc d', _ =>
           let (m, c) := commit { m with crop := none } d' job.label (d'.layers.size * d'.width * d'.height * 4)
-          ({ m with zoom := none, panX := 0, panY := 0, status := s!"{job.label} done" }, c)
+          ({ m with zoom := none, panX := 0, panY := 0, boxW := 0, status := s!"{job.label} done" }, c)
         | .png bytes, _ =>
           ({ m with status := s!"Exported {m.fileName}.png ({bytes.size / 1024} KB)" },
            .download s!"{m.fileName}.png" "image/png" bytes)
@@ -445,12 +476,17 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | none => (m, .none)
     | some d =>
-      if busy m then (m, .none)
+      if busy m then (m, .none) else
+      let (w, h) := g.outSize d.width d.height
+      if w == 0 || h == 0 then ({ m with status := "Nothing would be left" }, .none)
+      else if w * h > maxImagePixels || d.layers.size * w * h * 4 > maxJobBytes then
+        ({ m with status := s!"{w}×{h} is too large for {d.layers.size} layer(s)" }, .none)
       else ({ m with job := some (Job.geo g d), pending := none, status := s!"{g.label}…", lastFrame := 0 }, .nextFrame .frame)
   | .setResize w h =>
     match m.doc with
     | none => (m, .none)
     | some d =>
+      let w := min w 100000; let h := min h 100000
       if !m.keepRatio then ({ m with resizeW := w, resizeH := h }, .none)
       else if w != m.resizeW then ({ m with resizeW := w, resizeH := max 1 (w * d.height / max 1 d.width) }, .none)
       else ({ m with resizeH := h, resizeW := max 1 (h * d.width / max 1 d.height) }, .none)
@@ -482,21 +518,29 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | some d => commit m (d.moveLayer m.active up) (if up then "Layer up" else "Layer down") 0
     | none => (m, .none)
-  | .selectLayer lid => (if m.active == lid then m else { m with active := lid, pending := none }, .none)
+  | .selectLayer lid =>
+    if m.active == lid then (m, .none)
+    -- a pending preview belonged to the layer that was active: drop it from the canvas too
+    else if m.pending.isSome then refresh { m with active := lid, pending := none }
+    else ({ m with active := lid }, .none)
   | .toggleLayer lid =>
+    if busy m then (m, .none) else
     match m.doc with
     | some d => commit m (d.modifyLayer lid fun l => { l with visible := !l.visible }) "Visibility" 0
     | none => (m, .none)
   | .layerOpacity n =>
+    if busy m then (m, .none) else
     match m.doc with
     | some d => commit m (d.modifyLayer m.active fun l => { l with opacity := n }) "Layer opacity" 0
     | none => (m, .none)
   | .layerBlend b =>
+    if busy m then (m, .none) else
     match m.doc with
     | some d => commit m (d.modifyLayer m.active fun l => { l with blend := Blend.ofName b }) "Blend mode" 0
     | none => (m, .none)
-  | .startRename lid => ({ m with renamingId := some lid }, .focus "#rename")
+  | .startRename lid => if busy m then (m, .none) else ({ m with renamingId := some lid }, .focus "#rename")
   | .rename lid name =>
+    if busy m then (m, .none) else
     match m.doc with
     | some d =>
       let name := name.trimAscii.toString
@@ -529,7 +573,7 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     else match k.key with
       | "b" => update (.setTool .brush) m
       | "e" => update (.setTool .eraser) m
-      | "h" | " " => update (.setTool .hand) m
+      | "h" => update (.setTool .hand) m
       | "c" => update (.setTool .crop) m
       | "+" | "=" => update (.zoomBy 1.25) m
       | "-" => update (.zoomBy 0.8) m
@@ -550,16 +594,16 @@ def fmt1 (x : Float) : String :=
 
 /-- A labelled range input. `commit`: report only when it is released (`change`), for settings
 that record a history step. -/
-def slider (label ident : String) (lo hi step v : Int) (shown : String) (f : Int → Msg) (commit := false) : Html Msg :=
+def slider (label ident : String) (lo hi step v : Int) (shown : String) (f : Int → Msg) (commit := false) (dis := false) : Html Msg :=
   el "label" #[cls "row"] #[
     el "span" #[] #[text label],
     el "input" #[Attr.id ident, .attr "type" "range", .attr "min" (toString lo), .attr "max" (toString hi),
-      .attr "step" (toString step), .prop "value" (.str (toString v)),
+      .attr "step" (toString step), .prop "value" (.str (toString v)), .prop "disabled" (.bool dis),
       if commit then onChange fun s => f (parseInt s) else onInput fun s => f (parseInt s)] #[],
     el "output" #[] #[text shown]]
 
-def check (label ident : String) (v : Bool) (f : Bool → Msg) : Html Msg :=
-  el "label" #[] #[el "input" #[Attr.id ident, .attr "type" "checkbox", .prop "checked" (.bool v), onCheck f] #[], text (" " ++ label)]
+def check (label ident : String) (v : Bool) (f : Bool → Msg) (dis := false) : Html Msg :=
+  el "label" #[] #[el "input" #[Attr.id ident, .attr "type" "checkbox", .prop "checked" (.bool v), .prop "disabled" (.bool dis), onCheck f] #[], text (" " ++ label)]
 
 def button (label ident : String) (m : Msg) (disabled := false) (extra : Array (Attr Msg) := #[]) : Html Msg :=
   el "button" (#[Attr.id ident, onClick m, .prop "disabled" (.bool disabled)] ++ extra) #[text label]
@@ -637,7 +681,8 @@ def stage (m : Model) (d : Doc) : Html Msg :=
 
 def viewport (m : Model) : Html Msg :=
   el "panel" #[Attr.id "viewport", cls (if m.dropping then "viewport drag" else "viewport"),
-      onDragOver (some .dragOver), .on "dragleave" { decode := fun _ => some .dragLeave }, onDrop .files, onWheel (some ∘ .wheel)] #[
+      onDragOver (some .dragOver), .on "dragleave" { decode := fun _ => some .dragLeave }, onDrop .files, onWheel (some ∘ .wheel),
+      onPointer "pointerenter" (some ∘ .viewport)] #[
     match m.doc with
     | some d => stage m d
     | none => el "div" #[cls "empty"] #[
@@ -675,28 +720,28 @@ def panel (title ident : String) (open_ : Bool) (kids : Array (Html Msg)) : Html
 
 def adjustPanel (a : AdjustUI) (pending : Bool) (dis : Bool) : Html Msg :=
   panel "Adjustments" "adjust" true #[
-    slider "Brightness" "adj-brightness" (-100) 100 1 a.brightness (toString a.brightness) fun v => .setAdjust { a with brightness := v },
-    slider "Contrast" "adj-contrast" (-100) 100 1 a.contrast (toString a.contrast) fun v => .setAdjust { a with contrast := v },
-    slider "Exposure" "adj-exposure" (-300) 300 5 a.exposure (fmt1 (Float.ofInt a.exposure / 100)) fun v => .setAdjust { a with exposure := v },
-    slider "Saturation" "adj-saturation" (-100) 100 1 a.saturation (toString a.saturation) fun v => .setAdjust { a with saturation := v },
-    slider "Hue" "adj-hue" (-180) 180 1 a.hue s!"{a.hue}°" fun v => .setAdjust { a with hue := v },
-    slider "Black point" "adj-black" 0 254 1 a.black (toString a.black) fun v => .setAdjust { a with black := v.toNat },
-    slider "White point" "adj-white" 1 255 1 a.white (toString a.white) fun v => .setAdjust { a with white := v.toNat },
-    slider "Gamma" "adj-gamma" 10 300 1 a.gamma (fmt1 (Float.ofNat a.gamma / 100)) fun v => .setAdjust { a with gamma := v.toNat },
-    slider "Shadows" "adj-shadows" (-64) 64 1 a.shadows (toString a.shadows) fun v => .setAdjust { a with shadows := v },
-    slider "Midtones" "adj-midtones" (-64) 64 1 a.midtones (toString a.midtones) fun v => .setAdjust { a with midtones := v },
-    slider "Highlights" "adj-highlights" (-64) 64 1 a.highlights (toString a.highlights) fun v => .setAdjust { a with highlights := v },
-    el "div" #[cls "btns"] #[check "Invert" "adj-invert" a.invert fun b => .setAdjust { a with invert := b },
-      check "Grayscale" "adj-grayscale" a.grayscale fun b => .setAdjust { a with grayscale := b }],
+    slider "Brightness" "adj-brightness" (-100) 100 1 a.brightness (toString a.brightness) (fun v => .setAdjust { a with brightness := v }) (dis := dis),
+    slider "Contrast" "adj-contrast" (-100) 100 1 a.contrast (toString a.contrast) (fun v => .setAdjust { a with contrast := v }) (dis := dis),
+    slider "Exposure" "adj-exposure" (-300) 300 5 a.exposure (fmt1 (Float.ofInt a.exposure / 100)) (fun v => .setAdjust { a with exposure := v }) (dis := dis),
+    slider "Saturation" "adj-saturation" (-100) 100 1 a.saturation (toString a.saturation) (fun v => .setAdjust { a with saturation := v }) (dis := dis),
+    slider "Hue" "adj-hue" (-180) 180 1 a.hue s!"{a.hue}°" (fun v => .setAdjust { a with hue := v }) (dis := dis),
+    slider "Black point" "adj-black" 0 254 1 a.black (toString a.black) (fun v => .setAdjust { a with black := v.toNat }) (dis := dis),
+    slider "White point" "adj-white" 1 255 1 a.white (toString a.white) (fun v => .setAdjust { a with white := v.toNat }) (dis := dis),
+    slider "Gamma" "adj-gamma" 10 300 1 a.gamma (fmt1 (Float.ofNat a.gamma / 100)) (fun v => .setAdjust { a with gamma := v.toNat }) (dis := dis),
+    slider "Shadows" "adj-shadows" (-64) 64 1 a.shadows (toString a.shadows) (fun v => .setAdjust { a with shadows := v }) (dis := dis),
+    slider "Midtones" "adj-midtones" (-64) 64 1 a.midtones (toString a.midtones) (fun v => .setAdjust { a with midtones := v }) (dis := dis),
+    slider "Highlights" "adj-highlights" (-64) 64 1 a.highlights (toString a.highlights) (fun v => .setAdjust { a with highlights := v }) (dis := dis),
+    el "div" #[cls "btns"] #[check "Invert" "adj-invert" a.invert (fun b => .setAdjust { a with invert := b }) (dis := dis),
+      check "Grayscale" "adj-grayscale" a.grayscale (fun b => .setAdjust { a with grayscale := b }) (dis := dis)],
     el "div" #[cls "btns"] #[button "Apply" "adj-apply" (.apply .adjust) (!pending || dis) #[cls "primary"],
       button "Reset" "adj-reset" .cancelPending (!pending)]]
 
 def filterPanel (m : Model) (dis : Bool) : Html Msg :=
   panel "Filters" "filters" true #[
-    slider "Blur radius" "blur-radius" 1 60 1 m.blurRadius (toString m.blurRadius) fun v => .setBlur v.toNat,
+    slider "Blur radius" "blur-radius" 1 60 1 m.blurRadius (toString m.blurRadius) (fun v => .setBlur v.toNat) (dis := dis),
     el "div" #[cls "btns"] #[button "Apply blur" "blur-apply" (.apply .blur) dis #[cls "primary"]],
-    slider "Sharpen" "sharpen-amount" 10 300 5 m.sharpAmount s!"{m.sharpAmount}%" fun v => .setSharpen v.toNat m.sharpRadius,
-    slider "Radius" "sharpen-radius" 1 10 1 m.sharpRadius (toString m.sharpRadius) fun v => .setSharpen m.sharpAmount v.toNat,
+    slider "Sharpen" "sharpen-amount" 10 300 5 m.sharpAmount s!"{m.sharpAmount}%" (fun v => .setSharpen v.toNat m.sharpRadius) (dis := dis),
+    slider "Radius" "sharpen-radius" 1 10 1 m.sharpRadius (toString m.sharpRadius) (fun v => .setSharpen m.sharpAmount v.toNat) (dis := dis),
     el "div" #[cls "btns"] #[button "Apply sharpen" "sharpen-apply" (.apply .sharpen) dis #[cls "primary"]],
     el "div" #[cls "btns"] #[button "Edge detect" "edges" (.filter .edges) dis, button "Emboss" "emboss" (.filter .emboss) dis,
       button "Cancel preview" "filter-cancel" .cancelPending (m.pending.isNone || m.pending == some Pending.adjust)]]
@@ -713,14 +758,15 @@ def transformPanel (m : Model) (dis : Bool) : Html Msg :=
       el "input" #[Attr.id "resize-h", .attr "type" "number", .attr "min" "1", .prop "value" (.str (toString m.resizeH)),
         onChange fun s => .setResize m.resizeW (parseNat s)] #[],
       check "keep ratio" "resize-ratio" m.keepRatio .setKeepRatio,
-      button "Resize" "resize" (.geometry (.resize m.resizeW m.resizeH)) (dis || m.resizeW == 0 || m.resizeH == 0)]]
+      button "Resize" "resize" (.geometry (.resize m.resizeW m.resizeH))
+        (dis || m.resizeW == 0 || m.resizeH == 0 || m.resizeW * m.resizeH > maxImagePixels)]]
 
-def layerRow (active renamingId : Bool) (l : Layer) : Html Msg :=
+def layerRow (active renamingId dis : Bool) (l : Layer) : Html Msg :=
   el "li" #[.key (toString l.id), Attr.id s!"layer-{l.id}", cls (if active then "active" else ""), onClick (.selectLayer l.id)] #[
-    el "input" #[.attr "type" "checkbox", .attr "title" "Visible", .prop "checked" (.bool l.visible),
+    el "input" #[.attr "type" "checkbox", .attr "title" "Visible", .prop "checked" (.bool l.visible), .prop "disabled" (.bool dis),
       .on "click" { decode := fun _ => none, stopPropagation := true },
       .on "change" { payload := .checked, decode := fun _ => some (.toggleLayer l.id) }] #[],
-    el "span" #[cls "name", .on "dblclick" { decode := fun _ => some (.startRename l.id) }] #[
+    el "span" #[cls "name", .on "dblclick" { decode := fun _ => if dis then none else some (.startRename l.id) }] #[
       if renamingId then
         el "input" #[Attr.id "rename", .attr "type" "text", .prop "value" (.str l.name),
           .on "keydown" { payload := .value, decode := fun _ => none },
@@ -733,13 +779,13 @@ def layersPanel (d : Doc) (active : Nat) (renamingId : Option Nat) (dis : Bool) 
   let cur := d.layers.find? (·.id == active)
   panel "Layers" "layers" true #[
     el "ul" #[cls "layers"] (d.layers.reverse.map fun l =>
-      keyedMemo (toString l.id) (l.id == active, renamingId == some l.id, l.name, l.visible, l.opacity, l.blend.name)
-        fun _ => layerRow (l.id == active) (renamingId == some l.id) l),
+      keyedMemo (toString l.id) (l.id == active, renamingId == some l.id, dis, l.name, l.visible, l.opacity, l.blend.name)
+        fun _ => layerRow (l.id == active) (renamingId == some l.id) dis l),
     match cur with
     | some l => el "div" #[cls "sec", .attr "style" "padding:0"] #[
-        slider "Opacity" "layer-opacity" 0 100 1 l.opacity s!"{l.opacity}%" (fun v => .layerOpacity v.toNat) (commit := true),
+        slider "Opacity" "layer-opacity" 0 100 1 l.opacity s!"{l.opacity}%" (fun v => .layerOpacity v.toNat) (commit := true) (dis := dis),
         el "label" #[cls "row"] #[el "span" #[] #[text "Blend"],
-          el "select" #[Attr.id "layer-blend", .prop "value" (.str l.blend.name), onChange .layerBlend]
+          el "select" #[Attr.id "layer-blend", .prop "value" (.str l.blend.name), .prop "disabled" (.bool dis), onChange .layerBlend]
             (Blend.all.map fun b => el "option" #[.attr "value" b.name] #[text b.name]), el "span" #[] #[]]]
     | none => el "div" #[] #[],
     el "div" #[cls "btns"] #[button "+ Layer" "layer-add" .addLayer dis, button "Duplicate" "layer-dup" .duplicateLayer dis,
