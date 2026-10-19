@@ -44,7 +44,7 @@ name = "Examples"
 srcDir = "examples"
 roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp", "Pixels", "PixelsApp",
   "Editor.Image", "Editor.Adjust", "Editor.Filter", "Editor.Geometry", "Editor.Composite", "Editor.Paint", "Editor.Png", "Editor.Core",
-  "Editor.Doc", "Editor.Ops", "Editor", "EditorApp"]
+  "Editor.Doc", "Editor.Ops", "Editor", "EditorApp", "EditorBench", "EditorBenchApp"]
 
 [[lean_exe]]
 name = "leanui-tests"
