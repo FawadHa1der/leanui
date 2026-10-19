@@ -47,9 +47,10 @@ def Op.preview (op : Op) (scale : Float) (img : Image) : Image :=
   | .edges => Editor.edgeDetect img
   | .emboss => Editor.emboss img
 
-/-- What a finished job produced. -/
+/-- What a finished job produced: a layer's new image and, for a layer larger than a preview,
+its new preview (made by the job's last pass); or the bytes of an export. -/
 inductive JobResult where
-  | layer (id : Nat) (img : Image)
+  | layer (id : Nat) (img : Image) (prev : Option Image)
   | png (bytes : ByteArray)
 
 inductive JobKind where
@@ -67,27 +68,38 @@ structure Job where
   row : Nat := 0
   width : Nat
   height : Nat
-  /-- Work units per pixel of a pass. -/
+  /-- Work units per pixel of an operation pass. -/
   cost : Nat := 1
+  /-- The preview size, when a layer job ends with a pass that remakes the preview. -/
+  prevSize : Option (Nat × Nat) := none
   src : Image
   /-- First intermediate: the horizontal blur, or the output of a one-pass operation. -/
   a : Image
   /-- Second intermediate: the vertical blur. -/
   b : Image := default
+  /-- The new preview. -/
+  p : Image := default
   result : Option JobResult := none
   deriving Inhabited
 
 instance : Inhabited JobResult := ⟨.png .empty⟩
 
-def Job.layer (op : Op) (id : Nat) (img : Image) : Job :=
-  let passes := match op with | .blur _ => 2 | .sharpen .. => 3 | _ => 1
+/-- Passes of the operation itself. -/
+def Op.passes : Op → Nat
+  | .blur _ => 2 | .sharpen .. => 3 | _ => 1
+
+/-- A job applying `op` to layer `id`'s image; `prevSize`: the document's preview size, when the
+layer needs a preview. -/
+def Job.layer (op : Op) (id : Nat) (img : Image) (prevSize : Option (Nat × Nat) := none) : Job :=
   let cost := match op with
     | .adjust a => if a.saturation == 0 && a.hue == 0 && !a.grayscale then 1 else 3
     | .blur r | .sharpen _ r => 2 + r
     | .edges | .emboss => 4
-  { label := op.label, kind := .layer op id, passes, cost, width := img.width, height := img.height,
-    src := img, a := Image.blank img.width img.height,
-    b := if passes ≥ 2 then Image.blank img.width img.height else default }
+  let prevSize := prevSize.filter fun (pw, ph) => pw != img.width || ph != img.height
+  { label := op.label, kind := .layer op id, passes := op.passes + (if prevSize.isSome then 1 else 0), cost,
+    width := img.width, height := img.height, prevSize, src := img, a := Image.blank img.width img.height,
+    b := if op.passes ≥ 2 then Image.blank img.width img.height else default,
+    p := match prevSize with | some (pw, ph) => Image.blank pw ph | none => default }
 
 def Job.export (d : Doc) : Job :=
   let ls := d.layers.filter fun l => l.visible && l.opacity > 0 && !l.blank
@@ -100,35 +112,54 @@ def Job.progress (j : Job) : Float :=
 
 def Job.finished? (j : Job) : Option JobResult := j.result
 
-/-- Rows `[y0, y1)` of the current pass. -/
-def Job.slice (j : Job) (y0 y1 : Nat) : Job :=
-  match j with
-  | { label, kind, passes, pass, row, width, height, cost, src, a, b, result } =>
-    let (a, b) := match kind, pass with
-      | .layer (.adjust adj) _, _ => (Adjust.applyRows adj src a y0 y1, b)
-      | .layer (.blur r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b)
-      | .layer (.blur r) _, _ => (a, blurVRows (Float.ofNat r) a b y0 y1)
-      | .layer (.sharpen _ r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b)
-      | .layer (.sharpen _ r) _, 1 => (a, blurVRows (Float.ofNat r) a b y0 y1)
-      -- the horizontal blur is no longer needed: the sharpened rows go there
-      | .layer (.sharpen amt _) _, _ => (sharpenRows (Float.ofNat amt / 100) 0 src b a y0 y1, b)
-      | .layer .edges _, _ => (edgeDetectRows src a y0 y1, b)
-      | .layer .emboss _, _ => (convolveRows Kernel3.emboss src a y0 y1, b)
-      -- as `Doc.flatten`: a normal bottom layer at full opacity is copied
-      | .export ls, p => match ls[p]? with
-        | some l =>
-          if p == 0 && l.opacity == 100 && l.blend == .normal then (Doc.copyRows l.img a y0 y1, b)
-          else (compositeRows a l.img l.opacity l.blend y0 y1, b)
-        | none => (a, b)
-    { label, kind, passes, pass, row, width, height, cost, src, a, b, result }
-
-/-- The image a finished layer job leaves. -/
+/-- The image a layer job's operation passes leave. -/
 def Job.output (j : Job) : Image :=
   match j.kind with
   | .layer (.blur _) _ => j.b
   | _ => j.a
 
-/-- Do about `budget` pixels of work (at least one row). -/
+/-- Is pass `p` the preview pass? -/
+def Job.isPreviewPass (j : Job) (p : Nat) : Bool :=
+  match j.kind with
+  | .layer op _ => j.prevSize.isSome && p == op.passes
+  | .export _ => false
+
+/-- Width, height (rows to do) and work units per pixel of pass `p`. -/
+def Job.dims (j : Job) (p : Nat) : Nat × Nat × Nat :=
+  match j.prevSize with
+  | some (pw, ph) =>
+    if j.isPreviewPass p then (pw, ph, 1 + (j.width * j.height) / max 1 (pw * ph)) else (j.width, j.height, j.cost)
+  | none => (j.width, j.height, j.cost)
+
+/-- Rows `[y0, y1)` of the current pass. -/
+def Job.slice (j : Job) (y0 y1 : Nat) : Job :=
+  let preview := j.isPreviewPass j.pass
+  match j with
+  | { label, kind, passes, pass, row, width, height, cost, prevSize, src, a, b, p, result } =>
+    let (a, b, p) := if preview then
+        -- the preview, from the operation's output (`b` after a blur, else `a`)
+        match kind with
+        | .layer (.blur _) _ => (a, b, downscaleBoxRows b p y0 y1)
+        | _ => (a, b, downscaleBoxRows a p y0 y1)
+      else match kind, pass with
+      | .layer (.adjust adj) _, _ => (Adjust.applyRows adj src a y0 y1, b, p)
+      | .layer (.blur r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b, p)
+      | .layer (.blur r) _, _ => (a, blurVRows (Float.ofNat r) a b y0 y1, p)
+      | .layer (.sharpen _ r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b, p)
+      | .layer (.sharpen _ r) _, 1 => (a, blurVRows (Float.ofNat r) a b y0 y1, p)
+      -- the horizontal blur is no longer needed: the sharpened rows go there
+      | .layer (.sharpen amt _) _, _ => (sharpenRows (Float.ofNat amt / 100) 0 src b a y0 y1, b, p)
+      | .layer .edges _, _ => (edgeDetectRows src a y0 y1, b, p)
+      | .layer .emboss _, _ => (convolveRows Kernel3.emboss src a y0 y1, b, p)
+      -- as `Doc.flatten`: a normal bottom layer at full opacity is copied
+      | .export ls, q => match ls[q]? with
+        | some l =>
+          if q == 0 && l.opacity == 100 && l.blend == .normal then (Doc.copyRows l.img a y0 y1, b, p)
+          else (compositeRows a l.img l.opacity l.blend y0 y1, b, p)
+        | none => (a, b, p)
+    { label, kind, passes, pass, row, width, height, cost, prevSize, src, a, b, p, result }
+
+/-- Do about `budget` work units (at least one row). -/
 partial def Job.run (j : Job) (budget : Nat) : Job :=
   if j.result.isSome then j else
   if j.pass ≥ j.passes then j else
@@ -142,18 +173,20 @@ partial def Job.run (j : Job) (budget : Nat) : Job :=
   | .layer _ _ => rows j budget
 where
   rows (j : Job) (budget : Nat) : Job :=
-    let n := max 1 (budget / max 1 (j.width * j.cost))
-    let y1 := min j.height (j.row + n)
-    let j := j.slice j.row y1
+    let (w, h, cost) := j.dims j.pass
+    let n := max 1 (budget / max 1 (w * cost))
+    let y1 := min h (j.row + n)
     let done := y1 - j.row
-    let j := if y1 ≥ j.height then { j with pass := j.pass + 1, row := 0 } else { j with row := y1 }
+    let j := j.slice j.row y1
+    let j := if y1 ≥ h then { j with pass := j.pass + 1, row := 0 } else { j with row := y1 }
     if j.pass ≥ j.passes then
       match j.kind with
       | .layer _ id =>
         let out := j.output
-        { j with result := some (.layer id out), a := default, b := default, src := default }
+        let prev := if j.prevSize.isSome then some j.p else none
+        { j with result := some (.layer id out prev), a := default, b := default, p := default, src := default }
       | .export _ => j
     else if j.pass == j.passes - 1 && (match j.kind with | .export _ => true | _ => false) then j
-    else if budget > done * j.width * j.cost then j.run (budget - done * j.width * j.cost) else j
+    else if budget > done * w * cost then j.run (budget - done * w * cost) else j
 
 end Editor

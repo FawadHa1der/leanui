@@ -799,7 +799,7 @@ def testJobs : T Unit := do
   for (op, want) in cases do
     for budget in [1, 5000, 1000000] do
       match finish (Job.layer op 7 img) budget with
-      | (some (.layer 7 out), steps) =>
+      | (some (.layer 7 out _), steps) =>
         expectEq s!"{op.label} in slices of {budget}" out.checksum want.checksum
         if budget == 1 then expect s!"{op.label}: one row per slice" (steps ≥ 203) s!"{steps}"
       | _ => expect s!"{op.label} finishes" false
@@ -815,6 +815,16 @@ def testJobs : T Unit := do
     | .error e => expect "export decodes" false e
   | _ => expect "export finishes" false
   expect "progress" ((Job.layer (.blur 2) 1 img).progress == 0)
+  -- a layer larger than a preview: the job's last pass makes the new preview, sliced like the rest
+  let big := testImage 1500 700
+  for (op, budget) in [(Op.blur 3, 30000), (Op.adjust { Adjust.identity with brightness := 20 }, 1)] do
+    match finish (Job.layer op 1 big (some (1280, 597))) budget with
+    | (some (.layer 1 out (some prev)), _) =>
+      expectEq s!"{op.label}: preview pass" prev.checksum (downscaleBox out 1280 597).checksum
+    | _ => expect s!"{op.label}: a preview" false
+  match finish (Job.layer (.blur 3) 1 img (some (301, 203))) 100000 with
+  | (some (.layer 1 _ none), _) => expect "no preview pass for a small image" true
+  | _ => expect "no preview pass for a small image" false
 
 /-! ### The program in the DOM model -/
 

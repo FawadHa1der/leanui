@@ -101,8 +101,10 @@ def modifyLayer (d : Doc) (id : Nat) (f : Layer → Layer) : Doc :=
   | some i => let (ls, d) := d.takeLayers; { d with layers := ls.modify i f }
 
 /-- Replace a layer's full-resolution image (and remake its preview). -/
-def setLayerImage (d : Doc) (id : Nat) (img : Image) : Doc :=
-  let prev := mkPreview img d.pw d.ph
+def setLayerImage (d : Doc) (id : Nat) (img : Image) (prev? : Option Image := none) : Doc :=
+  let prev := match prev? with
+    | some p => if p.width == d.pw && p.height == d.ph then some p else mkPreview img d.pw d.ph
+    | none => mkPreview img d.pw d.ph
   d.modifyLayer id fun l => { l with img, prev, blank := false }
 
 /-- A new transparent layer above `above`; returns the document and the new layer's id. -/

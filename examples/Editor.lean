@@ -302,7 +302,7 @@ def startJob (m : Model) (op : Op) : Model × Cmd Msg :=
     match d.layerIndex? m.active with
     | none => (m, .none)
     | some i =>
-      let job := Job.layer op m.active d.layers[i]!.img
+      let job := Job.layer op m.active d.layers[i]!.img (some (d.pw, d.ph))
       ({ m with job := some job, status := s!"{op.label}…", lastFrame := 0 }, .nextFrame .frame)
 
 /-- Paint from the last stroke position to `p`, update the canvas under the brush. -/
@@ -424,8 +424,8 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       | some result =>
         let m := { m with job := none, budget, lastFrame := 0, adjust := if m.pending == some Pending.adjust then {} else m.adjust }
         match result, m.doc with
-        | .layer lid img, some d =>
-          let (m, c) := commit m (d.setLayerImage lid img) job.label (img.width * img.height * 4)
+        | .layer lid img prev, some d =>
+          let (m, c) := commit m (d.setLayerImage lid img prev) job.label (img.width * img.height * 4)
           ({ m with status := s!"{job.label} done" }, c)
         | .png bytes, _ =>
           ({ m with status := s!"Exported {m.fileName}.png ({bytes.size / 1024} KB)" },
