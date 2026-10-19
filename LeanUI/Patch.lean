@@ -249,11 +249,13 @@ end LeanUI.Op
 
 namespace LeanUI.Buf
 
-/-- Write `count` then the handles `hs[lo:hi]` (only through `w`, whatever `ops` is). -/
-def handles (b : Buf) (hs : Array UInt32) (lo hi : Nat) : Buf := Id.run do
-  let mut b := b.w (hi - lo).toUInt32
-  for i in [lo:hi] do b := b.w hs[i]!
-  return b
+/-- Write `count` then the handles `hs[lo:hi]` (only through `w`, whatever `ops` is). A recursive
+loop: `for i in [lo:hi]` allocates its range object on every call, one per clone. -/
+def handles (b : Buf) (hs : Array UInt32) (lo hi : Nat) : Buf :=
+  go (b.w (hi - lo).toUInt32) lo
+where
+  go (b : Buf) (i : Nat) : Buf := if i < hi then go (b.w hs[i]!) (i + 1) else b
+  termination_by hi - i
 
 /-- `TEMPLATE tid count hs`: remember a copy of the subtree rooted at `hs[0]`, whose nodes are
 `hs` in pre-order. -/

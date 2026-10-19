@@ -155,8 +155,11 @@ inductive Command where
   | setListener (n : UInt32) (ev : String) (slot : UInt32) (payload : Payload) (flags : UInt32)
   | removeListener (n : UInt32) (ev : String)
   | mount (sel : String) (n : UInt32)
+  | template (tid : UInt32) (hs : Array UInt32)
+  | clone (tid : UInt32) (hs : Array UInt32)
 
-/-- Decode the DOM commands of a buffer (`INTERN` is dropped: the writers intern again). -/
+/-- Decode the DOM commands of a buffer (`INTERN` is dropped: the writers intern again). It stops
+at the first command it does not know (an effect); `checkReplay` then fails. -/
 def decodeCommands (b : Buf) : Array Command := Id.run do
   let us := utf16Units b.strs
   let names : Std.HashMap UInt32 String := b.names.fold (fun m k v => m.insert v k) {}
@@ -194,6 +197,10 @@ def decodeCommands (b : Buf) : Array Command := Id.run do
       else if op == Op.removeListener then (some (.removeListener a (name (pc + 8))), 12)
       else if op == Op.intern then (none, 16)
       else if op == Op.mount then (some (.mount (str (pc + 4)) (word (pc + 12))), 16)
+      else if op == Op.template || op == Op.clone then
+        let n := (word (pc + 8)).toNat
+        let hs := (Array.range n).map fun k => word (pc + 12 + 4 * k)
+        (some (if op == Op.template then .template a hs else .clone a hs), 12 + 4 * n)
       else (none, ops.size)  -- not a DOM command: stop
     if let some c := c then out := out.push c
     pc := pc + len
@@ -217,6 +224,13 @@ def replay (b : Buf) (cs : Array Command) : Buf :=
     | .setListener n ev sl pl fl => b.setListener n ev sl pl fl
     | .removeListener n ev => b.removeListener n ev
     | .mount sel n => b.mount sel n
+    | .template t hs => b.template t hs
+    | .clone t hs => b.clone t hs
+
+/-- A replay must write what it decoded, or the encoding phase it measures is not the buffer's. -/
+def checkReplay (what : String) (replayed written : Buf) : IO Unit := do
+  if replayed.ops.size != written.ops.size || replayed.strs.size != written.strs.size then
+    throw (IO.userError s!"{what}: the replay wrote {replayed.ops.size} + {replayed.strs.size} bytes, the diff {written.ops.size} + {written.strs.size}")
 
 /-- Small objects of one update, by phase. `render` is what running the lazy rows' thunks
 allocated, `mount` the rest of the diff (mounting, patching, releasing) without the encoding,
@@ -243,7 +257,7 @@ def phasesOf (calib : Nat) (p : Program Model Msg) (st : State Model Msg) (msgs 
   let ((_, d2), noRender) ← smallObjects fun _ => (patch 0 st.tree pv).run st.diff
   let cs := decodeCommands d2.buf
   let (b, encode) ← smallObjects fun _ => replay st.diff.buf cs
-  if b.ops.size != d2.buf.ops.size then IO.println s!"  (replay wrote {b.ops.size} bytes, the diff {d2.buf.ops.size})"
+  checkReplay "allocs" b d2.buf
   let (st', step) ← smallObjects fun _ => ((stepMsgs p msgs).run st).2
   -- `stepMsgs` reconciles subscriptions last; again, on the state it left
   let (_, subs) ← smallObjects fun _ => ((syncSubs (p.subscriptions st'.model)).run st').2
@@ -314,7 +328,8 @@ def allocsNodes : IO Unit := do
     let (r, n) ← smallObjects fun _ => (mount v).run w
     let cs ← IO.lazyPure fun _ => decodeCommands r.2.buf
     let w ← warm ()
-    let (_, e) ← smallObjects fun _ => replay w.buf cs
+    let (b, e) ← smallObjects fun _ => replay w.buf cs
+    checkReplay s!"allocs-nodes {name}" b r.2.buf
     IO.println s!"| {name} | {n - calib} | {e - calib} |"
   -- the same tbody into a state with free handles and slots (as after clearing 1,000 rows)
   let rows := el "tbody" #[] (Bench.lazyRows (Bench.build {} 1000))
