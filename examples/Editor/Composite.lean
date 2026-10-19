@@ -59,15 +59,17 @@ dispatch per channel. -/
     (i n : USize) : ByteArray :=
   if i < n then
     if ht : InPx top i then
-      let as := div255 (px32 top i ht 3 * op)
+      let t := get32 top i ht
+      let as := div255 ((t >>> 24) * op)
       if as == 0 then compLoop bf top d op (i + 4) n
       else if h : InPx d i then
-        let ab := px32 d i h 3
+        let v := get32 d i h
+        let ab := v >>> 24
         let ao2 := as * 255 + ab * (255 - as)
-        let d := put4w d i h (compCh bf (px32 d i h 0) (px32 top i ht 0) as ab ao2)
-          (compCh bf (px32 d i h 1) (px32 top i ht 1) as ab ao2) (compCh bf (px32 d i h 2) (px32 top i ht 2) as ab ao2)
-          (div255 ao2)
-        compLoop bf top d op (i + 4) n
+        let w := compCh bf (v &&& 255) (t &&& 255) as ab ao2 |||
+          (compCh bf ((v >>> 8) &&& 255) ((t >>> 8) &&& 255) as ab ao2 <<< 8) |||
+          (compCh bf ((v >>> 16) &&& 255) ((t >>> 16) &&& 255) as ab ao2 <<< 16) ||| (div255 ao2 <<< 24)
+        compLoop bf top (set32 d i w h) op (i + 4) n
       else d
     else d
   else d

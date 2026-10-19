@@ -55,16 +55,19 @@ partial def dabRow (d : ByteArray) (w x x1 y : USize) (cx dy2 r inner span ca cr
       let o := 4 * (y * w + x)
       if s ≤ 0 then dabRow d w (x + 1) x1 y cx dy2 r inner span ca cr cg cb erase
       else if h : InPx d o then
-        let ab := (px d o h 3).toFloat * fInv255
-        let d :=
-          if erase then (setPx d o h 3 (toByte (ab * (1 - s) * 255))).1
+        let v := get32 d o h
+        let ab := (v >>> 24).toFloat * fInv255
+        let v' :=
+          if erase then (v &&& (0xffffff : UInt32)) ||| ((toByte (ab * (1 - s) * f255)).toUInt32 <<< 24)
           else
             let ao := s + ab * (1 - s)
             let kb := ab * (1 - s) / ao
             let ks := s / ao
-            put4 d o h (toByte (ks * cr + kb * (px d o h 0).toFloat)) (toByte (ks * cg + kb * (px d o h 1).toFloat))
-              (toByte (ks * cb + kb * (px d o h 2).toFloat)) (toByte (ao * 255))
-        dabRow d w (x + 1) x1 y cx dy2 r inner span ca cr cg cb erase
+            (toByte (ks * cr + kb * (v &&& (255 : UInt32)).toFloat)).toUInt32 |||
+              ((toByte (ks * cg + kb * ((v >>> 8) &&& (255 : UInt32)).toFloat)).toUInt32 <<< 8) |||
+              ((toByte (ks * cb + kb * ((v >>> 16) &&& (255 : UInt32)).toFloat)).toUInt32 <<< 16) |||
+              ((toByte (ao * f255)).toUInt32 <<< 24)
+        dabRow (set32 d o v' h) w (x + 1) x1 y cx dy2 r inner span ca cr cg cb erase
       else d
   else d
 

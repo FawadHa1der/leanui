@@ -206,25 +206,30 @@ end Adjust
   if v >>> 31 != 0 then 0 else clamp255 (v >>> 12)
 
 /-- Table lookups on the pixels at bytes `i .. n - 1` of `d`; alpha untouched. -/
-partial def lutLoop (lut : @& ByteArray) (hl : 256 ≤ lut.size) (d : ByteArray) (i n : USize) : ByteArray :=
-  if i < n then
-    if h : InPx d i then
-      lutLoop lut hl (put3 d i h (tab lut hl (px d i h 0)) (tab lut hl (px d i h 1)) (tab lut hl (px d i h 2)))
-        (i + 4) n
-    else d
+partial def lutLoop (lut : @& ByteArray) (hl : 256 ≤ lut.size) (d : ByteArray) (n : USize) (hn : RowIn d 0 n)
+    (h3 : 3 ≤ n) (i : USize) : ByteArray :=
+  if hi : i < n - 3 then
+    let h := hn.px h3 hi
+    let v := get32 d (0 + i) h
+    let r := (tab lut hl v.toUInt8).toUInt32
+    let g := (tab lut hl (v >>> 8).toUInt8).toUInt32
+    let b := (tab lut hl (v >>> 16).toUInt8).toUInt32
+    lutLoop lut hl (set32 d (0 + i) (r ||| (g <<< 8) ||| (b <<< 16) ||| (v &&& 0xff000000)) h) n (hn.set32 _ _ _) h3
+      (i + 4)
   else d
 
 /-- Table lookups, then the colour matrix. -/
 partial def lutMatLoop (lut : @& ByteArray) (hl : 256 ≤ lut.size) (m0 m1 m2 m3 m4 m5 m6 m7 m8 : UInt32)
-    (d : ByteArray) (i n : USize) : ByteArray :=
-  if i < n then
-    if h : InPx d i then
-      let r := (tab lut hl (px d i h 0)).toUInt32
-      let g := (tab lut hl (px d i h 1)).toUInt32
-      let b := (tab lut hl (px d i h 2)).toUInt32
-      lutMatLoop lut hl m0 m1 m2 m3 m4 m5 m6 m7 m8
-        (put3w d i h (matRow m0 m1 m2 r g b) (matRow m3 m4 m5 r g b) (matRow m6 m7 m8 r g b)) (i + 4) n
-    else d
+    (d : ByteArray) (n : USize) (hn : RowIn d 0 n) (h3 : 3 ≤ n) (i : USize) : ByteArray :=
+  if hi : i < n - 3 then
+    let h := hn.px h3 hi
+    let v := get32 d (0 + i) h
+    let r := (tab lut hl v.toUInt8).toUInt32
+    let g := (tab lut hl (v >>> 8).toUInt8).toUInt32
+    let b := (tab lut hl (v >>> 16).toUInt8).toUInt32
+    let w := matRow m0 m1 m2 r g b ||| (matRow m3 m4 m5 r g b <<< 8) ||| (matRow m6 m7 m8 r g b <<< 16) |||
+      (v &&& 0xff000000)
+    lutMatLoop lut hl m0 m1 m2 m3 m4 m5 m6 m7 m8 (set32 d (0 + i) w h) n (hn.set32 _ _ _) h3 (i + 4)
   else d
 
 namespace Adjust
@@ -239,11 +244,15 @@ def applyRowsIn (a : Adjust) (img : Image) (y0 y1 : Nat) : Image :=
     let n := (4 * img.width * y1).toUSize
     if hl : 256 ≤ lut.size then
       let ⟨w, h, d⟩ := img
-      if a.colorNeutral then
-        ⟨w, h, lutLoop lut hl d i n⟩
-      else
-        let m := Adjust.fixedMatrix a.matrix
-        ⟨w, h, lutMatLoop lut hl m[0]! m[1]! m[2]! m[3]! m[4]! m[5]! m[6]! m[7]! m[8]! d i n⟩
+      -- bytes `0 .. n - 1` checked once: the loops compare `i` only
+      let n := min n d.usize
+      if hn : RowIn d 0 n ∧ 3 ≤ n then
+        if a.colorNeutral then
+          ⟨w, h, lutLoop lut hl d n hn.1 hn.2 i⟩
+        else
+          let m := Adjust.fixedMatrix a.matrix
+          ⟨w, h, lutMatLoop lut hl m[0]! m[1]! m[2]! m[3]! m[4]! m[5]! m[6]! m[7]! m[8]! d n hn.1 hn.2 i⟩
+      else ⟨w, h, d⟩
     else img
 
 /-- Write rows `y0 .. y1 - 1` of `dst` from the same rows of `src` adjusted by `a` (same-size
@@ -262,16 +271,105 @@ def apply (a : Adjust) (img : Image) : Image :=
 
 end Adjust
 
-/-! ## Histogram -/
+/-! ## Histogram
 
-/-- Count bytes `i .. n - 1` of `d` into `t`: bins 0..255 red, 256..511 green, 512..767 blue,
-768..1023 luminance (Rec. 709, `(54 R + 183 G + 19 B + 128) / 256`). -/
+The counts live in a byte array of 1024 little-endian 32-bit words (`HistTable`), and one pixel
+updates its four counters in one inline-C step (`histAdd`: one exclusivity check, no boxing, four
+32-bit increments). An
+`Array UInt32` would box each count, check bounds and exclusivity, and release the old element on
+every increment. -/
+
+/-- Add one to the little-endian word at byte `4 k` (the specification of `histAdd`'s steps). -/
+def incWord (t : ByteArray) (k : Nat) : ByteArray :=
+  let o := 4 * k
+  let x := ((t.get! o).toUInt32 ||| ((t.get! (o + 1)).toUInt32 <<< 8) ||| ((t.get! (o + 2)).toUInt32 <<< 16) |||
+    ((t.get! (o + 3)).toUInt32 <<< 24)) + 1
+  t.set! o x.toUInt8 |>.set! (o + 1) (x >>> 8).toUInt8 |>.set! (o + 2) (x >>> 16).toUInt8
+    |>.set! (o + 3) (x >>> 24).toUInt8
+
+theorem incWord_size (t : ByteArray) (k : Nat) : (incWord t k).size = t.size := by
+  simp [incWord]
+
+/-- Count the pixel `v` (a little-endian word): one more in bins `r`, `256 + g`, `512 + b` and
+`768 + (54 r + 183 g + 19 b + 128) / 256` of the table `t` (at least 4096 bytes). -/
+@[extern c inline "({ lean_object *t_ = #1; uint32_t v_ = #2; \
+  if (LEAN_UNLIKELY(!lean_is_exclusive(t_))) t_ = lean_copy_byte_array(t_); \
+  typedef uint32_t __attribute__((aligned(1))) u32u_; \
+  u32u_ *w_ = (u32u_ *)lean_sarray_cptr(t_); \
+  uint32_t r_ = v_ & 255, g_ = (v_ >> 8) & 255, l_ = (v_ >> 16) & 255; \
+  uint32_t k_[4] = { r_, 256 + g_, 512 + l_, 768 + ((54 * r_ + 183 * g_ + 19 * l_ + 128) >> 8) }; \
+  for (int j_ = 0; j_ < 4; j_++) { \
+    if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) w_[k_[j_]] += 1; \
+    else w_[k_[j_]] = __builtin_bswap32(__builtin_bswap32(w_[k_[j_]]) + 1); } \
+  t_; })"]
+def histAdd (t : ByteArray) (v : UInt32) (_ht : 4096 ≤ t.size) : ByteArray :=
+  let r := v &&& 255
+  let g := (v >>> 8) &&& 255
+  let b := (v >>> 16) &&& 255
+  let y := (54 * r + 183 * g + 19 * b + 128) >>> 8
+  incWord (incWord (incWord (incWord t r.toNat) (256 + g.toNat)) (512 + b.toNat)) (768 + y.toNat)
+
+theorem histAdd_size (t : ByteArray) (v : UInt32) (ht : 4096 ≤ t.size) : (histAdd t v ht).size = t.size := by
+  simp [histAdd, incWord_size]
+
+/-- Count the pixels at bytes `i, i + 4, …` below `n` of `d` (checked once: `RowIn d 0 n`) into `t`. -/
+partial def histTableLoop (d : @& ByteArray) (n : USize) (hn : RowIn d 0 n) (h3 : 3 ≤ n) (t : ByteArray)
+    (ht : 4096 ≤ t.size) (i : USize) : ByteArray :=
+  if hi : i < n - 3 then
+    let t' := histAdd t (get32 d (0 + i) (hn.px h3 hi)) ht
+    histTableLoop d n hn h3 t' (by rw [histAdd_size]; exact ht) (i + 4)
+  else t
+
+/-- A histogram table: 1024 little-endian 32-bit counts (4096 bytes), in the order of
+`histogram`. -/
+structure HistTable where
+  bytes : ByteArray
+
+def HistTable.empty : HistTable := ⟨zeros 4096⟩
+
+/-- Add the pixels of rows `y0 .. y1 - 1` to the table. -/
+def HistTable.addRows (t : HistTable) (img : Image) (y0 y1 : Nat) : HistTable :=
+  let ⟨t⟩ := t
+  let y1 := min y1 img.height
+  if y1 ≤ y0 then ⟨t⟩
+  else
+    let d := img.data
+    let n := min (4 * img.width * y1).toUSize d.usize
+    if h : 4096 ≤ t.size ∧ RowIn d 0 n ∧ 3 ≤ n then
+      ⟨histTableLoop d n h.2.1 h.2.2 t h.1 (4 * img.width * y0).toUSize⟩
+    else ⟨t⟩
+
+/-- The counts. -/
+def HistTable.counts (t : HistTable) : Array Nat :=
+  let t := t.bytes
+  (Array.range 1024).map fun k =>
+    (t.get! (4 * k)).toNat ||| ((t.get! (4 * k + 1)).toNat <<< 8) ||| ((t.get! (4 * k + 2)).toNat <<< 16) |||
+      ((t.get! (4 * k + 3)).toNat <<< 24)
+
+/-- The histogram of every `step`-th row (`0, step, 2 step, …`), in the order of `histogram`: a
+cheaper estimate of its shape for a live display. -/
+def histogramEvery (img : Image) (step : Nat) : Array Nat := Id.run do
+  let step := max 1 step
+  let mut t := HistTable.empty
+  let mut y := 0
+  while y < img.height do
+    t := t.addRows img y (y + 1)
+    y := y + step
+  return t.counts
+
+/-- 1024 counts: 256 bins each for red, green, blue and luminance (Rec. 709 integer weights,
+`(54 R + 183 G + 19 B + 128) / 256`), in that order. Each group sums to the pixel count. -/
+def histogram (img : Image) : Array Nat :=
+  (HistTable.empty.addRows img 0 img.height).counts
+
+/-- Count the pixels at bytes `i .. n - 1` of `d` into the `Array UInt32` `t` (`histogramRows`). -/
 partial def histLoop (d : @& ByteArray) (t : Array UInt32) (i n : USize) : Array UInt32 :=
   if i < n then
     if h : InPx d i then
-      let r := px32 d i h 0
-      let g := px32 d i h 1
-      let b := px32 d i h 2
+      let v := get32 d i h
+      let r := v &&& 255
+      let g := (v >>> 8) &&& 255
+      let b := (v >>> 16) &&& 255
       let y := (54 * r + 183 * g + 19 * b + 128) >>> 8
       let t := wrW t r.toUSize (rdW t r.toUSize + 1)
       let t := wrW t (256 + g.toUSize) (rdW t (256 + g.toUSize) + 1)
@@ -282,15 +380,12 @@ partial def histLoop (d : @& ByteArray) (t : Array UInt32) (i n : USize) : Array
   else t
 
 /-- Add the pixels of rows `y0 .. y1 - 1` to the counts `t` (1024 entries, as `histogram`), for
-computing a histogram in chunks. Counts are 32-bit (images up to 4 billion pixels). -/
+computing a histogram in chunks. Counts are 32-bit (images up to 4 billion pixels). An
+`Array UInt32` of counts is slower to update than a `HistTable` (each count is boxed): prefer
+`HistTable.addRows`, or `histogramEvery` for a sampled histogram. -/
 def histogramRows (img : Image) (y0 y1 : Nat) (t : Array UInt32 := Array.replicate 1024 0) : Array UInt32 :=
   let y1 := min y1 img.height
   if y1 ≤ y0 then t
   else histLoop img.data t (4 * img.width * y0).toUSize (4 * img.width * y1).toUSize
-
-/-- 1024 counts: 256 bins each for red, green, blue and luminance (Rec. 709 integer weights,
-`(54 R + 183 G + 19 B + 128) / 256`), in that order. Each group sums to the pixel count. -/
-def histogram (img : Image) : Array Nat :=
-  (histogramRows img 0 img.height).map (·.toNat)
 
 end Editor
