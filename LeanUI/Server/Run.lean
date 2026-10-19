@@ -28,8 +28,9 @@ structure Config where
   logSessions : Bool := false
   /-- Prefix of the session endpoint (for `logSessions`). -/
   endpoint : String := "/leanui"
-  /-- The `Std.Http` settings. Keep-alive connections serve many events each. -/
-  http : Std.Http.Config := { maxRequests := 100000, serverName := some (.mk "LeanUI") }
+  /-- The `Std.Http` settings. Keep-alive connections serve many events each. Its own `Date`
+  header is off: `toResponse` sets one (see `httpDate`). -/
+  http : Std.Http.Config := { maxRequests := 100000, serverName := some (.mk "LeanUI"), generateDate := false }
 
 /-- The bind address. -/
 def Config.address (c : Config) : Except String Std.Net.SocketAddress := do
@@ -65,10 +66,21 @@ def toReq (r : Std.Http.Request Std.Http.Body.Stream) (maxBody : Nat) : ContextA
       | none => ""
     return .ok { Req.ofTarget method target headers body with remote }
 
-/-- A `Res` as a `Std.Http` response. Invalid header names or values are dropped (and logged). -/
+/-- The current time as an HTTP `Date` value. `Std.Http`'s own `Date` header looks "UTC" up in
+the time zone database, which minimal images (`ubuntu:24.04`, distroless) do not have: there the
+lookup throws and every connection closes without a response. Fixed UTC rules need no database;
+the RFC 822 form then ends in `+0000`, which HTTP writes `GMT` (RFC 9110's IMF-fixdate). -/
+def httpDate : IO String := do
+  let d := Std.Time.DateTime.ofTimestamp (← Std.Time.Timestamp.now) Std.Time.TimeZone.ZoneRules.UTC
+  return d.toRFC822String.replace " +0000" " GMT"
+
+/-- A `Res` as a `Std.Http` response, with a `Date` header unless `res` has one. Invalid header
+names or values are dropped (and logged). -/
 def toResponse (res : Res) : Async (Std.Http.Response Std.Http.Body.Full) := do
   let status := (Std.Http.Status.ofCode none res.status.toUInt16).getD .internalServerError
   let mut b := Std.Http.Response.withStatus status
+  if !res.headers.any (·.1.toLower == "date") then
+    if let some b' := b.header? "date" (← httpDate) then b := b'
   for (k, v) in res.headers do
     match b.header? k v with
     | some b' => b := b'

@@ -527,6 +527,9 @@ def testHttpAdapter : IO Unit := withSite {} fun _ site => do
   expect (head.startsWith "HTTP/1.1 200") s!"page status: {head}"
   expect (contains head "Content-Type: text/html; charset=utf-8") "page type"
   expect (contains head "Cache-Control: no-store") "page cache"
+  let dates := (head.splitOn "\r\n").filter (·.startsWith "Date: ")
+  expect (dates.length == 1 && dates.all (·.endsWith " GMT")) s!"one Date header, in GMT: {dates}"
+  expect (!({} : Config).http.generateDate) "Std.Http's own Date header stays off (it needs a time zone database)"
   let page := String.fromUTF8! body
   let some sid := jsonField page "session" | throw (IO.userError "FAILED: no session over HTTP")
   expect (contains page "<output id=\"value\" class=\"pos\">0</output>") "SSR over HTTP"
