@@ -774,7 +774,43 @@ to be re-measured on the reference Mac*.
   next frame while the current one is filtered (this hides the grab); and filtering in a worker.
   The worker is the largest change, because frames would then be filtered in parallel.
 
-Firefox and GitHub's runners: the `bench` label runs the same measurement (below).
+**GitHub's runners** (`ubuntu-latest`, the `bench` run at `6711a38`, 2026-10-19), same
+measurement. These are faster machines than the cloud VM: Chromium's Lean side is about 3× faster.
+
+| Chromium 151 | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 30 | 30 | 30.3 |
+| none (grab and draw) | 30 · 0.5 · 0.2 | 30 · 1.7 · 0.5 | 30 · 2.8 · 0.9 |
+| vivid (contrast, saturation) | 30 · 0.5 · 1.5 | 30 · 1.8 · 5.5 | 30 · 2.8 · 12.1 |
+| black and white | 29.7 · 0.5 · 1.5 | 29.7 · 1.7 · 5.6 | 30.1 · 3.3 · 12.3 |
+| invert (a lookup table) | 29.7 · 0.6 · 1.7 | 29.3 · 1.8 · 4.4 | 29.7 · 2.9 · 9.9 |
+| edge detect (Sobel) | 27.7 · 0.5 · 3.0 | 29.3 · 1.7 · 9.2 | 29.8 · 2.7 · 19.7 |
+| emboss (3×3) | 23 · 0.5 · 3.6 | 30 · 1.8 · 13.6 | 27.7 · 2.8 · 30.8 |
+| sharpen (unsharp mask, radius 2) | 29.7 · 0.6 · 8.7 | 28.6 · 1.8 · 31.6 | 12.5 · 2.9 · 73.8 |
+| blur (Gaussian, radius 4) | 29.7 · 0.6 · 10.7 | 22 · 1.8 · 41.6 | 10 · 2.7 · 94.8 |
+
+On the runner every filter but blur keeps up with the video at 720p. At 1080p the colour
+filters, edges and emboss do, and blur and sharpen run at 10–12.5 fps. The 640×360 emboss
+(23 fps) and edges (27.7) rows cost 3–4 ms a frame, so something other than the filter cost
+those frames (one 3 s window each, not repeated).
+
+| Playwright's Firefox 153 | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 25.1 | 25 | 25 |
+| none (grab and draw) | 25 · 2 · 0 | 24.9 · 8 · 1 | 24.9 · 16 · 1 |
+| vivid (contrast, saturation) | 24.6 · 2 · 7 | 24.9 · 8 · 27 | 13.1 · 16 · 58 |
+| black and white | 24.3 · 2 · 7 | 24.8 · 8 · 27 | 13 · 16 · 59 |
+| invert (a lookup table) | 24.3 · 2 · 5 | 24.2 · 8 · 18 | 17.9 · 16 · 38 |
+| edge detect (Sobel) | 24.8 · 2 · 12 | 19.9 · 8 · 41 | 9.4 · 16 · 88 |
+| emboss (3×3) | 23.9 · 2 · 21 | 11.3 · 8 · 78 | 5.1 · 15 · 175 |
+| sharpen (unsharp mask, radius 2) | 21.7 · 2 · 42 | 6 · 8 · 156 | 2.6 · 16 · 356 |
+| blur (Gaussian, radius 4) | 16.5 · 2 · 57 | 4.3 · 8 · 221 | 1.9 · 16 · 499 |
+
+Headless Firefox presents these 30 fps videos at 25 fps even with nothing else running (first
+row), so 25 is its ceiling here. Its timer is coarsened to whole milliseconds. Its Lean side
+takes 4–6× Chromium's on the same runner, which is the gap between Playwright's Firefox build
+and Chromium for any wasm (see "Playwright's Firefox is not Firefox" above): release Firefox
+would need its own measurement.
 
 ### Reproducing (the editor)
 
