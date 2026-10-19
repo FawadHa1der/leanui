@@ -22,7 +22,13 @@ const seed = process.argv[3] || "1";
 const engines = (process.argv[4] || "chromium,firefox").split(",");
 
 const t0 = Date.now();
-const data = JSON.parse(execFileSync(bin + "/lake", ["env", bin + "/lean", "--run", "tests/KeyedDom.lean", steps, seed],
+// `lean --run` with the compiled LeanUI library loaded: the command buffer's byte primitives are
+// inline C (LeanUI/Patch.lean), which the interpreter can only call from the library. Building it
+// first keeps the library in step with the sources (0.1 s when nothing changed).
+execFileSync(bin + "/lake", ["build", "LeanUI:shared"], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
+const dynlib = root + ".lake/build/lib/libleanui_LeanUI." + (process.platform === "darwin" ? "dylib" : "so");
+const data = JSON.parse(execFileSync(bin + "/lake",
+  ["env", bin + "/lean", "--load-dynlib=" + dynlib, "--run", "tests/KeyedDom.lean", steps, seed],
   { cwd: root, maxBuffer: 1 << 30 }).toString());
 const genMs = Date.now() - t0;
 const runtime = readFileSync(root + "runtime/leanui.js", "utf8");

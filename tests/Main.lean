@@ -1,5 +1,6 @@
 import LeanUI
 import LeanUI.Testing.Harness
+import LeanUI.Testing.Wire
 open LeanUI LeanUI.Testing Attr
 
 /-! A deterministic PRNG for randomised tests. -/
@@ -177,8 +178,122 @@ def testVoid : IO Unit := do
     unless isVoid t == voidElements.contains t do throw (IO.userError s!"isVoid {t}")
   IO.println "  void elements: ok"
 
+/-! ## Encoding primitives (`pushU32`, `appendUtf8` and interning; compiled as inline C) -/
+
+/-- The specification of `pushU32`, compiled as ordinary Lean (byte pushes). -/
+def refPushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
+  b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8
+
+def encStrs : Array String := #["", "a", "col-md-1", "é", "😀 x", "naïve \x00 nul",
+  String.ofList (List.replicate 70000 'z'), "remove glyphicon glyphicon-remove"]
+
+/-- One random append (`k = 0`: a word, else a string), by the primitives or by the specification. -/
+def encStep (spec : Bool) (a : ByteArray) (k x : Nat) : ByteArray :=
+  if k == 0 then
+    let w := (x * 2654435761 % 4294967296).toUInt32
+    if spec then refPushU32 a w else pushU32 a w
+  else
+    let s := encStrs[x % encStrs.size]!
+    if spec then a ++ s.toUTF8 else appendUtf8 a s
+
+/-- Interning as `0a415c1` defined it (`get?`, then the caller writes its words): the reference
+that the allocation-free `intern` and `named` must match exactly, from any starting counter. -/
+def refIntern (b : Buf) (nm : String) : UInt32 × Buf :=
+  match b.names.get? nm with
+  | some n => (n, b)
+  | none =>
+    let n := b.nextName
+    (n, ({ b with names := b.names.insert nm n, nextName := n + 1 }.w Op.intern |>.w n |>.s nm))
+
+/-- One command that names something (`k` picks which), by the writers or by the reference. -/
+def namedStep (spec : Bool) (b : Buf) (k : Nat) (node : UInt32) (nm v : String) : Buf :=
+  if spec then
+    let (n, b) := refIntern b nm
+    match k with
+    | 0 => b.w Op.createElement |>.w node |>.w Ns.svg.code |>.w n
+    | 1 => b.w Op.setAttr |>.w node |>.w n |>.s v
+    | 2 => b.w Op.removeAttr |>.w node |>.w n
+    | 3 => b.w Op.setPropStr |>.w node |>.w n |>.s v
+    | 4 => b.w Op.setPropBool |>.w node |>.w n |>.w 1
+    | 5 => b.w Op.removeProp |>.w node |>.w n
+    | 6 => b.w Op.setListener |>.w node |>.w n |>.w (node + 1) |>.w Payload.value.code |>.w 3
+    | _ => b.w Op.removeListener |>.w node |>.w n
+  else
+    match k with
+    | 0 => b.createElement node .svg nm
+    | 1 => b.setAttr node nm v
+    | 2 => b.removeAttr node nm
+    | 3 => b.setProp node nm (.str v)
+    | 4 => b.setProp node nm (.bool true)
+    | 5 => b.removeProp node nm
+    | 6 => b.setListener node nm (node + 1) .value 3
+    | _ => b.removeListener node nm
+
+def testEncoding : IO Unit := do
+  let fail (what : String) : IO Unit := throw (IO.userError s!"encoding: {what}")
+  -- random appends to arrays of every starting capacity; every 7th step appends to a shared array
+  -- (the old one stays alive and must not change)
+  let mut rng : Rng := ⟨7⟩
+  for cap in [0, 1, 3, 4, 5, 8, 4096] do
+    let mut a := ByteArray.emptyWithCapacity cap
+    let mut ref := ByteArray.emptyWithCapacity cap
+    for step in [0:400] do
+      let (r1, k) := rng.below 3; let (r2, x) := r1.below 0x7fffffff; rng := r2
+      if step % 7 == 0 then
+        let keep := a
+        let before := keep.toList
+        a := encStep false a k x
+        if keep.toList != before then fail s!"shared array changed (cap {cap}, step {step})"
+      else
+        a := encStep false a k x
+      ref := encStep true ref k x
+      if a != ref then fail s!"cap {cap}, step {step}: {a.size} bytes, want {ref.size}"
+  -- interning: ids from 1 in order of first use, one INTERN each, `intern` agrees with the writers
+  let b : Buf := {}
+  let b := b.setAttr 1 "class" "x" |>.setAttr 2 "class" "y" |>.createElement 3 .html "td"
+  let (cid, b) := b.intern "class"
+  let (tid, b) := b.intern "td"
+  let (nid, b) := b.intern "new"
+  let (nid2, b) := b.intern "new"
+  unless (cid, tid, nid, nid2, b.nextName, b.names.size) == (1, 2, 3, 3, 4, 3) do
+    fail s!"intern ids {(cid, tid, nid, nid2, b.nextName, b.names.size)}"
+  match Wire.decode b.ops b.strs with
+  | .error e => fail s!"wire: {e}"
+  | .ok cmds =>
+    let interns := cmds.filterMap fun c => match c.op with | .intern i s => some (i, s) | _ => none
+    unless interns == #[(1, "class"), (2, "td"), (3, "new")] do fail s!"INTERN commands {interns}"
+  -- random sessions of `intern` and every named writer (and `reset`) against the reference, from
+  -- several starting counters: 0 (a name can then have id 0, which `getD … 0` also returns for a
+  -- miss) and the counter wrapping through 0 included
+  let pool := #["a", "class", "td", "", "é", "😀", "click", "input", "a\x00b"] ++
+    (Array.range 24).map (s!"n{·}")
+  for start in [0, 1, 2, 1000, 0xFFFFFFF0, 0xFFFFFFFE, 0xFFFFFFFF] do
+    let mut b : Buf := { nextName := start }
+    let mut ref : Buf := { nextName := start }
+    for step in [0:600] do
+      let (r1, k) := rng.below 10; let (r2, i) := r1.below pool.size; let (r3, node) := r2.below 5000
+      rng := r3
+      let nm := pool[i]!
+      if k == 8 then
+        let (n, b') := b.intern nm
+        let (rn, ref') := refIntern ref nm
+        if n != rn then fail s!"intern {nm.quote} = {n}, want {rn} (start {start}, step {step})"
+        b := b'; ref := ref'
+      else if k == 9 then
+        b := b.reset; ref := ref.reset
+      else
+        b := namedStep false b k node.toUInt32 nm s!"v{step}"
+        ref := namedStep true ref k node.toUInt32 nm s!"v{step}"
+      let same := b.ops == ref.ops && b.strs == ref.strs && b.units == ref.units &&
+        b.nextName == ref.nextName && b.names.size == ref.names.size &&
+        pool.all fun n => b.names.get? n == ref.names.get? n
+      unless same do
+        fail s!"named writers differ from the reference (start {start}, step {step}, op {k}, name {nm.quote})"
+  IO.println "  encoding primitives: ok"
+
 def main : IO UInt32 := do
   IO.println "leanui tests"
+  testEncoding
   testRender
   testPlanner 20000
   testCounter

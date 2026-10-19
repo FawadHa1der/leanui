@@ -132,8 +132,8 @@ Sampled CPU profiles of the synchronous click in Chromium, on a build with funct
   closure, its key and its dependencies per row, about ten objects) and freeing the old one is about a
   quarter of the time (`malloc`/`free`), followed by `patchNode`, comparing dependencies and the
   pure check. The DOM work is a few percent.
-- **Next steps** this suggests: writing the command buffer a word at a time (needs a small C
-  helper, also for native builds); cloning static subtrees from templates (the template syntax
+- **Next steps** this suggests: writing the command buffer a word at a time (done since: see
+  "What made encoding cheap"); cloning static subtrees from templates (the template syntax
   knows which parts of a view are static); avoiding the per-row view allocation altogether for
   rows whose model did not change.
 
@@ -160,6 +160,53 @@ tests and the property suites against an independent reference model.
    listeners or children share one empty array.
 5. **Cheap strings.** The UTF-16 length of an ASCII string is read from the string object
    (byte size equals length) instead of walking it.
+
+## What made encoding cheap
+
+Creating 1,000 rows writes 122,000 words and 10,000 strings into the command buffer and names a
+tag, attribute or event 18,000 times. Two changes in `LeanUI/Patch.lean`, with no change to the
+protocol:
+
+1. **Inline stores.** A word was four calls to `lean_byte_array_push`, and a string was copied
+   twice (`String.toUTF8`, then appended). `pushU32` and `appendUtf8` keep their Lean bodies as
+   the specification but compile, through `@[extern c inline]`, to a statement expression pasted
+   at each call site: when the array is exclusive and has room, store the bytes and bump the size;
+   otherwise run the original runtime calls. There is no C file and no build step, natively or in
+   wasm. The cost: the interpreter has no code of its own for an inline C extern, so code that
+   writes a buffer needs the compiled LeanUI library. Executables and wasm link it; `#eval` and
+   `lean --run` work once it is loaded (`lake build LeanUI:shared`, then
+   `lean --load-dynlib=.lake/build/lib/libleanui_LeanUI.dylib`, as `tests/browser/keyed-dom.mjs`
+   does), and so does the editor in a downstream library with `precompileModules = true`.
+2. **No buffer per command.** Interning returned an `(id, buffer)` pair and looked names up with
+   `HashMap.get?`; the compiler took the buffer apart around the pair and allocated a new one for
+   every command that names something, plus an `Option` per lookup. Now `named` passes the
+   caller's own buffer to an out-of-line writer that takes the id (updated in place), uses
+   `getD … 0` (ids start at 1; on a miss a `contains` check keeps a name that really has id 0
+   exact), and defines new names out of line.
+
+Measured A/B against `0a415c1` on the same machine and session (native: median of five
+alternating runs of `leanui-perf`, lazy rows; Chromium 151 traced script time, the median over
+three alternating rounds of nine fresh loads each):
+
+| operation | native before | native after | Chromium script before | after |
+|---|--:|--:|--:|--:|
+| create 1,000 rows | 1.93 ms | 1.13 ms | 6.94 ms | 5.60 ms |
+| replace all 1,000 rows | 2.64 ms | 1.67 ms | 10.28 ms | 8.93 ms |
+| create 10,000 rows | 20.25 ms | 11.83 ms | 63.66 ms | 52.66 ms |
+| append 1,000 rows to 1,000 | 2.25 ms | 1.39 ms | 8.04 ms | 6.74 ms |
+| clear 1,000 rows | 0.49 ms | 0.41 ms | 2.94 ms | 2.87 ms |
+
+The other operations write a few words and did not change. In the create-1,000-rows profile,
+Lean's share of the click went from 58% to 51% (`lean_byte_array_push`, 8%, and
+`lean_string_to_utf8` are gone); looking names up (`HashMap.getD` and `lean_string_hash`) is now
+3%. The wasm grew 2% (1,036,399 to 1,057,465 bytes) and shrank slightly with brotli.
+
+Tried and left out: a C helper per word or per command (out of line, it needs a C build step for
+native builds; in a native micro-benchmark a call per word took 7× as long as the inline store),
+pure-Lean alternatives (growing with `copySlice`, then `set!`/`uset`: less than half the gain in
+the same micro-benchmark), a small
+two-way cache in front of the name map (natively no change, in Chromium within noise, 35 KB more
+wasm), and keeping the buffers' storage across updates in `reset` (no change in Chromium).
 
 ## Findings about measuring
 
