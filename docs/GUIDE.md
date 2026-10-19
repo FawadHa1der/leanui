@@ -75,8 +75,8 @@ Things to notice:
 - Whitespace between tags (or between `{…}` and a tag) never makes a text node, so the space
   before the remove button is written `{" "}`.
 - `keyed` gives each row a key, so removing a note removes exactly its `<li>` and moves nothing.
-  For long lists, make rows lazy as well: `keyed k (lazy (n.id, n.text) fun _ => row n)` skips
-  building and diffing a row while its dependencies are equal.
+  For long lists, make rows lazy as well: `keyedLazy k n.text fun _ => row n` skips building and
+  diffing a row while its key and dependencies are equal.
 
 ## 3. Test it natively
 

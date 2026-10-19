@@ -151,8 +151,9 @@ A few idioms cover most of what an app needs; `examples/` has each of them in a 
   module that does `open LeanUI`, write the subscription type as `LeanUI.Sub` (Lean's own `Sub`
   is the subtraction class).
 - **Big lists**: give rows keys and make them lazy, so unchanged rows are neither rendered nor
-  diffed: `keyed (toString r.id) (lazy (r.id, r.label, selected) fun _ => row r)`. Dependencies
-  are compared exactly (any `ToDep` value: numbers, strings, booleans, options, tuples, lists).
+  diffed: `keyedLazy (toString r.id) (r.label, selected) fun _ => row r`. Dependencies are
+  compared exactly (any `ToDep` value: numbers, strings, booleans, options, tuples, lists), and
+  so is the key, which therefore need not be repeated among them.
 - **Components** are programs: embed one with `Html.map`, `Cmd.map` and `Sub.map`
   (`examples/Site.lean` embeds the counter and TodoMVC this way).
 - **Routing**: `LeanUI.Router` routes are bidirectional, so a link and the parser cannot drift

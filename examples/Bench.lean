@@ -67,24 +67,32 @@ def button (bid label : String) (msg : Msg) : Html Msg :=
   el "div" #[cls "col-sm-6 smallpad"] #[
     el "button" #[Attr.attr "type" "button", cls "btn btn-primary btn-block", id bid, onClick msg] #[text label]]
 
-def row (sel : Bool) (r : Row) : Html Msg :=
+/-- One row. `idText` is the id as text, which the lazy rows already made for the key. -/
+def row (sel : Bool) (r : Row) (idText : String := toString r.id) : Html Msg :=
   el "tr" (if sel then #[cls "danger"] else #[]) #[
-    el "td" #[cls "col-md-1"] #[text (toString r.id)],
+    el "td" #[cls "col-md-1"] #[text idText],
     el "td" #[cls "col-md-4"] #[el "a" #[cls "lbl", onClick (.select r.id)] #[text r.label]],
     el "td" #[cls "col-md-1"] #[el "a" #[cls "remove", onClick (.remove r.id)] #[
       el "span" #[cls "remove glyphicon glyphicon-remove", Attr.attr "aria-hidden" "true"] #[]]],
     el "td" #[cls "col-md-6"] #[]]
 
-/-- The rows, each keyed and lazy: rendered and diffed only when its id, label or selection
-changes. -/
+/-- Is row `id` the selected one? (`m.selected == some id` would allocate the `some`.) -/
+@[inline] def isSelected (selected : Option Nat) (id : Nat) : Bool :=
+  match selected with
+  | some s => s == id
+  | none => false
+
+/-- The rows, each keyed and lazy: rendered and diffed only when its id (the key), label or
+selection changes. -/
 def lazyRows (m : Model) : Array (Html Msg) :=
   m.rows.map fun r =>
-    let sel := m.selected == some r.id
-    keyed (toString r.id) (lazy (r.id, r.label, sel) fun _ => row sel r)
+    let sel := isSelected m.selected r.id
+    let k := toString r.id
+    keyedLazy k (r.label, sel) fun _ => row sel r k
 
 /-- The same rows rebuilt eagerly on every update (for comparison). -/
 def eagerRows (m : Model) : Array (Html Msg) :=
-  m.rows.map fun r => keyed (toString r.id) (row (m.selected == some r.id) r)
+  m.rows.map fun r => keyed (toString r.id) (row (isSelected m.selected r.id) r)
 
 def page (rows : Array (Html Msg)) : Html Msg :=
   el "div" #[cls "container"] #[

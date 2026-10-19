@@ -9,6 +9,7 @@
 #   LEANUI_INITIAL_MEMORY  initial linear memory in bytes (default 16 MiB; it grows on demand)
 #   LEANUI_FS              extra filesystem flag, e.g. -sFILESYSTEM=0 (default: keep the FS layer)
 #   LEANUI_TOOLCHAIN       where the wasm64 archives live (default .toolchain)
+#   LEANUI_COUNT_ALLOCS=1  link tools/alloc-count.c: count every malloc/free (tests/browser/allocs.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MOD="$1"; NAME="${2:-$(echo "$MOD" | tr '.' '-' | tr 'A-Z' 'a-z')}"; MODE="${3:-}"
@@ -36,6 +37,12 @@ FSFLAG="${LEANUI_FS:-}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--pr
 CG="-m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -D LEAN_EMSCRIPTEN"
 map() { sed "s|^$ROOT|/proj|"; }
 TCD="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}"
+CNT_CC="true"; CNT_LINK=""; EXPORTS="_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free"
+if [ "${LEANUI_COUNT_ALLOCS:-}" = 1 ]; then
+  CNT_CC="emcc $OPT $CG -c /proj/tools/alloc-count.c -o \$W/obj/count.o"
+  CNT_LINK="\$W/obj/count.o"
+  EXPORTS="$EXPORTS,_leanui_alloc_counter"
+fi
 docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e EM_COMPILER_WRAPPER=ccache -w /proj "$image" bash -lc "
   set -e
   W=/proj/.lake/wasm/$NAME
@@ -45,12 +52,13 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
   cat \$W/app.list | sed 's|^$ROOT|/proj|' | xargs -P 8 -I{} bash -c 'cc1 {}' > \$W/app.objs
   emcc $OPT $CG -I /tc/wasm64/include -c /proj/runtime/leanui_wasm.c -o \$W/obj/shim.o
   emcc $OPT $CG -I /tc/wasm64/include -c \$W/leanui_init.c -o \$W/obj/init.o
+  $CNT_CC
   rm -f \$W/libleanui.a && emar rcs \$W/libleanui.a \$(cat \$W/fw.objs)
-  emcc $OPT $CG $DBG \$W/obj/shim.o \$W/obj/init.o \$(cat \$W/app.objs) \$W/libleanui.a \
+  emcc $OPT $CG $DBG \$W/obj/shim.o \$W/obj/init.o $CNT_LINK \$(cat \$W/app.objs) \$W/libleanui.a \
     /tc/wasm64/lib/libStd.a /tc/wasm64/lib/libInit.a /tc/wasm64/lib/libleanrt.a /tc/wasm64/lib/libuv.a \
     -sMALLOC=${LEANUI_MALLOC:-dlmalloc} -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=${LEANUI_INITIAL_MEMORY:-16777216} -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
     -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
-    -sEXPORTED_FUNCTIONS=_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free -sEXPORTED_RUNTIME_METHODS=lengthBytesUTF8,stringToUTF8 \
+    -sEXPORTED_FUNCTIONS=$EXPORTS -sEXPORTED_RUNTIME_METHODS=lengthBytesUTF8,stringToUTF8 \
     -o /proj/dist/$NAME/app.js
 " 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
 cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"

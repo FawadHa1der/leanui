@@ -114,14 +114,20 @@ export ToDep (toDep)
 
 instance : ToDep Dep := ⟨id⟩
 instance : ToDep Unit := ⟨fun _ => .unit⟩
-instance : ToDep Bool := ⟨.bool⟩
+/-- `.bool true`, `.bool false` and `.opt none` as constants, so that a boolean or absent
+dependency allocates nothing (`.bool b` would). `noinline`: the compiler would otherwise turn
+`if b then .bool true else .bool false` back into `.bool b`. -/
+@[noinline] def Dep.boolTrue : Dep := .bool true
+@[noinline, inherit_doc Dep.boolTrue] def Dep.boolFalse : Dep := .bool false
+@[noinline, inherit_doc Dep.boolTrue] def Dep.optNone : Dep := .opt none
+instance : ToDep Bool := ⟨fun b => if b then .boolTrue else .boolFalse⟩
 instance : ToDep Nat := ⟨.nat⟩
 instance : ToDep Int := ⟨.int⟩
 instance : ToDep UInt64 := ⟨.u64⟩
 instance : ToDep UInt32 := ⟨fun n => .u64 n.toUInt64⟩
 instance : ToDep Char := ⟨fun c => .nat c.toNat⟩
 instance : ToDep String := ⟨.str⟩
-instance [ToDep α] : ToDep (Option α) := ⟨fun o => .opt (o.map toDep)⟩
+instance [ToDep α] : ToDep (Option α) := ⟨fun | none => .optNone | some a => .opt (some (toDep a))⟩
 instance [ToDep α] [ToDep β] : ToDep (α × β) := ⟨fun (a, b) => .pair (toDep a) (toDep b)⟩
 instance [ToDep α] : ToDep (List α) := ⟨fun xs => .list (xs.map toDep)⟩
 instance [ToDep α] : ToDep (Array α) := ⟨fun xs => .list (xs.toList.map toDep)⟩
@@ -130,10 +136,11 @@ instance [ToDep α] : ToDep (Array α) := ⟨fun xs => .list (xs.toList.map toDe
 inductive Html (Msg : Type) where
   | text (s : String)
   | elem (ns : Ns) (tag : String) (attrs : Array (Attr Msg)) (kids : Array (Html Msg))
-  /-- A subtree rendered only when needed: while `deps` equals the mounted subtree's, both its
-  rendering and its diff are skipped, handlers included. So `render` must be determined by
-  `deps`, including the messages its handlers send. `key` is its reconciliation key among
-  siblings, since that cannot be read off the subtree without rendering it. -/
+  /-- A subtree rendered only when needed: while `key` and `deps` equal the mounted subtree's,
+  both its rendering and its diff are skipped, handlers included. So `render` must be determined
+  by `key` and `deps`, including the messages its handlers send. `key` is its reconciliation key
+  among siblings, since that cannot be read off the subtree without rendering it; it is compared
+  like a dependency, so `deps` need not repeat what the key already determines. -/
   | lazy (key : Option String) (deps : Dep) (render : Unit → Html Msg)
 
 instance : Inhabited (Html Msg) := ⟨.text ""⟩
@@ -200,6 +207,16 @@ def keyed (k : String) : Html Msg → Html Msg
   | .elem ns tag attrs kids => .elem ns tag (#[.key k] ++ attrs.filter fun | .key _ => false | _ => true) kids
   | .lazy _ d r => .lazy (some k) d r
   | h => h
+/-- `keyed k (lazy deps render)`, built directly: a keyed lazy row of a long list. The key is
+compared too, so `deps` need not include what the key already determines (a row keyed by its
+id depends on the rest of the row): `keyedLazy (toString r.id) (r.label, selected) fun _ => row r`.
+This is a contract of the diff (`sameF` and `patchNode` skip a lazy node only if key *and* deps are
+equal); `testKeyContract` and the `keyedLazyNoId` lists in tests/Main.lean fail if it breaks. -/
+@[inline] def keyedLazy [ToDep α] (k : String) (deps : α) (render : Unit → Html Msg) : Html Msg :=
+  .lazy (some k) (toDep deps) render
+/-- `keyed k (memo a f)`, built directly. -/
+@[inline] def keyedMemo [ToDep α] (k : String) (a : α) (f : α → Html Msg) : Html Msg :=
+  .lazy (some k) (toDep a) fun _ => f a
 
 namespace Attr
 @[inline] def cls (c : String) : Attr Msg := .attr "class" c
