@@ -175,6 +175,58 @@ def testSharedEmpty : IO Unit := do
     throw (IO.userError s!"2,000 rows hold {kids.size} distinct empty children arrays and {ls.size} distinct empty listener tables (want 1 each)")
   IO.println "  childless elements share one empty array: ok"
 
+/-! ## What a `DiffM` loop allocates
+
+The convention in `LeanUI/Diff.lean` ("State passing") rests on how Lean compiles `StateM`: a call
+that is not inlined returns its result and the state as a fresh pair, while a loop costs nothing
+per iteration by itself. This pins both, so a toolchain that changes either fails here. -/
+
+/-- Small objects allocated while `f ()` is evaluated (`IO.getNumHeartbeats` counts them). -/
+@[noinline] def smallObjectsIn (f : Unit → α) : IO Nat := do
+  let h0 ← IO.getNumHeartbeats
+  let _ ← IO.lazyPure f
+  let h1 ← IO.getNumHeartbeats
+  return h1 - h0
+
+def loopForInline (xs : Array Nat) : DiffM Unit Unit := do
+  for x in xs do modify fun s => { s with nextNode := s.nextNode + x.toUInt32 }
+
+def loopWhileInline (n : Nat) : DiffM Unit Unit := do
+  let mut i := 0
+  while i < n do
+    modify fun s => { s with nextNode := s.nextNode + 1 }
+    i := i + 1
+
+@[noinline] def bumpNextNode (x : Nat) : DiffM Unit Unit :=
+  modify fun s => { s with nextNode := s.nextNode + x.toUInt32 }
+
+def loopForCalling (xs : Array Nat) : DiffM Unit Unit := do
+  for x in xs do bumpNextNode x
+
+def loopWhileCalling (n : Nat) : DiffM Unit Unit := do
+  let mut i := 0
+  while i < n do
+    bumpNextNode i
+    i := i + 1
+
+def testLoopPairs : IO Unit := do
+  -- a fresh, uniquely owned state per measurement (`seed` is a run-time value, so the compiler
+  -- cannot make the state a shared constant)
+  let seed := (← IO.monoNanosNow) % 1
+  let cost (run : Nat → DiffM Unit Unit) (n : Nat) : IO Nat := do
+    let s : DiffState Unit ← IO.lazyPure fun _ => { nextNode := 1 + seed.toUInt32 }
+    smallObjectsIn fun _ => ((run n).run s).2.nextNode
+  let perIter (name : String) (run : Nat → DiffM Unit Unit) (want : Nat) : IO Unit := do
+    let c0 ← cost run 0
+    let c1 ← cost run 1000
+    unless c1 == c0 + 1000 * want do
+      throw (IO.userError s!"{name}: {c0} small objects for 0 iterations, {c1} for 1,000 (want {want} more per iteration)")
+  perIter "for, inline update" (fun n => loopForInline (Array.range n)) 0
+  perIter "while, inline update" loopWhileInline 0
+  perIter "for, non-inlined call" (fun n => loopForCalling (Array.range n)) 1
+  perIter "while, non-inlined call" loopWhileCalling 1
+  IO.println "  DiffM loops allocate only through non-inlined calls (one pair each): ok"
+
 /-! ## The planner's list model -/
 def testPlanner (iters : Nat) : IO Unit := do
   let mut rng : Rng := ⟨42⟩
@@ -364,6 +416,7 @@ def main : IO UInt32 := do
   testLazy
   testKeyContract
   testSharedEmpty
+  testLoopPairs
   testLists .keyed 400
   testLists .positional 400
   testLists .keyedLazy 400

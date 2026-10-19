@@ -194,9 +194,12 @@ node by node 20 (60 before), 1,000 rows, all but the first two cloned, 21,087 (4
 #### State passing in mount, clone and release
 
 `DiffM` is `StateM`. In Lean 4.34's generated code every call that is not inlined returns its
-result and the state as a freshly allocated pair, and so does every iteration of a `while` loop
-(a `for` over an array or a range allocates only on exit). The paths that run once per created or
-removed node are now plain functions on `DiffState` that return the state, or one pair at the
+result and the state as a freshly allocated pair, so a loop whose body makes such a call costs one
+pair per iteration. The loop itself, `for` or `while`, costs nothing per iteration: one whose body
+updates the state inline allocates the same two or three objects for 0 or 1,000 iterations, and
+calling a `@[noinline]` update from the same loop adds exactly one per iteration
+(`testLoopPairs` in `leanui-tests` pins this). The paths that run once per created or removed
+node are now plain functions on `DiffState` that return the state, or one pair at the
 end: `releaseS`, `mountS` (`mountElem`, `mountKids`, `mountCandidate`, `mountShape`), `cloneOf`
 (`cloneWalk`, `cloneKids`, `cloneAttrs`), `mountAppend` for a list that grows, and `placeMid` for
 the middle of a keyed list. What the compiler needs from such code, each costing an allocation
@@ -247,11 +250,18 @@ of 800 selects, 200 updates and 80 creates; median of three rounds), create 1,00
 3.45 to 3.07 ms, select stayed at 0.155 ms and update every 10th at 0.44 ms. Rendering is
 unchanged, so in script plus rendering the creates gain 1.5 to 4%, clear 12%.
 
-The fresh-page "highlight a row" and "update every 10th" figures came out 11–14% and 2–6% higher
-in every session (five), although neither click runs code that changed: their Lean code compiles
-to the same C (and `sameF`, `patchSame` and `Dep` equality to wasm functions of the same size),
-they allocate exactly as often, natively they take the same time, and on hot pages they are
-within 1%. On a fresh page they are dominated by first
+The fresh-page "highlight a row" and "update every 10th" figures came out 8–14% and 2–6% higher
+in every session (six), although almost none of the code they run changed. The one change they
+run is the key check in `patchNode`'s element case (`attrsKey`, now a call of `attrsKeyFrom`
+instead of an inlined loop): 4 or 5 times per select (the three elements above the rows and the
+one or two rows whose class changes) and 303 times per update every 10th (three elements in each
+of 100 rows), each over at most two attributes, far too little work to explain the difference.
+The rest compiles to the same C: `sameF`, `kidsSameF`, `patchC`, `patchSame`, `rebind`,
+`unchanged`, `patchAttrs` (but for the name of the empty table it starts from, now
+`noListeners`) and the branch of `patchKidsC` they take (its append, removal and keyed-middle
+branches changed); `sameF`, `patchSame` and `Dep` equality also compile to wasm functions of the
+same size. Both clicks allocate exactly as often, natively they take the same time, and on hot
+pages they are within 1%. On a fresh page they are dominated by first
 touches of the memory they read, the 1,000 rows' keys and dependencies that the create made
 (a sampled profile of the measured click over 60 fresh pages puts the extra time in comparing
 them), and where those objects lie depends on everything allocated before them; see
@@ -265,12 +275,12 @@ tests and the property suites against an independent reference model.
 
 1. **Change tracking.** `patch` reports whether a node changed. An unchanged node is returned as
    the *same* object, so unchanged parents are not rebuilt either.
-2. **A pure check before any monadic work.** Every monadic step in Lean's state monad returns a
-   freshly allocated pair. `sameF` decides, without allocating, that a subtree needs no command;
-   the subtree then only has its listener slots re-pointed, with one state update for a whole run
-   of unchanged siblings. Subtree sizes are cached in the mounted nodes so the check only runs on
-   subtrees within its budget, which keeps the total work linear at any depth (patching a
-   100,000-level chain went from 294 ms to 21 ms, the cost of mounting it).
+2. **A pure check before any monadic work.** Every monadic step in Lean's state monad that is
+   not inlined returns a freshly allocated pair. `sameF` decides, without allocating, that a
+   subtree needs no command; the subtree then only has its listener slots re-pointed, with one
+   state update for a whole run of unchanged siblings. Subtree sizes are cached in the mounted
+   nodes so the check only runs on subtrees within its budget, which keeps the total work linear at
+   any depth (patching a 100,000-level chain went from 294 ms to 21 ms, the cost of mounting it).
 3. **Exact lazy rows.** Freeing the discarded view was the largest remaining cost (about 27
    objects per benchmark row). `lazy` with exact dependencies (`Dep`, compared structurally,
    never hashed) and its own key skips both building and diffing a row: selecting a row went from
@@ -359,8 +369,8 @@ wasm), and keeping the buffers' storage across updates in `reset` (no change in 
   measure after the warm-up, not right after a GC.
 - **Heap history.** A click that mostly compares (highlight a row: 0.4 ms on a fresh page,
   0.15 ms on a hot one) depends on where the objects it reads were allocated, and so on what
-  every earlier click allocated and freed. Changing only what creating rows allocates (the same
-  code for the click itself, see "State passing in mount, clone and release") moved the
+  every earlier click allocated and freed. Changing what creating rows allocates (the click
+  itself runs almost the same code, see "State passing in mount, clone and release") moved the
   fresh-page "highlight a row" by −3 to +14% depending on the build and the warm-up sequence
   (the standard one; `#run #clear` before it; `#runlots #clear` before it), which also reorders
   the builds. Believe a fresh-page difference in such an operation only when its own code

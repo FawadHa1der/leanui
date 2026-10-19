@@ -124,8 +124,8 @@ def freeSlot (i : UInt32) : DiffM Msg Unit :=
 @[noinline] private def freeSlotS (s : DiffState Msg) (i : UInt32) : DiffState Msg :=
   { s with slots := s.slots.set! i.toNat none, freeSlots := s.freeSlots.push i }
 
-/-- `release` in state-passing style: no allocation per node (in `DiffM`, every `for` iteration
-and every call returns a fresh pair). Children first, then the element's slots, then its handle. -/
+/-- `release` in state-passing style: no pair per node (in `DiffM`, every call that is not inlined
+returns a fresh pair). Children first, then the element's slots, then its handle. -/
 partial def releaseS : Node Msg → DiffState Msg → DiffState Msg
   | .text h _, s => freeNodeS s h
   | .elem h _ _ _ _ ls kids _, s =>
@@ -138,14 +138,14 @@ partial def releaseS : Node Msg → DiffState Msg → DiffState Msg
 
 /-! ## State passing
 
-`DiffM` is `StateM`, so every call that is not inlined and every iteration of a `for` loop
-returns a freshly allocated pair. The paths that run once per created or removed node (mounting,
-cloning, releasing) are written in plain state-passing style instead: functions
-`DiffState Msg → DiffState Msg`, or returning one pair at the end. Lean 4.34's compiler allocates
-a new state cell wherever two branches that update the state differently meet again inside one
-function (it passes the fields to the join point), and returns an inline helper's pair as an
-object, so each update below is its own small `@[noinline]` function that returns the reused
-cell, and what an update hands out (a handle, a slot) is read first by a separate `peek`. -/
+`DiffM` is `StateM`: every call that is not inlined returns its result and the state as a fresh
+pair, so a loop whose body makes such a call costs a pair per iteration (the loop itself, none).
+The paths that run once per created or removed node (mounting, cloning, releasing) are written
+in plain state-passing style instead: functions `DiffState Msg → DiffState Msg`, or returning one
+pair at the end. Lean 4.34's compiler allocates a new state cell wherever two branches that update
+the state differently meet again inside one function (it passes the fields to the join point),
+and returns an inline helper's pair as an object, so each update below is its own `@[noinline]`
+function returning the reused cell, and what an update hands out is read first by a `peek`. -/
 
 /-- The listener table of an element without listeners, and the children of a childless
 element: shared constants. A `#[]` in an argument position is allocated where it is written,
