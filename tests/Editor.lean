@@ -1114,6 +1114,7 @@ def testVideo : T Unit := do
   r.inst.callback (← lastCb r "fileUrl cb=") true "blob:y"
   expectEq "video: one loop" ((← r.dom.get).effects.filter (·.startsWith frameOp)).size loops
   expectEq "video: second source" (← attrOf r "vid-src" "src") (some "blob:y")
+  expectEq "video: second source, no frame yet" ((← textOf r "vid-size"), (← attrOf r "vid-out" "width")) ("–", some "0")
   r.fire (← r.find "id" "vid-file") "change" "7\t10\tvideo/mp4\tc.mp4"
   r.inst.callback (← lastCb r "fileUrl cb=") false ""
   expectEq "video: file gone" (← textOf r "vid-status") "c.mp4: the file is gone."

@@ -1,8 +1,9 @@
 // Browser test for the video lab (examples/Video.lean, built to dist/editor/video): a video made in
-// the page (an animated canvas recorded by MediaRecorder: no binary fixture) is opened through the
-// file input (FILE_URL), played, and every frame is grabbed (FRAME_GRAB), filtered in Lean and
-// drawn. Checks the pixels against the frame the video shows, that a paused video is not filtered
-// again, and with --perf measures the frames filtered and drawn per second for every filter at
+// the page (an animated canvas encoded by VideoEncoder into a WebM file, or recorded by
+// MediaRecorder where that is missing: no binary fixture) is opened through the file input
+// (FILE_URL), played, and every frame is grabbed (FRAME_GRAB), filtered in Lean and drawn. Checks
+// the pixels against the frame the video shows, that a paused video is not filtered again, that a
+// file the browser cannot play says so, and with --perf measures the frames filtered and drawn per second for every filter at
 // three sizes (a 30 fps source), with the time per frame of the grab and of the Lean side.
 //   node tests/browser/video.mjs <url of dist/editor/video/index.html> [chromium|firefox] [--perf] [--out file.json]
 import { pw } from "./playwright.mjs";
@@ -185,8 +186,13 @@ for (const key of ["vivid", "blur", "sharpen", "edges", "emboss", "none"]) {
   const n = await frames();
   check(`filter ${key} runs`, await until(async () => (await frames()) >= n + 2), `${n} -> ${await frames()}`);
 }
-const grabs = await page.evaluate(() => window.__log.length);
-check("grabs replied", grabs > 0 && (await page.evaluate(() => window.__log.every((e) => e.ok || e.t === null))));
+check("grabs replied with a time", await page.evaluate(() => window.__log.some((e) => e.ok) && window.__log.every((e) => !e.ok || /^\d+$/.test(e.t))));
+
+// a file the browser cannot play: the lab says so, and shows no size from the previous video
+await page.evaluate(() => { window.__file = new File([new Uint8Array(4096).fill(7)], "junk.webm", { type: "video/webm" }); });
+await openVideo();
+check("unplayable file", await until(async () => (await text("vid-status")).startsWith("the browser cannot play this video")), await text("vid-status"));
+check("unplayable file: no size", (await text("vid-size")) === "–", await text("vid-size"));
 
 // ---- frames per second per filter, 30 fps sources ----
 const results = { engine, version: browser.version(), url, sizes: {} };

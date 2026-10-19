@@ -343,11 +343,13 @@
     // video plays, the time is the presented frame's media time, which requestVideoFrameCallback
     // reports (VideoFrame's timestamp is 0 in Firefox; currentTime moves between frames); while it
     // is paused (or without that callback), currentTime, which then names the frame shown.
-    // WebCodecs' VideoFrame converts to RGBA; a 2D canvas draws the frame where it cannot.
+    // WebCodecs' VideoFrame converts to RGBA; a 2D canvas draws the frame where it cannot, and
+    // where the frame is rotated or flipped.
     async grabFrame(cb, sel) {
       let f = null;
       try {
         const v = document.querySelector(sel);
+        if (v && v.error) throw new Error("the browser cannot play this video" + (v.error.message ? ": " + v.error.message : ""));
         if (!v || !(v.readyState >= 2) || !v.videoWidth) throw new Error("no video frame");
         if (v.requestVideoFrameCallback && v.__leanuiFrameMs === undefined) {
           v.__leanuiFrameMs = -1;
@@ -357,7 +359,8 @@
         const t = !v.paused && v.__leanuiFrameMs >= 0 ? v.__leanuiFrameMs : Math.round(v.currentTime * 1000);
         if (typeof VideoFrame === "function") { try { f = new VideoFrame(v); } catch (e) { f = null; } }
         let w = f ? f.displayWidth : v.videoWidth, h = f ? f.displayHeight : v.videoHeight, px = null;
-        if (f && f.visibleRect.width === w && f.visibleRect.height === h) {
+        // copyTo copies the stored pixels: a rotated or flipped frame is drawn, which orients it
+        if (f && !f.rotation && !f.flip && f.visibleRect.width === w && f.visibleRect.height === h) {
           try { const buf = new Uint8Array(4 * w * h); await f.copyTo(buf, { format: "RGBA" }); px = buf; } catch (e) { px = null; }
         }
         if (!px) {

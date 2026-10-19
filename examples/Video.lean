@@ -97,8 +97,8 @@ def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     | none => (m, .none)
   | .opened name url =>
     if url.isEmpty then ({ m with status := s!"{name}: the file is gone." }, .none) else
-    let m := { m with name, url, lastTime := none, frames := 0, repeats := 0, windowStart := 0, windowFrames := 0,
-                      fps := 0, status := s!"Playing {name}." }
+    let m := { m with name, url, width := 0, height := 0, lastTime := none, frames := 0, repeats := 0,
+                      windowStart := 0, windowFrames := 0, fps := 0, status := s!"Playing {name}." }
     if m.looping then (m, .none) else ({ m with looping := true }, .nextFrame .tick)
   | .setFilter f => ({ m with filter := f, lastTime := none, repeats := 0 }, .none)
   | .tick ms =>
