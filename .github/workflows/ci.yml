@@ -1,5 +1,5 @@
 # Build and test everything (native, then wasm64 in Chromium and Firefox); on main, deploy the
-# LeanUI site to Cloudflare Containers. Setup and secrets: docs/DEPLOY.md.
+# LeanUI site to Cloudflare Containers (also on a manual run of main). Setup and secrets: docs/DEPLOY.md.
 name: CI
 
 on:
@@ -48,15 +48,18 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .lake/build
-          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
-          restore-keys: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-${{ github.sha }}
+          # a build from an older lakefile is still a good start: Lake rebuilds what changed
+          restore-keys: |
+            lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-
+            lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-
       - name: Build (native)
         run: lake build
       - name: Save the Lake build
         uses: actions/cache/save@v6
         with:
           path: .lake/build
-          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-${{ github.sha }}
 
       - name: Native tests
         run: |
@@ -89,8 +92,22 @@ jobs:
           path: .toolchain/wasm64
           key: ${{ steps.archives.outputs.cache-primary-key }}
 
+      # ccache (tools/build-app.sh's compiler cache): app builds reuse the objects of earlier runs.
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .toolchain/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
       - name: Build the apps (wasm64)
         run: tests/browser/run-all.sh --build-only
+      - name: Own the compiler cache (Docker wrote it as root)
+        run: sudo chown -R "$(id -u):$(id -g)" .toolchain/ccache
+      - name: Save the compiler cache
+        uses: actions/cache/save@v6
+        with:
+          path: .toolchain/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
 
       - uses: actions/setup-node@v7
         with:
@@ -115,9 +132,11 @@ jobs:
           grep -q "Web UIs, written in Lean 4." "$RUNNER_TEMP/home.html"
           curl -fsS -o /dev/null http://127.0.0.1:8080/assets/site/app.wasm
           curl -fsS -o /dev/null http://127.0.0.1:8080/site.css
+          curl -fsS -o /dev/null -D "$RUNNER_TEMP/wasm.headers" -H 'accept-encoding: br, gzip' http://127.0.0.1:8080/assets/site/app.wasm
+          grep -qi '^content-encoding: br' "$RUNNER_TEMP/wasm.headers"
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           name: site-container
           path: ${{ runner.temp }}/site-container.tgz
@@ -126,7 +145,7 @@ jobs:
   deploy:
     name: Deploy the site to Cloudflare
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
@@ -166,3 +185,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
+      - name: Wrangler's log
+        if: failure()
+        run: cat ~/.config/.wrangler/logs/*.log 2>/dev/null || echo "no wrangler log"

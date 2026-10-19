@@ -1,7 +1,7 @@
 # Continuous integration and deployment
 
-`.github/workflows/ci.yml` builds and tests everything on every push and pull request. On `main`,
-it then deploys the LeanUI site (`examples/Site.lean`) to Cloudflare, served by a native Lean
+`.github/workflows/ci.yml` builds and tests everything on every push and pull request. On `main`
+(a push, or a manual run of the workflow on `main`), it then deploys the LeanUI site (`examples/Site.lean`) to Cloudflare, served by a native Lean
 server in a Cloudflare container.
 
 ## The test job
@@ -9,7 +9,8 @@ server in a Cloudflare container.
 One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it:
 
 1. **Lean**: elan installs the toolchain named in `lean-toolchain` (cached).
-2. **Native**: `lake build` (the `.lake/build` cache makes it incremental), then every test
+2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
+   change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,
    `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`.
 3. **wasm64**: `toolchain/image.sh` builds the emsdk image from the fork's
@@ -21,9 +22,11 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
    apply-semantics, server, effects, bench-smoke, depth.
-5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files. The image is
-   built for `linux/amd64` and started, and `/`, the wasm and the stylesheet must answer. On
-   `main` the staged files are uploaded for the deploy job.
+5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files, and writes
+   brotli (quality 11) and gzip siblings of `app.wasm`, `app.js` and `leanui.js`. The image is
+   built for `linux/amd64` and started, and `/`, the wasm and the stylesheet must answer, the
+   wasm brotli-encoded to a client that accepts it. On `main` the staged files are uploaded for
+   the deploy job.
 
 `tests/browser/run-all.sh` is also the local entry point (`--build` builds the apps first). On a
 shared machine, run it under the host browser lock.
@@ -38,6 +41,10 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
 - The **container** runs `leanui-site` (examples/SiteServer.lean, built on the runner) from
   `ubuntu:24.04`, as `nobody`, with no outbound network. It renders every page (SSR), serves the
   wasm build, and runs server-driven sessions for browsers without Memory64 (Safari).
+- **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
+  accept them (`Content-Encoding`, `Vary: Accept-Encoding`), and Cloudflare passes encoded bodies
+  through. Brotli at quality 11 is smaller than what the edge would produce on the fly (the site's
+  wasm: about 190 KB instead of 255 KB).
 - **One instance** (`max_instances: 1`, one Durable Object name): a server-driven session lives in
   that process's memory, so every request must reach the same process. The site's traffic fits
   one `basic` instance (1/4 vCPU, 1 GiB). The more sessions are live at once, the more memory it
@@ -72,8 +79,10 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
    ```
 
 Until both secrets exist, the deploy job prints a notice and skips the deploy. Everything else
-still runs. The site appears at `https://leanui-site.<your-subdomain>.workers.dev`. A custom
-domain is a `routes` entry in `deploy/cloudflare/wrangler.jsonc` (or the dashboard's Domains &
+still runs. To redeploy without a new commit, run the workflow on `main` by hand (Actions → CI →
+Run workflow). When `wrangler deploy` fails, the job prints wrangler's own log
+(`~/.config/.wrangler/logs`). The site appears at `https://leanui-site.<your-subdomain>.workers.dev`. `wrangler.jsonc` sets `workers_dev: true` (that URL) and `preview_urls: false` (no extra
+preview URL per uploaded version). A custom domain is a `routes` entry in `deploy/cloudflare/wrangler.jsonc` (or the dashboard's Domains &
 Routes).
 
 ## Deploying by hand
