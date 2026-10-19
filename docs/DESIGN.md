@@ -62,13 +62,18 @@ built against. It was first written on 2026-10-18 from the research in
   for empty texts, so the browser's pre-order walk meets exactly the nodes `mount` allocates;
   only the last of repeated attributes, `\r` as `&#13;`, a doubled leading newline in `pre`,
   `textarea` and `listing` (the parser drops one).
-- **Browser runtime** (`runtime/leanui.js`, about 5 KB brotli): applies buffers; one delegated
-  listener per event type on the container, in the capture phase for events that do not bubble,
-  which then reach their target's listener only; payloads extracted in the browser (`value`,
-  `checked`, `key`, the `name=value` lines of the element's form); strings cross into wasm as
-  UTF-8 bytes plus length (a payload may contain U+0000). An update that throws (in practice: a
-  view nested about a thousand levels deep overflows the browser's native stack) is reported
-  once, the instance is no longer called, and the container receives a `leanui:error` event.
+- **Browser runtime** (`runtime/leanui.js`, about 5 KB brotli): applies buffers in one pass
+  (a `class` attribute on an HTML element is written through `className`, which needs no name
+  lookup; a run of `REMOVE`s that empties a parent in order is one `replaceChildren()`, the same
+  DOM, but page code sees one `MutationObserver` record for it, and custom elements'
+  `disconnectedCallback`s run after all the removals instead of after each one); one
+  delegated listener per event type on the container, in the capture phase for events that do
+  not bubble, which then reach their target's listener only; payloads extracted in the browser
+  (`value`, `checked`, `key`, the `name=value` lines of the element's form); strings cross into
+  wasm as UTF-8 bytes plus length (a payload may contain U+0000). An update that throws (in
+  practice: a view nested about a thousand levels deep overflows the browser's native stack) is
+  reported once, the instance is no longer called, and the container receives a `leanui:error`
+  event.
 - **Hosts**: `LeanUI.Host.Wasm` (browser; `leanui_app p` defines the export the C shim calls),
   `LeanUI.Server` (native Lean `Std.Http`: SSR, static files, server-driven sessions as actors;
   `docs/SERVER.md`). A server-driven page reloads once when its session has expired (HTTP 410).
@@ -125,7 +130,7 @@ built against. It was first written on 2026-10-18 from the research in
 
 | Module / file | Role | Tests |
 |---|---|---|
-| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,templates,depth}.mjs` |
+| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,templates,depth,apply-semantics}.mjs` |
 | `LeanUI/Syntax.lean` | JSX-style templates (compile time only) | `leanui-syntax-tests` |
 | `LeanUI/Proofs/Keyed.lean` | machine-checked keyed reconciliation | `lake build` |
 | `LeanUI/Testing/*` | DOM model, harness, generators, reference model, protocol checker, SSR parser | `leanui-props` |

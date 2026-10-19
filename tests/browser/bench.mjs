@@ -3,7 +3,8 @@
 // (bench/vanilla/index.html) with the same markup, stylesheet and labels.
 //
 //   node tests/browser/bench.mjs [--engines chromium,firefox] [--runs 7] [--impls leanui,vanilla]
-//                                [--json results.json]
+//                                [--json results.json] [--leanui-dir dist/bench] [--only create1k,...]
+//                                [--cpu-only]   (no startup and memory runs)
 //
 // Run it under the host browser lock (one heavy browser at a time). It serves the pages itself.
 //
@@ -39,6 +40,8 @@ const ONLY = opt("only", null);
 // another LeanUI build to measure in place of dist/bench (e.g. an allocator variant)
 const LEANUI_DIR = opt("leanui-dir", "dist/bench").replace(/\/?$/, "/");
 const SKIP_CPU = argv.includes("--no-cpu");
+// only the per-operation CPU times (no startup or memory runs), e.g. for A/B runs of two builds
+const CPU_ONLY = argv.includes("--cpu-only");
 // ms of busy-waiting in the page before each measured click: an idle renderer is often moved to an
 // efficiency core, which makes single-click timings bimodal; spinning first applies to both alike
 const SPIN = +opt("spin", "30");
@@ -224,7 +227,7 @@ for (const engine of ENGINES) {
       process.stderr.write(`${engine} ${op.name.padEnd(10)} ${impl.padEnd(8)} ${JSON.stringify(R.cpu[op.name][impl])}\n`);
     }
   }
-  for (const impl of IMPLS) {
+  for (const impl of CPU_ONLY ? [] : IMPLS) {
     R.startup[impl] = await startup(browser, impl);
     if (engine === "chromium") R.memory[impl] = await memory(browser, impl);
   }
@@ -246,8 +249,10 @@ for (const [engine, R] of Object.entries(results.engines)) {
     if (IMPLS.includes("leanui") && IMPLS.includes("vanilla")) cells.push(`${(c.leanui[metric[0]] / c.vanilla[metric[0]]).toFixed(2)}×`);
     lines.push("| " + cells.join(" | ") + " |");
   }
-  lines.push("", "| startup | " + IMPLS.join(" | ") + " |", "|---|" + IMPLS.map(() => "---").join("|") + "|");
-  for (const k of ["readyMs", "bootMs", "transferKB", "brotliKB"]) lines.push(`| ${k} | ` + IMPLS.map((i) => R.startup[i][k]).join(" | ") + " |");
+  if (Object.keys(R.startup).length) {
+    lines.push("", "| startup | " + IMPLS.join(" | ") + " |", "|---|" + IMPLS.map(() => "---").join("|") + "|");
+    for (const k of ["readyMs", "bootMs", "transferKB", "brotliKB"]) lines.push(`| ${k} | ` + IMPLS.map((i) => R.startup[i][k]).join(" | ") + " |");
+  }
   if (Object.keys(R.memory).length) {
     lines.push("", "| memory | " + IMPLS.map((i) => `${i} JS heap / wasm / DOM nodes`).join(" | ") + " |", "|---|" + IMPLS.map(() => "---").join("|") + "|");
     for (const m of MEMORY) lines.push(`| ${m.desc} | ` + IMPLS.map((i) => { const x = R.memory[i][m.name]; return `${x.jsHeapMB} MB / ${x.wasmMB} MB / ${x.domNodes}`; }).join(" | ") + " |");

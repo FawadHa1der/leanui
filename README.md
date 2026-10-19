@@ -204,8 +204,9 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-server-tests     # server, sessions, CLI
 ./.lake/build/bin/leanui-todomvc-tests    # TodoMVC against the DOM model
 node tests/browser/todomvc.mjs            # real browsers (Playwright); also site, counter, effects,
-                                          # keyed-dom, fuzz, depth, server
-node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers
+                                          # keyed-dom, fuzz, depth, server, apply-semantics
+node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
+                                          # apply-bench.mjs for the JS runtime alone
 ```
 
 `lake build` also checks every proof.
