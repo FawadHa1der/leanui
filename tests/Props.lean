@@ -239,7 +239,7 @@ def appCase (cfg : Config) (seed : UInt64) (i : Nat) (nEdits : Nat) (wrap hydrat
     unless d.effects.contains s!"hydrate #app 1 {cs.size}" do throw (IO.userError s!"app: no hydrate claim in {d.effects}")
     pure ({ inst, dom } : Running)
   let msg (m : String) := if wrap then "w:" ++ m else m
-  let mut eff := ((mountS trees[0]!).run 0).1
+  let mut eff := ((LeanUI.Testing.mountS trees[0]!).run 0).1
   let mut last := ""
   let mut fired := 0
   let readLast : IO String := do
