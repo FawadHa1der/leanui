@@ -124,7 +124,7 @@ jobs:
       - name: Browser tests (Chromium, Firefox)
         run: tests/browser/run-all.sh
 
-      # The editor's benchmarks (docs/BENCHMARKS.md, "The photo editor"): only on a pull request
+      # The editor's and the video lab's benchmarks (docs/BENCHMARKS.md, "The photo editor"): only on a pull request
       # labelled `bench`, and they never fail the build. The JSON goes up as an artifact.
       - name: Editor benchmarks (Chromium, Firefox)
         if: contains(github.event.pull_request.labels.*.name, 'bench')
@@ -140,6 +140,8 @@ jobs:
           node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ firefox --sizes 1 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-firefox.json"
           node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html chromium --out "$RUNNER_TEMP/bench/editor-perf-chromium.json" > /dev/null
           node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html firefox --quick --out "$RUNNER_TEMP/bench/editor-perf-firefox.json" > /dev/null
+          node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html chromium --perf --out "$RUNNER_TEMP/bench/video-chromium.json"
+          node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html firefox --perf --out "$RUNNER_TEMP/bench/video-firefox.json"
       - uses: actions/upload-artifact@v7
         if: contains(github.event.pull_request.labels.*.name, 'bench')
         with:
@@ -161,6 +163,8 @@ jobs:
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/wasm.headers"
           curl -fsS http://127.0.0.1:8080/editor/ | grep -q "LeanUI Photo"
           curl -fsS -o /dev/null http://127.0.0.1:8080/editor/app.wasm
+          curl -fsS http://127.0.0.1:8080/editor/video/ | grep -q "LeanUI Video"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/editor/video/app.wasm
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

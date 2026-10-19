@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 BIN=.lake/build/bin PORT=5331
 if [ "${1:-}" = --build ] || [ "${1:-}" = --build-only ]; then
   for app in "TodoMVCApp todomvc" "SiteApp site" "CounterApp counter" "BenchApp bench" "EffectsApp effects" \
-             "PixelsApp pixels" "EditorApp editor" "EditorBenchApp editor-bench" \
+             "PixelsApp pixels" "EditorApp editor" "VideoApp editor/video" "EditorBenchApp editor-bench" \
              "LeanUI.Testing.DepthProbe depth-probe"; do
     read -r mod name <<< "$app"
     tools/build-app.sh "$mod" "$name" || { echo "build of $name failed"; exit 1; }
@@ -48,5 +48,7 @@ run pixels-chromium node tests/browser/pixels.mjs "http://127.0.0.1:$PORT/pixels
 run pixels-firefox node tests/browser/pixels.mjs "http://127.0.0.1:$PORT/pixels/index.html" firefox
 run editor-chromium node tests/browser/editor.mjs "http://127.0.0.1:$PORT/editor/index.html" chromium
 run editor-firefox node tests/browser/editor.mjs "http://127.0.0.1:$PORT/editor/index.html" firefox
+run video-chromium node tests/browser/video.mjs "http://127.0.0.1:$PORT/editor/video/index.html" chromium
+run video-firefox node tests/browser/video.mjs "http://127.0.0.1:$PORT/editor/video/index.html" firefox
 run depth node tests/browser/depth.mjs "http://127.0.0.1:$PORT/depth-probe/index.html"
 if [ ${#failed[@]} -eq 0 ]; then echo "all browser suites passed"; else echo "failed: ${failed[*]}"; exit 1; fi

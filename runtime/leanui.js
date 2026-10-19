@@ -198,6 +198,8 @@
           case 50: this.readFile(w[i + 1], w[i + 2], true); i += 3; break;
           case 51: this.download(S(i + 1), S(i + 3), this.blob(bytes, w[i + 5])); i += 6; break;
           case 52: this.listenKeys(w[i + 1]); i += 2; break;
+          case 53: this.grabFrame(w[i + 1], S(i + 2)); i += 4; break;
+          case 54: { const cb = w[i + 1], f = this.files.get(w[i + 2]); const u = f ? URL.createObjectURL(f) : ""; queueMicrotask(() => this.callback(cb, !!f, u)); i += 3; break; }
           default: throw new Error("LeanUI: unknown opcode " + w[i] + " at word " + i);
         }
       }
@@ -336,6 +338,31 @@
         bmp.close();
         this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
       } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
+    }
+    // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". WebCodecs'
+    // VideoFrame gives the frame's own timestamp (currentTime moves between frames) and converts to
+    // RGBA; a 2D canvas draws the frame where that conversion is not available.
+    async grabFrame(cb, sel) {
+      let f = null;
+      try {
+        const v = document.querySelector(sel);
+        if (!v || !(v.readyState >= 2) || !v.videoWidth) throw new Error("no video frame");
+        if (typeof VideoFrame === "function") { try { f = new VideoFrame(v); } catch (e) { f = null; } }
+        const t = Math.round(f ? f.timestamp / 1000 : v.currentTime * 1000);
+        let w = f ? f.displayWidth : v.videoWidth, h = f ? f.displayHeight : v.videoHeight, px = null;
+        if (f && f.visibleRect.width === w && f.visibleRect.height === h) {
+          try { const buf = new Uint8Array(4 * w * h); await f.copyTo(buf, { format: "RGBA" }); px = buf; } catch (e) { px = null; }
+        }
+        if (!px) {
+          const c = this.grabCanvas || (this.grabCanvas = new OffscreenCanvas(w, h));
+          if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+          const ctx = c.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(f || v, 0, 0, w, h);
+          px = ctx.getImageData(0, 0, w, h).data;
+        }
+        this.callbackBytes(cb, true, w + " " + h + " " + t, px);
+      } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
+      finally { if (f) f.close(); }
     }
     listenKeys(sub) {
       this.keysSub = sub;

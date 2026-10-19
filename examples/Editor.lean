@@ -626,6 +626,7 @@ def topbar (m : Model) : Html Msg :=
     button "Export PNG" "export" .exportPng (!hasDoc || busy m) #[cls "primary"],
     button "↶ Undo" "undo" .undo (m.cursor == 0 || busy m),
     button "↷ Redo" "redo" .redo (m.cursor + 1 ≥ m.history.size || busy m),
+    el "a" #[cls "video-link", .attr "href" "video/", .attr "title" "The same filters on every frame of a video"] #[text "Video lab"],
     el "span" #[cls "spacer"] #[],
     button "−" "zoom-out" (.zoomBy 0.8) (!hasDoc),
     el "span" #[Attr.id "zoom"] #[text (if hasDoc then s!"{(currentZoom m * 100).round.toUInt64}%" else "")],

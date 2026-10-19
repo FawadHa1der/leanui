@@ -3,7 +3,7 @@
 # linked against the single-threaded archives (toolchain/build-archives.sh).
 #   tools/build-app.sh <Module> [name] [--debug]     e.g.  tools/build-app.sh Examples.Counter counter
 # --debug keeps function names (--profiling-funcs) for profilers. Environment:
-#   LEANUI_PAGE            page template (default examples/<name>.html, else a minimal page)
+#   LEANUI_PAGE            page template (default examples/<last part of name>.html, else a minimal page)
 #   LEANUI_MALLOC          emscripten allocator (default dlmalloc: same speed within noise as
 #                          mimalloc here, half the linear memory; see docs/BENCHMARKS.md)
 #   LEANUI_INITIAL_MEMORY  initial linear memory in bytes (default 16 MiB; it grows on demand)
@@ -68,7 +68,7 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
     -o /proj/dist/$NAME/app.js
 " 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
 cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"
-PAGE="${LEANUI_PAGE:-$ROOT/examples/$NAME.html}"
+PAGE="${LEANUI_PAGE:-$ROOT/examples/$(basename "$NAME").html}"
 if [ -f "$PAGE" ]; then cp "$PAGE" "$OUT/index.html"; else
 cat > "$OUT/index.html" <<HTML
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$NAME · LeanUI</title></head>

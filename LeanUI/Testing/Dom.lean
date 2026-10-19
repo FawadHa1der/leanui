@@ -238,6 +238,10 @@ def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
       d := { d with effects := d.effects.push s!"{if op == Op.fileRead then "readFile" else "decodeImage"} cb={a} file={word (pc + 8)}" }; pc := pc + 12
     else if op == Op.keysListen then
       d := { d with effects := d.effects.push s!"op{op} {a}" }; pc := pc + 8
+    else if op == Op.frameGrab then
+      d := { d with effects := d.effects.push s!"grabFrame cb={a} {str (pc + 8)}" }; pc := pc + 16
+    else if op == Op.fileUrl then
+      d := { d with effects := d.effects.push s!"fileUrl cb={a} file={word (pc + 8)}" }; pc := pc + 12
     else
       d := d.err s!"unknown opcode {op} at byte {pc}"; pc := n
   return d

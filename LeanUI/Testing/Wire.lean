@@ -91,7 +91,8 @@ def width (op : UInt32) : Option Nat :=
   else if op == Op.storageRemove || op == Op.urlPush || op == Op.urlReplace || op == Op.focus ||
     op == Op.log || op == Op.title || op == Op.blur || op == Op.scrollIntoView then some 3
   else if op == Op.putImage then some 10 else if op == Op.download then some 6
-  else if op == Op.fileRead || op == Op.imageDecode then some 3 else if op == Op.keysListen then some 2
+  else if op == Op.fileRead || op == Op.imageDecode || op == Op.fileUrl then some 3 else if op == Op.keysListen then some 2
+  else if op == Op.frameGrab then some 4
   else none
 
 def words (ops : ByteArray) : Array UInt32 := Id.run do

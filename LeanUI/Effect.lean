@@ -79,6 +79,11 @@ inductive Cmd (Msg : Type) where
   /-- A file decoded by the browser's image decoders (PNG, JPEG, WebP, GIF's first frame, …) to
   RGBA pixels, or why it could not be. -/
   | decodeImage (file : Nat) (k : Except String Bitmap → Msg)
+  /-- The frame a `<video>` (the first match of `video`) shows now, as RGBA pixels with its time in
+  milliseconds (WebCodecs' `VideoFrame`), or why there is none (no video, no frame yet). -/
+  | grabFrame (video : String) (k : Except String (Bitmap × Nat) → Msg)
+  /-- A URL for a file the browser holds (an object URL), for a `<video>` or `<img>` to load it. -/
+  | fileUrl (file : Nat) (k : String → Msg)
 
 instance : Inhabited (Cmd Msg) := ⟨.none⟩
 instance : Append (Cmd Msg) := ⟨fun a b => .batch #[a, b]⟩
@@ -104,6 +109,8 @@ def Cmd.map (f : α → β) : Cmd α → Cmd β
   | .download n t d => .download n t d
   | .readFile i k => .readFile i (f ∘ k)
   | .decodeImage i k => .decodeImage i (f ∘ k)
+  | .grabFrame v k => .grabFrame v (f ∘ k)
+  | .fileUrl i k => .fileUrl i (f ∘ k)
 
 /-- Show all of `img` on the canvas (`putImage` with the whole bitmap as the dirty rectangle). -/
 def Cmd.drawBitmap (canvas : String) (img : Bitmap) : Cmd Msg :=
@@ -168,6 +175,8 @@ def downloadCmd (b : Buf) (name type : String) (data : ByteArray) : Buf :=
 def fileReadCmd (b : Buf) (cb : UInt32) (file : Nat) : Buf := b.w Op.fileRead |>.w cb |>.w file.toUInt32
 def imageDecodeCmd (b : Buf) (cb : UInt32) (file : Nat) : Buf := b.w Op.imageDecode |>.w cb |>.w file.toUInt32
 def keysListen (b : Buf) (sub : UInt32) : Buf := b.w Op.keysListen |>.w sub
+def frameGrabCmd (b : Buf) (cb : UInt32) (video : String) : Buf := b.w Op.frameGrab |>.w cb |>.s video
+def fileUrlCmd (b : Buf) (cb : UInt32) (file : Nat) : Buf := b.w Op.fileUrl |>.w cb |>.w file.toUInt32
 end Buf
 
 end LeanUI

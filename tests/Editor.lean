@@ -1,6 +1,7 @@
 module
 public import Editor.Core
 public import Editor
+public import Video
 public import LeanUI.Testing.Harness
 /-!
 # Tests for the photo editor core (`examples/Editor/*.lean`)
@@ -30,6 +31,10 @@ them with another decoder).
   job's row-sliced result equals the whole-image operation, export round-trips through PNG, and
   the program itself in the DOM model (`LeanUI.Testing`): open, adjust with live preview, apply,
   filters, paint, undo and redo, layers, geometry, crop, export.
+* **The video lab** (`examples/Video.lean`) in the DOM model: a file opened through its object
+  URL, the frame loop (grab, filter, draw, next animation frame), a frame shown twice filtered
+  once, a new filter refiltering the frame, the slow poll of a paused video, frames per second,
+  errors.
 -/
 public section
 open Editor
@@ -1036,6 +1041,84 @@ def goldenPngs : List (String × Image × Nat) :=
   [("base", base, 0), ("base", base, 1), ("gradient", gradient 61 37, 1), ("gradient", gradient 61 37, 9),
     ("checker", checker 64 48 8, 4)]
 
+/-! ## The video lab -/
+
+/-- The callback id of the most recent effect starting with `pfx`. -/
+def lastCb (r : LeanUI.Testing.Running) (pfx : String) : IO UInt32 := do
+  let some e := (← r.dom.get).effects.reverse.find? (·.startsWith pfx) | throw (IO.userError s!"no effect {pfx}")
+  let digits := (e.drop pfx.length).toString.toList.dropWhile (!·.isDigit) |>.takeWhile Char.isDigit
+  return (String.ofList digits).toNat!.toUInt32
+
+def testVideo : T Unit := do
+  -- the filters are the editor's
+  let img := noise 37 23 7
+  expectEq "video: none" ((Video.Filter.run .none img.copy).checksum) img.checksum
+  expectEq "video: invert" ((Video.Filter.run .invert img.copy).checksum) (Adjust.apply { invert := true } img).checksum
+  expectEq "video: blur" ((Video.Filter.run .blur img.copy).checksum) (Editor.blur img.copy 4).checksum
+  expectEq "video: edges" ((Video.Filter.run .edges img.copy).checksum) (Editor.edgeDetect img).checksum
+  expect "video: sizes kept" (Video.Filter.all.all fun f => let o := f.run img.copy; o.width == 37 && o.height == 23 && o.valid)
+  expect "video: keys" (Video.Filter.all.all fun f => Video.Filter.ofKey f.key == f)
+  let r ← LeanUI.Testing.run Video.program
+  let frameOp := s!"op{LeanUI.Op.frame} "
+  let last : IO String := do return (← r.dom.get).effects.back?.getD ""
+  let tick (ms : Nat) : IO Unit := do r.inst.callback (← lastCb r frameOp) true (toString ms)
+  let reply (t : Nat) (w : Nat := 2) (h : Nat := 1) : IO Unit := do
+    r.inst.callbackBytes (← lastCb r "grabFrame cb=") true s!"{w} {h} {t}" (ByteArray.mk (Array.replicate (4 * w * h) 7))
+  expectEq "video: start" (← textOf r "vid-status") "Choose a video file."
+  -- a file: its object URL becomes the video's source, and the frame loop starts
+  r.fire (← r.find "id" "vid-file") "change" "5\t1000\tvideo/webm\tclip.webm"
+  expectEq "video: url asked" (← last) "fileUrl cb=1 file=5"
+  r.inst.callback (← lastCb r "fileUrl cb=") true "blob:x"
+  expectEq "video: source" (← attrOf r "vid-src" "src") (some "blob:x")
+  expectEq "video: playing" (← textOf r "vid-status") "Playing clip.webm."
+  expect "video: loop" ((← last).startsWith frameOp) (← last)
+  tick 1000
+  expectEq "video: grab" (← last) s!"grabFrame cb={← lastCb r "grabFrame cb="} #vid-src"
+  let mark := (← r.dom.get).effects.size
+  reply 0
+  let effs := (← r.dom.get).effects.extract mark (← r.dom.get).effects.size
+  expect "video: drawn, then the next frame" (effs.size == 2 && effs[0]! == "putImage #vid-out blob=0 2x1 dirty=0,0,2,1" && effs[1]!.startsWith frameOp) s!"{effs}"
+  expectEq "video: canvas" ((← attrOf r "vid-out" "width"), (← attrOf r "vid-out" "height")) (some "2", some "1")
+  expectEq "video: counted" ((← textOf r "vid-frames"), (← textOf r "vid-size")) ("1", "2×1")
+  -- the same frame again is not filtered again; a new filter refilters it
+  tick 1016; reply 0
+  expectEq "video: same frame" (← textOf r "vid-frames") "1"
+  expect "video: same frame, next frame" ((← last).startsWith frameOp) (← last)
+  r.fire (← r.find "id" "vid-filter") "change" "invert"
+  tick 1032; reply 0
+  expectEq "video: new filter" (← textOf r "vid-frames") "2"
+  -- no new frame for half a second: a poll every 100 ms, until one comes
+  for i in [0:Video.idleAfter] do
+    tick (1048 + 16 * i); reply 0
+  expect "video: slow poll" ((← last).startsWith "timeout ") (← last)
+  r.inst.callback (← lastCb r "timeout ") true ""
+  expect "video: poll grabs" ((← last).startsWith "grabFrame cb=") (← last)
+  reply 33
+  expectEq "video: new frame after the poll" (← textOf r "vid-frames") "3"
+  expect "video: back to animation frames" ((← last).startsWith frameOp) (← last)
+  -- frames per second: a new frame every 20 ms for a second
+  for i in [0:51] do
+    tick (5000 + 20 * i); reply (100 + 20 * i)
+  expectEq "video: fps" (← textOf r "vid-fps") "50.0"
+  -- errors: no frame yet, and a size that does not match the bytes
+  tick 7000
+  r.inst.callbackBytes (← lastCb r "grabFrame cb=") false "no video frame" .empty
+  expectEq "video: no frame" (← textOf r "vid-status") "no video frame"
+  expect "video: keeps looping" ((← last).startsWith frameOp) (← last)
+  tick 7016
+  r.inst.callbackBytes (← lastCb r "grabFrame cb=") true "2 2 9000" (ByteArray.mk #[1, 2, 3])
+  expectEq "video: size mismatch" (← textOf r "vid-status") "grabbed 3 bytes for 2×2 pixels"
+  -- another file while the loop runs: no second loop; a file the page no longer has
+  let loops := ((← r.dom.get).effects.filter (·.startsWith frameOp)).size
+  r.fire (← r.find "id" "vid-file") "change" "6\t10\tvideo/mp4\tb.mp4"
+  r.inst.callback (← lastCb r "fileUrl cb=") true "blob:y"
+  expectEq "video: one loop" ((← r.dom.get).effects.filter (·.startsWith frameOp)).size loops
+  expectEq "video: second source" (← attrOf r "vid-src" "src") (some "blob:y")
+  r.fire (← r.find "id" "vid-file") "change" "7\t10\tvideo/mp4\tc.mp4"
+  r.inst.callback (← lastCb r "fileUrl cb=") false ""
+  expectEq "video: file gone" (← textOf r "vid-status") "c.mp4: the file is gone."
+  expect "video: protocol" (← r.dom.get).errors.isEmpty s!"{(← r.dom.get).errors}"
+
 public def main (args : List String) : IO UInt32 := do
   if args.contains "--print-goldens" then
     for (n, v) in computeGoldens do IO.println s!"  (\"{n}\", {v}),"
@@ -1052,7 +1135,7 @@ public def main (args : List String) : IO UInt32 := do
   IO.println "leanui editor tests"
   let ((), s) ← (do
     testByHand; testGoldens; testGeometry; testFilters; testAdjust; testComposite; testPaint; testPng
-    testDoc; testJobs; testProgram : T Unit).run {}
+    testDoc; testJobs; testProgram; testVideo : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0

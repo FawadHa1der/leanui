@@ -132,6 +132,20 @@ partial def execCmd (c : Cmd Msg) (acc : Array Msg) : RunM Model Msg (Array Msg)
                            else .error s!"decoded {b.size} bytes for {w}×{h} pixels"
                          | _, _ => .error p)] }
     emitR (·.imageDecodeCmd cb file); return acc
+  | .grabFrame video k =>
+    let frameInfo (p : String) : Option (Nat × Nat × Nat) := match p.splitOn " " with
+      | [w, h, t] => do pure (← w.toNat?, ← h.toNat?, ← t.toNat?)
+      | _ => none
+    let cb ← allocCb { decode := fun _ p => #[k (.error p)], persistent := false,
+                       decodeBytes? := some fun ok p b => #[k (match ok, frameInfo p with
+                         | true, some (w, h, t) =>
+                           if b.size == 4 * w * h then .ok ({ width := w, height := h, data := b }, t)
+                           else .error s!"grabbed {b.size} bytes for {w}×{h} pixels"
+                         | _, _ => .error p)] }
+    emitR (·.frameGrabCmd cb video); return acc
+  | .fileUrl file k =>
+    let cb ← allocCb { decode := fun _ p => #[k p], persistent := false }
+    emitR (·.fileUrlCmd cb file); return acc
 
 /-- The wanted subscriptions grouped by identity, in first-seen order: one browser subscription
 per identity, whose callback delivers a message to every part of the app that wants it (two

@@ -78,6 +78,8 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 50 | IMAGE_DECODE | cb, file | reply `cb` with file `file` decoded to RGBA pixels, payload `"<width> <height>"` (section 8) |
 | 51 | DOWNLOAD | s name, s type, blob | offer blob's bytes as a download named `name` of media type `type` |
 | 52 | KEYS_LISTEN | sub | reply `sub` for every `keydown` on the document except in text fields (`textarea`, `select`, editable content, and `input`s other than checkboxes, radio buttons, ranges, buttons, file and colour pickers), payload `Ctrl+`, `Alt+`, `Shift+`, `Meta+` prefixes (in that order) then `KeyboardEvent.key`; presses of a modifier key alone are not reported, and no default is prevented |
+| 53 | FRAME_GRAB | cb, s selector | reply `cb` with the frame the first `<video>` matching `selector` shows, as RGBA pixels (a WebCodecs `VideoFrame` copied as RGBA, or drawn on a 2D canvas where that conversion is not available), payload `"<width> <height> <timeMs>"` with the frame's timestamp (`VideoFrame.timestamp`; `currentTime` without WebCodecs); `ok` = 0 when there is no frame yet (section 8) |
+| 54 | FILE_URL | cb, file | reply `cb` with an object URL for file `file` (`ok` = 0 and an empty payload for an unknown id) |
 
 Unknown opcodes are fatal (the receiver stops and reports). New commands get new numbers; numbers
 are never reused. Opcode 22 is unused: an `INSERT_MANY` (insert a run of children with one

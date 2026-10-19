@@ -57,6 +57,9 @@ def fileRead      : UInt32 := 49  -- cb, file id            (bytes callback: the
 def imageDecode   : UInt32 := 50  -- cb, file id            (bytes callback: RGBA pixels, payload "width height")
 def download      : UInt32 := 51  -- name-str, type-str, blob
 def keysListen    : UInt32 := 52  -- sub                   (document keydown -> callback)
+-- video (2026-10-19)
+def frameGrab     : UInt32 := 53  -- cb, video-selector-str (bytes callback: RGBA pixels, payload "width height timeMs")
+def fileUrl       : UInt32 := 54  -- cb, file id            (callback: an object URL for the file)
 end LeanUI.Op
 
 namespace LeanUI
