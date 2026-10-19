@@ -9,7 +9,8 @@ server in a Cloudflare container.
 One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it:
 
 1. **Lean**: elan installs the toolchain named in `lean-toolchain` (cached).
-2. **Native**: `lake build` (the `.lake/build` cache makes it incremental), then every test
+2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
+   change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,
    `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`.
 3. **wasm64**: `toolchain/image.sh` builds the emsdk image from the fork's

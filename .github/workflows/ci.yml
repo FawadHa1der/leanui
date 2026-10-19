@@ -48,15 +48,18 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .lake/build
-          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
-          restore-keys: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-${{ github.sha }}
+          # a build from an older lakefile is still a good start: Lake rebuilds what changed
+          restore-keys: |
+            lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-
+            lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-
       - name: Build (native)
         run: lake build
       - name: Save the Lake build
         uses: actions/cache/save@v6
         with:
           path: .lake/build
-          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}-${{ hashFiles('lakefile.toml') }}-${{ github.sha }}
 
       - name: Native tests
         run: |
