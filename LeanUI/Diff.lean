@@ -8,7 +8,8 @@ public import LeanUI.Keyed
 `mount` turns a view into commands that build it; `patch` compares a mounted node with a new view
 and emits only the changes. Both run in `DiffM`, a pure state monad over `DiffState`, so the whole
 engine is testable natively (`LeanUI.Testing`) and the same code runs in the browser and on a
-server.
+server; what runs once per created or removed node passes the state explicitly instead (see
+"State passing").
 
 Handles (DOM nodes) and slots (event handlers) are allocated by Lean from free lists, so a long
 session reuses them instead of growing. Listener slots are what the browser reports back: an

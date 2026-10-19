@@ -159,21 +159,103 @@ Every allocation is countable: `leanui-perf allocs` counts the *small objects* (
 thunks: what Lean's heartbeat counter counts) of each benchmark operation natively, by phase, and
 `tests/browser/allocs.mjs` counts every `malloc` and `free` of one click in a wasm build linked
 with `tools/alloc-count.c`. Both are exact and deterministic, so two builds compare without noise.
-Creating a benchmark row (at commit `5c6d926`) takes 154 allocations in wasm, of which 123 small
-objects:
+Creating a benchmark row (at commit `43e20b3`) takes 41 small objects natively and 62 allocations
+in wasm (small objects included); before mounting, cloning and releasing were rewritten in
+state-passing style (below; at `492772a`, templates and inline encoding already in) it took 67
+and 89 (at `5c6d926`, before templates and inline encoding: 123 and 154):
 
-| phase | small objects per created row |
-|---|--:|
-| update (building the rows) | 2 |
-| view (the keyed lazy row: node, key, dependencies) | 4 |
-| rendering the row (10 nodes, 2 handlers) | 14 |
-| mounting it (`mount` and the list diff around it) | 67 |
-| encoding its 30 commands | 36 |
+| phase (`leanui-perf allocs`, create 1,000 rows) | small objects per created row, before | after |
+|---|--:|--:|
+| update (building the rows) | 2 | 2 |
+| view (the keyed lazy row: node, key, dependencies) | 4 | 4 |
+| rendering the row (10 nodes, 2 handlers) | 14 | 14 |
+| mounting and encoding it (`CLONE`, what the clone still needs, the list diff around it) | 47 | 21 |
+| **the whole update** | **67.07** | **41.07** |
 
-The rest are arrays (children, attributes, listener tables), strings and closures, and a copy of
-every string written to the buffer (`String.toUTF8`). `leanui-perf allocs-nodes` gives the cost of
-one node of each shape: an element costs 7 small objects (its `Node`, 4 pairs and rebuilt state
-cells of the state monad, 2 to encode `CREATE_ELEMENT`), and each attribute 3 more.
+The 21 that remain are the row's 11 mounted nodes (10, and the lazy row), its 2 slots (`some h`)
+and listener-table entries, and one pair per element with children (6). The rest of wasm's
+allocations are arrays (children, listener tables), strings and closures. `leanui-perf
+allocs-nodes` gives the cost of mounting one node of each shape: an element costs 2 small objects
+(its `Node` and the pair it is returned in; 5 before), an attribute nothing (1 before), a listener
+2 (its slot and its table entry, as before), a text child 1 (2 before); a benchmark row mounted
+node by node 20 (60 before), 1,000 rows, all but the first two cloned, 21,087 (47,103 before).
+
+| operation (per created row, or per click) | small objects (native), before | after | wasm allocations, before | after |
+|---|--:|--:|--:|--:|
+| create 1,000 rows | 67.07 / row | 41.07 | 88.94 / row | 61.94 |
+| replace all 1,000 rows | 95.08 / row | 44.08 | 116.98 / row | 64.98 |
+| append 1,000 rows to 1,000 | 82.08 / row | 50.08 | 105.94 / row | 72.94 |
+| create 10,000 rows | 67.01 / row | 41.01 | 88.85 / row | 61.85 |
+| clear 1,000 rows | 20,066 | 65 | 20,085 (59,086 frees) | 84 (39,085) |
+| swap 2 of 1,000 rows | 17,057 | 12,063 | 18,982 | 13,986 |
+| remove one of 1,000 rows | 10,088 | 8,069 | 11,947 | 9,936 |
+| highlight a row; update every 10th | 4,107; 11,966 | the same | 6,054; 15,156 | the same |
+
+#### State passing in mount, clone and release
+
+`DiffM` is `StateM`. In Lean 4.34's generated code every call that is not inlined returns its
+result and the state as a freshly allocated pair, and so does every iteration of a `while` loop
+(a `for` over an array or a range allocates only on exit). The paths that run once per created or
+removed node are now plain functions on `DiffState` that return the state, or one pair at the
+end: `releaseS`, `mountS` (`mountElem`, `mountKids`, `mountCandidate`, `mountShape`), `cloneOf`
+(`cloneWalk`, `cloneKids`, `cloneAttrs`), `mountAppend` for a list that grows, and `placeMid` for
+the middle of a keyed list. What the compiler needs from such code, each costing an allocation
+when it is missing (the allocation lane found most of these on the code before templates):
+
+- one small `@[noinline]` function per state update (`emitSetText`, `takeSlot`, ...): when two
+  branches update the state differently and meet again inside one function, the compiler passes
+  the fields to the join point and builds a new cell; no inline helper that returns a pair;
+- what an update hands out is read first by a separate pure `peek` (`peekNode`, `peekSlotAt`,
+  `handleAt`), never returned together with the state;
+- an element's listener table is computed purely, from the slots its listeners will take
+  (`listenersOf`), so setting its attributes and listeners is a pass that returns only the state;
+- texts and childless elements are built inside their parent's loop: only an element with
+  children costs a pair, the one it is returned in;
+- a clone's handles are read from the free list during the walk and taken after it, and `CLONE`
+  writes them straight from the free list: no array of handles per clone;
+- shared constants for an empty listener table and empty children (`noListeners`, `noKids`: a
+  `#[]` in an argument position is allocated where it is written; `testSharedEmpty` pins both),
+  `getD` rather than `get?`, keys checked for uniqueness unboxed (`uniqueKeys` took `Option`s),
+  `attrsKey` as a plain loop (`findSome?` allocated per element).
+
+The command buffers are byte for byte what they were: the corpora `leanui-props --long --only
+corpus` writes for four seeds (every buffer of 1,280 sessions and of 32 template scenarios, with
+templates and without) are identical to those of the build before, and every suite passes,
+natively and in Chromium and Firefox; the nesting limit is unchanged (1,050 levels in Chromium,
+1,700 in Firefox).
+
+Measured A/B against `492772a` on the same machine and session. Native: median of seven
+alternating runs of `leanui-perf`, lazy rows (min–max). Chromium 151 traced script time: median
+of three alternating rounds of nine fresh loads each (the three rounds' medians):
+
+| operation | native before | after | Chromium script before | after |
+|---|--:|--:|--:|--:|
+| create 1,000 rows | 0.83 ms (0.82–1.00) | 0.62 ms (0.61–0.63) | 4.11 ms (4.02–4.15) | 3.82 ms (3.74–3.87) |
+| replace all 1,000 rows | 1.39 (1.37–1.53) | 1.01 (0.99–1.02) | 7.10 (7.09–7.12) | 6.36 (6.35–6.43) |
+| append 1,000 rows to 1,000 | 1.09 (1.07–1.14) | 0.81 (0.80–0.81) | 6.32 (6.14–6.37) | 5.95 (5.84–5.98) |
+| create 10,000 rows | 8.87 (8.66–8.99) | 6.74 (6.67–6.82) | 36.58 (36.22–36.61) | 33.10 (32.98–33.14) |
+| clear 1,000 rows | 0.39 (0.38–0.40) | 0.28 (0.27–0.29) | 2.79 (2.77–2.81) | 2.45 (2.41–2.46) |
+| swap 2 of 1,000 rows | 0.28 (0.27–0.29) | 0.24 (0.24–0.24) | | |
+| remove one of 1,000 rows | 0.16 (0.16–0.17) | 0.14 (0.14–0.15) | | |
+| update every 10th of 1,000 rows | 0.19 (0.19–0.20) | 0.19 (0.19–0.19) | 0.84 (0.83–0.85) | 0.87 (0.87–0.88) |
+| highlight a row (of 1,000) | 0.080 (0.078–0.083) | 0.079 (0.078–0.080) | 0.37 (0.37–0.37) | 0.41 (0.41–0.42) |
+
+Three earlier sessions against `195e344` (two of them without `placeMid`; `Buf.handles` still
+allocated once per clone) gave the same picture for the creates: create 1,000 rows −6 to −11%,
+replace −10 to −11%, create 10,000 rows −8 to −10%, append −6 to −8%. On one page clicked over and over (hot: the mean
+of 800 selects, 200 updates and 80 creates; median of three rounds), create 1,000 rows went from
+3.45 to 3.07 ms, select stayed at 0.155 ms and update every 10th at 0.44 ms. Rendering is
+unchanged, so in script plus rendering the creates gain 1.5 to 4%, clear 12%.
+
+The fresh-page "highlight a row" and "update every 10th" figures came out 11–14% and 2–6% higher
+in every session (five), although neither click runs code that changed: their Lean code compiles
+to the same C (and `sameF`, `patchSame` and `Dep` equality to wasm functions of the same size),
+they allocate exactly as often, natively they take the same time, and on hot pages they are
+within 1%. On a fresh page they are dominated by first
+touches of the memory they read, the 1,000 rows' keys and dependencies that the create made
+(a sampled profile of the measured click over 60 fresh pages puts the extra time in comparing
+them), and where those objects lie depends on everything allocated before them; see
+"Heap history" below.
 
 ## What made the diff fast
 
@@ -275,6 +357,14 @@ wasm), and keeping the buffers' storage across updates in `reset` (no change in 
   difference only when it holds in more than one session. A forced GC (`gc()`) right before a
   measurement deoptimized the apply loop once in Chromium (18 ns per command instead of 2):
   measure after the warm-up, not right after a GC.
+- **Heap history.** A click that mostly compares (highlight a row: 0.4 ms on a fresh page,
+  0.15 ms on a hot one) depends on where the objects it reads were allocated, and so on what
+  every earlier click allocated and freed. Changing only what creating rows allocates (the same
+  code for the click itself, see "State passing in mount, clone and release") moved the
+  fresh-page "highlight a row" by −3 to +14% depending on the build and the warm-up sequence
+  (the standard one; `#run #clear` before it; `#runlots #clear` before it), which also reorders
+  the builds. Believe a fresh-page difference in such an operation only when its own code
+  changed, or when it holds on a hot page too.
 - **Fresh loads, not warm pages.** Chrome's optimizing tier changes nothing measurable for
   LeanUI after the first second (a 12-second warm-up probe stays flat once the core scheduling
   effect is removed).

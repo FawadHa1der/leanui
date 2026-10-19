@@ -108,7 +108,10 @@ built against. It was first written on 2026-10-18 from the research in
   whole compiler, about 104 MB). Compile-time code (templates, JSON deriving) lives in modules the
   app reaches only through `meta import`, which keeps it out of the binary.
 - No `initialize` globals on runtime paths. Hot loops keep arrays uniquely owned (`modifyGet`,
-  not `get` then `modify`).
+  not `get` then `modify`). Code that runs once per created or removed node (mounting, cloning,
+  releasing, placing a keyed list's middle) passes `DiffState` explicitly instead of running in
+  `DiffM`, one `@[noinline]` function per state update (2026-10-18; `LeanUI.Diff`, "State
+  passing"; `docs/BENCHMARKS.md`, "Allocations").
 - `lake build` builds and checks everything (library, examples, tests, proofs) warning-free; the
   test executables are listed in the README.
 - Browser runs go through the host lock:
