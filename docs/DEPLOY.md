@@ -46,9 +46,10 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   starts it again, which takes a few seconds. Live sessions end with it. A page whose session is
   gone gets `410` and reloads once (`docs/SERVER.md`), and pages running in wasm are not
   affected. On `SIGTERM` the server closes its sessions and exits.
-- **Updates**: `wrangler deploy` uploads the Worker, then builds and pushes the image. Instances
-  move to the new image over the next minutes, and right after the first deploy, requests can
-  fail for a few minutes until the container is ready.
+- **Updates**: `wrangler deploy` builds the image locally, uploads the Worker, then pushes the
+  image and rolls the container out (stop with `SIGTERM`, start on the new image). A failed image
+  build changes nothing; a failed push leaves the new Worker version live on the old image. Right
+  after the first deploy, requests can fail for a few minutes until the container is ready.
 
 ## Setup (once, by the repository owner)
 
@@ -56,9 +57,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
    $5/month plan includes 25 GiB-hours of memory, 375 vCPU-minutes and 200 GB-hours of disk a
    month, and usage beyond that is billed).
 2. An API token: Cloudflare dashboard → My Profile → API Tokens → Create Token → the **Edit
-   Cloudflare Workers** template, limited to your account. If the token form lists a Containers
-   permission, add it with Edit access. If a deploy fails with an authorization error on the
-   container image push, that permission is the one missing.
+   Cloudflare Workers** template, limited to your account, plus **Account → Containers → Edit**
+   (the template does not include it). Without it the deploy fails after "Uploaded leanui-site",
+   on the `.../containers/...` API calls, and the site stays unreachable.
 3. The account ID, from the dashboard's Workers & Pages overview.
 4. Both as repository secrets (Settings → Secrets and variables → Actions), or with the GitHub CLI:
 
@@ -77,7 +78,8 @@ Routes).
 
 ## Deploying by hand
 
-The image needs a Linux x86-64 `leanui-site`, so deploy from Linux (or let CI do it):
+The image needs a Linux x86-64 `leanui-site`, so deploy from Linux (or let CI do it), with the
+wasm64 archives built once (`toolchain/build-archives.sh`, needs Docker):
 
 ```bash
 lake build leanui-site && tools/build-app.sh SiteApp site && deploy/cloudflare/stage.sh

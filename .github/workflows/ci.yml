@@ -23,9 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache the Lean toolchain
+      # Caches are restored and saved explicitly: actions/cache saves only when the whole job
+      # succeeds, and the archives below take half an hour to rebuild.
+      - name: Restore the Lean toolchain
         id: elan
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ~/.elan
           key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
@@ -34,16 +36,27 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - name: Save the Lean toolchain
+        if: steps.elan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.elan
+          key: ${{ steps.elan.outputs.cache-primary-key }}
       - run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Cache the Lake build
-        uses: actions/cache@v6
+      - name: Restore the Lake build
+        uses: actions/cache/restore@v6
         with:
           path: .lake/build
           key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
           restore-keys: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-
       - name: Build (native)
         run: lake build
+      - name: Save the Lake build
+        uses: actions/cache/save@v6
+        with:
+          path: .lake/build
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
 
       - name: Native tests
         run: |
@@ -58,9 +71,9 @@ jobs:
 
       # The single-threaded wasm64 Lean archives (toolchain/build-archives.sh, ~30 min cold) depend
       # only on the pinned fork, the patch and the script.
-      - name: Cache the wasm64 archives
+      - name: Restore the wasm64 archives
         id: archives
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .toolchain/wasm64
           key: wasm64-archives-${{ hashFiles('toolchain/fork.lock', 'toolchain/lean-wasm-threads.patch', 'toolchain/build-archives.sh') }}
@@ -69,6 +82,12 @@ jobs:
       - name: Build the wasm64 archives
         if: steps.archives.outputs.cache-hit != 'true'
         run: toolchain/build-archives.sh
+      - name: Save the wasm64 archives
+        if: steps.archives.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .toolchain/wasm64
+          key: ${{ steps.archives.outputs.cache-primary-key }}
 
       - name: Build the apps (wasm64)
         run: tests/browser/run-all.sh --build-only
@@ -113,12 +132,13 @@ jobs:
     concurrency:
       group: deploy-cloudflare
       cancel-in-progress: false
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # The secrets reach only the two steps that need them (not npm install).
     steps:
       - name: Check for Cloudflare credentials
         id: creds
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
           else echo "::notice::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set: skipping the deploy (docs/DEPLOY.md)"; fi
@@ -133,10 +153,16 @@ jobs:
         if: steps.creds.outputs.ok == 'true'
         with:
           node-version: 22
-      - name: Deploy (wrangler builds and pushes the container image)
+      - name: Install wrangler
         if: steps.creds.outputs.ok == 'true'
         working-directory: deploy/cloudflare
         run: |
           tar -xzf "$RUNNER_TEMP/site-container.tgz"
           npm install --no-audit --no-fund
-          npx wrangler deploy
+      - name: Deploy (wrangler builds the image, uploads the Worker, pushes the image)
+        if: steps.creds.outputs.ok == 'true'
+        working-directory: deploy/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

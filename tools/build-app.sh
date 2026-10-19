@@ -32,9 +32,12 @@ lean_object *leanui_initialize_app(void) { return $SYM(1); }
 C
 # Every package module goes into one archive and only the entry module is linked directly, so the
 # linker pulls exactly what the app reaches (meta-only modules such as LeanUI.Syntax drop out).
-# Excluded: tests, the CLI, the native-only testing and server modules, and other app entry points.
+# Excluded: tests, the CLI, the native-only testing and server modules, and other app entry points,
+# and C whose module has no source any more (a long-lived or restored .lake keeps the C of a removed
+# or renamed module, whose symbols would clash with its successor's).
+live() { while read -r c; do m="${c#"$IR"/}"; m="${m%.c}"; if [ -f "$ROOT/$m.lean" ] || [ -f "$ROOT/examples/$m.lean" ]; then echo "$c"; fi; done; }
 find "$IR" -name '*.c' ! -path "$IR/tests/*" ! -path "$IR/cli/*" ! -path '*/Testing/*' ! -path '*/Server*' ! -path "$APPC" \
-  | { grep -v -E "^$IR/[^/]+App\.c$" || true; } > "$WORK/fw.list"
+  | { grep -v -E "^$IR/[^/]+App\.c$" || true; } | live > "$WORK/fw.list"
 echo "$APPC" > "$WORK/app.list"
 FSFLAG="${LEANUI_FS:-}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--profiling-funcs"
 CG="-m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -D LEAN_EMSCRIPTEN"

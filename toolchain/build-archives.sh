@@ -36,6 +36,7 @@ docker run --rm -v "$SRC":/lean4 -v "$B":/build -v "$T/ccache":/root/.ccache -e 
 mkdir -p "$OUT/lib" "$OUT/include"
 cp "$B/stage1/lib/lean/libInit.a" "$B/stage1/lib/lean/libStd.a" "$B/stage1/lib/lean/libleanrt.a" "$B/stage1/libuv/src/libuv/libuv.a" "$OUT/lib/"
 rm -rf "$OUT/include/lean" && cp -R "$B/stage1/include/lean" "$OUT/include/lean"
-grep -q 'MULTI_THREAD:BOOL=OFF' "$B/stage1/CMakeCache.txt" && ! grep -q pthread "$B/stage1/compile_commands.json"
+grep -q 'MULTI_THREAD:BOOL=OFF' "$B/stage1/CMakeCache.txt" || { echo "the runtime was configured multi-threaded" >&2; exit 4; }
+if grep -q pthread "$B/stage1/compile_commands.json"; then echo "-pthread in the compile commands" >&2; exit 4; fi
 ( cd "$OUT/lib" && shasum -a 256 *.a ) > "$OUT/SHA256SUMS"
 echo "archives in $OUT/lib:"; ls -la "$OUT/lib"
