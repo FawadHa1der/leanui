@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeanUI Photo · an image editor in Lean</title>
+<meta name="description" content="A photo editor written in Lean 4 with LeanUI: every pixel operation runs in Lean, compiled to WebAssembly.">
+<style>
+  :root {
+    --bg: #1b1d21; --panel: #24272c; --panel2: #2c3036; --line: #383c43; --ink: #e6e7e9; --muted: #9aa0a8;
+    --accent: #4f8cff; --accent2: #2f6be0; --danger: #e5646e; --check1: #2a2d32; --check2: #33373d;
+    --top: 46px; --opts: 40px; --tools: 52px; --side: 320px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; overflow: hidden; }
+  #app { height: 100%; }
+  button, select, input { font: inherit; color: inherit; }
+  button { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent); }
+  button.on { background: var(--accent2); border-color: var(--accent); }
+  select, input[type=number], input[type=text] { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; }
+  input[type=number] { width: 72px; }
+  input[type=range] { accent-color: var(--accent); }
+  .editor { display: grid; height: 100%; grid-template-rows: var(--top) var(--opts) 1fr; grid-template-columns: var(--tools) 1fr var(--side); }
+  .topbar { grid-column: 1 / 4; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 650; letter-spacing: .02em; margin-right: 6px; }
+  .brand a { color: inherit; text-decoration: none; }
+  .brand small { color: var(--muted); font-weight: 400; }
+  .spacer { flex: 1; }
+  .status { color: var(--muted); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-label { position: relative; overflow: hidden; display: inline-block; }
+  .file-label input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .options { grid-column: 1 / 4; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .options label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .options output { color: var(--ink); min-width: 3ch; }
+  .tools { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; background: var(--panel); border-right: 1px solid var(--line); }
+  .tools button { width: 40px; height: 40px; padding: 0; font-size: 18px; }
+  .viewport { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none;
+    background: repeating-conic-gradient(var(--check1) 0 25%, var(--check2) 0 50%) 0 0 / 20px 20px; }
+  .viewport.drag { outline: 3px dashed var(--accent); outline-offset: -6px; }
+  .stage { position: relative; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 8px 30px rgba(0,0,0,.45); line-height: 0; }
+  .stage canvas { display: block; touch-action: none; background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+  .stage.fit canvas { max-width: calc(100vw - var(--tools) - var(--side) - 40px); max-height: calc(100vh - var(--top) - var(--opts) - 40px); }
+  .stage.zoomed canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+  .stage.t-brush canvas, .stage.t-eraser canvas, .stage.t-crop canvas { cursor: crosshair; }
+  .stage.t-hand canvas { cursor: grab; }
+  .crop { position: absolute; border: 1px dashed #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); pointer-events: none; outline: 1px dashed #000; }
+  .empty { color: var(--muted); text-align: center; line-height: 1.6; }
+  .empty h2 { color: var(--ink); font-weight: 500; }
+  .busy { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; min-width: 260px; }
+  .busy .bar { height: 6px; background: var(--panel2); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .busy .bar i { display: block; height: 100%; background: var(--accent); }
+  .side { overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { padding: 9px 12px; cursor: pointer; font-weight: 600; user-select: none; }
+  .sec { padding: 4px 12px 12px; display: grid; gap: 7px; }
+  .row { display: grid; grid-template-columns: 82px 1fr 44px; align-items: center; gap: 8px; }
+  .row span { color: var(--muted); }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hist { width: 100%; height: 90px; display: block; background: #15171a; border-radius: 4px; }
+  .layers, .history { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 5px; max-height: 260px; overflow-y: auto; }
+  .layers li, .history li { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .layers li:last-child, .history li:last-child { border-bottom: 0; }
+  .layers li.active, .history li.current { background: rgba(79,140,255,.18); }
+  .history li.future { color: var(--muted); font-style: italic; }
+  .layers .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layers .name input { width: 100%; }
+  .layers .meta { color: var(--muted); font-size: 11px; }
+  .history .n { color: var(--muted); width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }
+  .note { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="leanui.js"></script>
+<script>
+  LeanUI.start({ glue: "app.js", selector: "#app" }).then((rt) => {
+    window.__leanui = rt; window.__ready = performance.now();
+  }, (e) => {
+    document.getElementById("app").textContent = LeanUI.supported()
+      ? "The editor failed to start: " + e.message
+      : "This editor runs Lean compiled to WebAssembly with 64-bit memory (Memory64), which this browser does not support yet. Chrome, Edge 133+ and Firefox 134+ do.";
+  });
+</script>
+</body>
+</html>
