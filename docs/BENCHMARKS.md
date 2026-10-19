@@ -542,9 +542,9 @@ in the same browser process on the same input.
   (the undo history's 1 GiB budget then holds 23 steps); wasm memory never shrinks.
 - **Download:** 288 KB with brotli (wasm 264 KB, glue 15 KB, runtime 9 KB).
 - **Video** (the [video lab](../examples/Video.lean), the same filters on every frame of a 30 fps
-  video): every filter keeps up at 640×360, except blur at 24 fps. At 1280×720 the colour filters
-  and edge detection keep up, emboss runs at 18 fps, and sharpen and blur at 7–8 fps. At 1920×1080
-  the copy alone keeps up and the colour filters reach 16–20 fps.
+  video): every filter keeps up at 640×360, except blur at 27 fps. At 1280×720 the colour filters
+  and edge detection keep up, emboss runs at 20 fps, and sharpen and blur at 6–9 fps. At
+  1920×1080, grabbing and drawing alone reach 27 fps and the colour filters 18–22 fps.
 
 ### Each operation: Lean (wasm) against plain JavaScript and the canvas
 
@@ -744,27 +744,31 @@ to be re-measured on the reference Mac*.
 
 | filter | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
 |---|--:|--:|--:|
-| the video played alone | 30 | 29.7 | 27.7 |
-| none (grab and draw) | 30 · 1.7 · 0.8 | 29 · 5.9 · 2.1 | 29 · 11.9 · 4.6 |
-| vivid (contrast, saturation) | 30 · 1.7 · 4.6 | 30 · 5.8 · 16.8 | 15.7 · 12.6 · 40.4 |
-| black and white | 30 · 1.8 · 5.0 | 30 · 5.5 · 16.6 | 17.0 · 12.2 · 38.3 |
-| invert (a lookup table) | 30 · 1.8 · 4.2 | 30 · 5.6 · 13.3 | 20.3 · 12.1 · 29.3 |
-| edge detect (Sobel) | 30 · 1.8 · 7.6 | 27.5 · 5.8 · 24.3 | 12.5 · 13.8 · 54.9 |
-| emboss (3×3) | 30 · 1.8 · 10.6 | 17.7 · 6.0 · 41.1 | 9.3 · 12.2 · 83.8 |
-| sharpen (unsharp mask, radius 2) | 29.5 · 1.7 · 26.9 | 8.2 · 6.0 · 104.7 | 3.5 · 13.2 · 260.4 |
-| blur (Gaussian, radius 4) | 24 · 1.6 · 34.3 | 7.3 · 5.5 · 126.9 | 2.8 · 12.3 · 304.7 |
+| the video played alone | 30 | 29.7 | 29.7 |
+| none (grab and draw) | 30 · 1.8 · 0.8 | 29.9 · 5.9 · 2.4 | 26.9 · 12.5 · 5.0 |
+| vivid (contrast, saturation) | 30 · 1.7 · 4.3 | 30 · 5.7 · 15.6 | 18.1 · 12.6 · 34.6 |
+| black and white | 30 · 1.8 · 4.4 | 29.9 · 5.8 · 16.0 | 18.5 · 12.1 · 35.0 |
+| invert (a lookup table) | 30 · 1.7 · 3.8 | 29.8 · 6.3 · 13.1 | 22.0 · 12.2 · 26.9 |
+| edge detect (Sobel) | 30 · 1.8 · 7.3 | 28.2 · 5.8 · 23.5 | 14.7 · 12.1 · 49.1 |
+| emboss (3×3) | 30 · 1.8 · 10.2 | 19.8 · 5.9 · 38.8 | 9.2 · 12.5 · 87.7 |
+| sharpen (unsharp mask, radius 2) | 29.2 · 1.7 · 25.4 | 9.1 · 5.8 · 97.4 | 4.0 · 12.3 · 230.4 |
+| blur (Gaussian, radius 4) | 26.7 · 1.7 · 32.5 | 6.4 · 6.4 · 142.5 | 3.1 · 12.7 · 293.7 |
 
 - **The frame rate follows the per-frame cost.** One frame costs a grab plus the Lean side, and
-  the loop waits for an animation frame between frames. So a frame costing 47 ms (emboss at
+  the loop waits for an animation frame between frames. So a frame costing 45 ms (emboss at
   720p) takes three 16.7 ms animation frames, and the lab draws about 20 fps of a 30 fps video;
-  the measurement is 17.7.
-- **Moving the pixels is cheap.** Without a filter, a 1080p frame is grabbed in 12 ms (the
-  asynchronous `VideoFrame` conversion to RGBA), then handed to Lean and drawn in 4.6 ms (8 MB
-  copied into wasm memory, then `putImageData` from it).
+  the measurement is 19.8.
+- **Moving the pixels is cheap.** Without a filter, a 1080p frame is grabbed in 12.5 ms (the
+  asynchronous `VideoFrame` conversion to RGBA), then handed to Lean and drawn in 5 ms (8 MB
+  copied into wasm memory, then `putImageData` from it). The frame reaches `update` unshared,
+  so the colour filters write into it: a counting build (`LEANUI_COUNT_ALLOCS=1`) shows one
+  frame-sized allocation per inverted frame, two for edges (its output) and blur (its
+  temporary). Before `stepMsgs` handed messages over unshared, every in-place filter copied the
+  frame first: 2–6 ms a frame at 1080p, comparing a run before the change with one after.
 - **The filters cost what they cost in the editor** (the Lean side minus the copy, per pixel, at
-  720p and 1080p): 15–17 ns for a lookup table and a colour matrix, 24 ns for edges, 38–42 ns for
-  emboss, 110–145 ns for the unsharp mask and the blur. The neighbourhood filters are the gap, as
-  in the editor's previews.
+  720p and 1080p): 11–14 ns for a lookup table and a colour matrix, 21–23 ns for edges, 40 ns
+  for emboss, 100–150 ns for the unsharp mask and the blur. The neighbourhood filters are the
+  gap, as in the editor's previews.
 - **What would raise the rates**, none of it done: a box-filter blur, whose cost does not grow
   with the radius; filtering at preview size, as the editor's blur preview does; grabbing the
   next frame while the current one is filtered (this hides the grab); and filtering in a worker.

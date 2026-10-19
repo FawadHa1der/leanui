@@ -188,6 +188,10 @@ an array of the model in place does so without copying it. -/
     let (model, cmd) := p.update m model
     (cmd, { model, tree, diff, cbs, freeCbs, subs })
 
+/-- The last element and the array without it. The element is unshared when the array was: it
+is read and released in one call, which the compiler cannot reorder around its caller's use. -/
+@[noinline] def popLast (a : Array α) (h : 0 < a.size) : α × Array α := (a[a.size - 1], a.pop)
+
 /-- Process messages (and the messages their commands send), then render once and reconcile
 subscriptions. Bounded, so an app that sends messages forever cannot hang the page. -/
 def stepMsgs (p : Program Model Msg) (msgs : Array Msg) : RunM Model Msg Unit := do
@@ -195,7 +199,12 @@ def stepMsgs (p : Program Model Msg) (msgs : Array Msg) : RunM Model Msg Unit :=
   let mut fuel := 10000
   while !queue.isEmpty && fuel > 0 do
     let mut next := #[]
-    for m in queue do
+    -- popped off the end of the reversed queue, each message reaches `update` unshared (the
+    -- array lets go of it), so bytes in a message, such as a video frame, are written in place
+    let mut rest := queue.reverse
+    while h : 0 < rest.size do
+      let (m, r) := popLast rest h
+      rest := r
       let cmd ← modifyGet (updateModel p m)
       next ← execCmd cmd next
       fuel := fuel - 1

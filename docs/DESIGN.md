@@ -121,7 +121,10 @@ built against. It was first written on 2026-10-18 from the research in
   not `get` then `modify`). `update` gets the model uniquely owned (`LeanUI.App.updateModel`;
   `tests/Kit.lean`, "update owns the model"), so an app whose model holds pixels updates them in
   place if it takes the model apart (`match m with | { img, .. } => …`) rather than reading
-  `m.img` and then building `{ m with img := … }`, which keeps the old `m` alive meanwhile. Code that runs once per created or removed node (mounting, cloning,
+  `m.img` and then building `{ m with img := … }`, which keeps the old `m` alive meanwhile. It
+  gets each message unshared too (`LeanUI.App.stepMsgs` pops them off the queue with
+  `popLast`, a call the compiler cannot reorder; `tests/Kit.lean`, "update owns the message"), so
+  bytes in a message, such as a video frame, are written in place. Code that runs once per created or removed node (mounting, cloning,
   releasing, placing a keyed list's middle) passes `DiffState` explicitly instead of running in
   `DiffM`, one `@[noinline]` function per state update (2026-10-18; `LeanUI.Diff`, "State
   passing"; `docs/BENCHMARKS.md`, "Allocations").

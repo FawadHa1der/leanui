@@ -899,6 +899,28 @@ def testUniqueModel : T Unit := section_ "update owns the model" do
   expect "a shared model is copied (the check can fail)" (addrs.size == 3 && addrs[0]! != addrs[1]! && addrs[1]! != addrs[2]!) s!"{addrs}"
   expectEq "kept states unchanged" (kept.map (·.model.1[0]!)) #[0, 1, 2]
 
+unsafe def exclusiveImpl (b : @& ByteArray) : Bool := isExclusiveUnsafe b
+/-- Whether `b` is referenced once (so writing into it would not copy it). -/
+@[implemented_by exclusiveImpl] def isExclusive (b : @& ByteArray) : Bool := false
+
+/-- Messages carrying bytes: `update` records whether it got them unshared. -/
+def bytesProgram : Program (Array Bool) ByteArray where
+  init _ := (#[], .none)
+  update b m := (m.push (isExclusive b), .none)
+  view m := text (toString m.size)
+
+def testUniqueMessages : T Unit := section_ "update owns the message" do
+  -- sizes known only at run time, and all different: a closed term would be a persistent (never
+  -- unique) constant, and equal expressions may be shared
+  let n := ((← IO.getEnv "LEANUI_NO_SUCH_VARIABLE").map (·.length)).getD 1000
+  let st := initState bytesProgram "" "#app" false
+  let st := ((stepMsgs bytesProgram #[ByteArray.mk (Array.replicate (100 * n) 0), ByteArray.mk (Array.replicate n 0)]).run st).2
+  expectEq "messages unshared" st.model #[true, true]
+  -- the control: a message still referenced elsewhere
+  let kept := #[ByteArray.mk (Array.replicate (n + 1) 0)]
+  let st := ((stepMsgs bytesProgram kept).run st).2
+  expectEq "a shared message is seen shared (the check can fail)" (st.model, kept.size) (#[true, true, false], 1)
+
 def testPixelsApp : T Unit := section_ "pixels lab (DOM model)" do
   let r ← Testing.run Pixels.program
   let eff0 := (← r.dom.get).effects
@@ -954,7 +976,7 @@ public def main : IO UInt32 := do
   IO.println "leanui kit tests"
   let ((), s) ← (do
     testDocuments; testPrinting; testNumbers; testClasses; testAccessors; testLarge
-    testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testPixelsApp : T Unit).run {}
+    testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testUniqueMessages; testPixelsApp : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0
