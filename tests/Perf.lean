@@ -159,7 +159,7 @@ inductive Command where
   | clone (tid : UInt32) (hs : Array UInt32)
 
 /-- Decode the DOM commands of a buffer (`INTERN` is dropped: the writers intern again). It stops
-at the first command it does not know (an effect); `checkReplay` then fails. -/
+at the first command it does not know (HYDRATE or an effect); `checkReplay` then fails. -/
 def decodeCommands (b : Buf) : Array Command := Id.run do
   let us := utf16Units b.strs
   let names : Std.HashMap UInt32 String := b.names.fold (fun m k v => m.insert v k) {}
