@@ -11,7 +11,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 BIN=.lake/build/bin PORT=5331
 if [ "${1:-}" = --build ] || [ "${1:-}" = --build-only ]; then
   for app in "TodoMVCApp todomvc" "SiteApp site" "CounterApp counter" "BenchApp bench" "EffectsApp effects" \
-             "PixelsApp pixels" "EditorApp editor" "LeanUI.Testing.DepthProbe depth-probe"; do
+             "PixelsApp pixels" "EditorApp editor" "EditorBenchApp editor-bench" \
+             "LeanUI.Testing.DepthProbe depth-probe"; do
     read -r mod name <<< "$app"
     tools/build-app.sh "$mod" "$name" || { echo "build of $name failed"; exit 1; }
   done
