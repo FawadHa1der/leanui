@@ -576,6 +576,10 @@ private def allocLoop (s : DiffState Msg) (hs : Array UInt32) : Nat → Array UI
 /-- `n` handles, in the order `n` calls of `allocNode` would return them (never while hydrating). -/
 def allocNodes (n : Nat) : DiffM Msg (Array UInt32) := modifyGet fun s => allocLoop s (Array.mkEmpty n) n
 
+/-- The children of a childless element: one shared constant. A `#[]` written in an argument
+position is allocated where it is written, once per element (`testSharedEmpty` pins this). -/
+@[noinline] def noKids : Array (Node Msg) := #[]
+
 /-- The attributes of a prototype element: those before its first property, as `mountAttrs` sets
 them. -/
 private def protoAttrs (h : UInt32) (attrs : Array (Attr Msg)) (i : Nat := 0) : DiffM Msg Unit :=
@@ -649,7 +653,7 @@ partial def cloneWalk (hs : Array UInt32) (sh : TplShape) (v : Html Msg) (i : Na
     -- a void element's view may name children it never gets
     let kids := if kids.size == sks.size then kids else effectiveKids tag kids
     let ls ← cloneAttrs h tas attrs (afterProp := m == .bare)
-    if kids.isEmpty then return .elem h ns tag (attrsKey attrs) attrs ls #[] 1
+    if kids.isEmpty then return .elem h ns tag (attrsKey attrs) attrs ls noKids 1
     let (ks, j) ← cloneKids hs sks kids 0 (i + 1) (Array.mkEmpty kids.size)
     return .elem h ns tag (attrsKey attrs) attrs ls ks (j - i)
   | _, _ => return .text h ""  -- unreachable: `v` matches `sh`
