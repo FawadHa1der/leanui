@@ -37,6 +37,8 @@ try {
 
   for (const engine of (process.argv[2] || "chromium,firefox").split(",")) {
     const browser = await pw[engine].launch({ headless: true });
+    // the embedded TodoMVC's rows in each mode, after the same edits
+    const todos = {};
     for (const mode of ["wasm", "server"]) {
       const C = (what, ok, detail) => check(`${engine}/${mode}`, what, ok, detail);
       const page = await browser.newPage();
@@ -69,17 +71,28 @@ try {
       C("back returns home, state kept", await page.evaluate(() => location.pathname === "/" && document.querySelector("#value").textContent === "2" && window.__noReload === true));
       await page.click(".site-header nav a:has-text('Examples')");
       await page.waitForSelector(".todo-demo .new-todo");
-      await page.fill(".new-todo", "check the site"); await page.press(".new-todo", "Enter");
-      await page.fill(".new-todo", "ship it"); await page.press(".new-todo", "Enter");
-      await page.click(".todo-list li:first-child .toggle");
+      // count the runtime's CLONEs: rows from the fourth new one on are copies of a template (the
+      // third becomes it), so in server mode they arrive over HTTP
+      await page.evaluate(() => { const P = LeanUI.Runtime.prototype, clone = P.clone; window.__clones = 0; P.clone = function (w, i) { window.__clones++; return clone.call(this, w, i); }; });
+      const rows = (n) => page.waitForFunction((n) => document.querySelectorAll(".todo-list li").length === n, n, { timeout: 5000 }).catch(() => {});
+      const titles = ["check the site", "ship it", "write the docs", "measure it", "celebrate"];
+      for (let k = 0; k < titles.length; k++) { await page.fill(".new-todo", titles[k]); await page.press(".new-todo", "Enter"); await rows(k + 1); }
+      // the first row, and a copy
+      await page.click(".todo-list li:nth-child(1) .toggle"); await page.click(".todo-list li:nth-child(4) .toggle");
+      await page.waitForFunction(() => document.querySelectorAll(".todo-list li.completed").length === 2, null, { timeout: 5000 }).catch(() => {});
+      todos[mode] = await page.$$eval(".todo-list li", (ls) => ls.map((l) => [l.outerHTML, l.querySelector(".toggle").checked]));
+      const clones = await page.evaluate(() => window.__clones);
+      C("new rows are template copies", clones > 0, `${clones} CLONEs`);
       await page.click(".filters a[href='#/active']");
       await page.waitForFunction(() => location.hash === "#/active", null, { timeout: 5000 }).catch(() => {});
+      await rows(3);
       const items = await page.$$eval(".todo-list li label", (ls) => ls.map((l) => l.textContent));
-      C("embedded TodoMVC with its fragment filter", JSON.stringify(items.slice(-1)) === JSON.stringify(["ship it"]) && (await page.evaluate(() => location.pathname + location.hash)) === "/examples#/active" && (await page.textContent(".site-header nav a.active")) === "Examples", JSON.stringify(items));
+      C("embedded TodoMVC with its fragment filter", JSON.stringify(items) === JSON.stringify(["ship it", "write the docs", "celebrate"]) && (await page.evaluate(() => location.pathname + location.hash)) === "/examples#/active" && (await page.textContent(".site-header nav a.active")) === "Examples", JSON.stringify(items));
       C("no console errors", errors.length === 0, errors.join(" | "));
       await page.evaluate(() => localStorage.clear());
       await page.close();
     }
+    check(engine, "server-driven TodoMVC rows match wasm's", todos.server?.length === 5 && JSON.stringify(todos.server) === JSON.stringify(todos.wasm), JSON.stringify(todos));
     await browser.close();
   }
 } finally {
