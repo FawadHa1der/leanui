@@ -827,8 +827,8 @@ tools/build-app.sh VideoApp editor/video
 node tests/browser/video.mjs http://127.0.0.1:5331/editor/video/index.html chromium --perf --out video.json
 ```
 
-CI runs them (the operations in Chromium at 1, 4 and 12 MP and in Firefox at 1 MP; the editor and
-the video lab in both) on a pull request with the `bench` label and uploads the JSON as the
+CI runs them (the operations at 1, 4 and 12 MP, the editor and the video lab, in Chromium and
+Firefox) on a pull request with the `bench` label and uploads the JSON as the
 `editor-bench` artifact; [`bench/editor/README.md`](../bench/editor/README.md)
 has the details and caveats.
 

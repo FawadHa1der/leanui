@@ -137,7 +137,7 @@ jobs:
           trap 'kill $srv' EXIT
           for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:5332/editor/index.html && break; sleep 0.2; done
           node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ chromium --sizes 1,4,12 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-chromium.json"
-          node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ firefox --sizes 1 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-firefox.json"
+          node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ firefox --sizes 1,4,12 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-firefox.json"
           node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html chromium --out "$RUNNER_TEMP/bench/editor-perf-chromium.json" > /dev/null
           node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html firefox --quick --out "$RUNNER_TEMP/bench/editor-perf-firefox.json" > /dev/null
           node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html chromium --perf --out "$RUNNER_TEMP/bench/video-chromium.json"
