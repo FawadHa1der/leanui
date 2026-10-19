@@ -124,19 +124,22 @@ async function record(browser, op) {
   return { name: op.name, prefix: bufs.slice(0, -1), measured: bufs[bufs.length - 1], check };
 }
 
-// per-opcode command counts of a buffer
+// per-opcode command counts of a buffer; TEMPLATE and CLONE have a variable number of operands
+// (tid, count, then count handles), every other DOM command a fixed one
 const OPERANDS = { 1: 3, 2: 3, 3: 4, 4: 2, 5: 4, 6: 3, 7: 4, 8: 2, 9: 3, 10: 2, 11: 3, 12: 1, 13: 2, 14: 1, 15: 5, 16: 2, 17: 3, 18: 3, 19: 4 };
-const NAMES = { 1: "CREATE_ELEMENT", 2: "CREATE_TEXT", 3: "SET_ATTR", 4: "REMOVE_ATTR", 5: "SET_PROP_STR", 6: "SET_PROP_BOOL", 7: "SET_PROP_NUM", 8: "REMOVE_PROP", 9: "SET_TEXT", 10: "APPEND_CHILD", 11: "INSERT_BEFORE", 12: "REMOVE", 13: "REPLACE", 14: "FREE", 15: "SET_LISTENER", 16: "REMOVE_LISTENER", 17: "INTERN", 18: "MOUNT", 19: "HYDRATE" };
+const NAMES = { 1: "CREATE_ELEMENT", 2: "CREATE_TEXT", 3: "SET_ATTR", 4: "REMOVE_ATTR", 5: "SET_PROP_STR", 6: "SET_PROP_BOOL", 7: "SET_PROP_NUM", 8: "REMOVE_PROP", 9: "SET_TEXT", 10: "APPEND_CHILD", 11: "INSERT_BEFORE", 12: "REMOVE", 13: "REPLACE", 14: "FREE", 15: "SET_LISTENER", 16: "REMOVE_LISTENER", 17: "INTERN", 18: "MOUNT", 19: "HYDRATE", 20: "TEMPLATE", 21: "CLONE" };
 function opcodeCounts(buf) {
   const b = Buffer.from(buf.b64, "base64");
   const w = new Uint32Array(b.buffer.slice(b.byteOffset, b.byteOffset + buf.opsLen));
   const counts = {};
-  for (let i = 0; i < w.length; ) {
+  let i = 0;
+  while (i < w.length) {
     const op = w[i];
-    if (!(op in OPERANDS)) throw new Error("opcode " + op + " (the recorder knows DOM commands only)");
+    if (!(op in NAMES)) throw new Error("opcode " + op + " (the recorder knows DOM commands only)");
     counts[NAMES[op]] = (counts[NAMES[op]] || 0) + 1;
-    i += 1 + OPERANDS[op];
+    i += 1 + (op === 20 || op === 21 ? 2 + w[i + 2] : OPERANDS[op]);
   }
+  if (i !== w.length) throw new Error(`the last command runs ${i - w.length} words past the buffer`);
   return { words: w.length, strBytes: b.length - buf.opsLen, counts };
 }
 

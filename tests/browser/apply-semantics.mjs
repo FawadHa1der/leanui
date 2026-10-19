@@ -2,9 +2,11 @@
 //
 // runtime/leanui.js does not apply every command with the DOM call the protocol table names:
 // SET_ATTR "class" on an HTML element writes `className`, and a run of REMOVEs that empties a
-// parent is one `replaceChildren()`. Here hand-built buffers go through the runtime and through a
-// reference applier written in this file (one DOM call per command, exactly as the table reads),
-// in Chromium and Firefox, and for every scenario we compare:
+// parent is one `replaceChildren()`. The first depends on each handle's kind (HTML, SVG/MathML,
+// text), which every command that binds a handle records (CLONE from its template's nodes) and
+// FREE forgets; the second reads FREEs inside the run. Here hand-built buffers go through the
+// runtime and through a reference applier written in this file (one DOM call per command,
+// exactly as the table reads), in Chromium and Firefox, and for every scenario we compare:
 //   * the container's final DOM and whether the buffer threw (the error's class, not its text);
 //   * what page code can observe while the buffer is applied: MutationObserver records (removed
 //     nodes per record) and custom elements' disconnectedCallbacks (each logs how many children
@@ -47,13 +49,15 @@ function check() {
       free(h) { w.push(14, h); return b; },
       mount(h) { w.push(18, ...s("#app"), h); return b; },
       hydrate(first, count) { w.push(19, ...s("#app"), first, count); return b; },
+      tpl(tid, hs) { w.push(20, tid, hs.length, ...hs); return b; },
+      clone(tid, hs) { w.push(21, tid, hs.length, ...hs); return b; },
     };
     return b;
   };
   const NS = [null, "http://www.w3.org/2000/svg", "http://www.w3.org/1998/Math/MathML"];
   // ---- the reference: one DOM call per command, as the protocol table reads ----
   class Ref {
-    constructor() { this.nodes = [null]; this.names = [null]; }
+    constructor() { this.nodes = [null]; this.names = [null]; this.tpl = []; }
     apply(b) {
       const w = b.w, text = b.text, N = this.nodes, names = this.names, S = (i) => text.substr(w[i], w[i + 1]);
       for (let i = 0; i < w.length; ) {
@@ -79,6 +83,16 @@ function check() {
             };
             walk(document.querySelector(S(i + 1)));
             i += 5; break;
+          }
+          // TEMPLATE / CLONE: the subtree's nodes (elements and texts) in pre-order are the handles
+          case 20: case 21: {
+            const n = w[i + 2], copy = (w[i] === 20 ? N[w[i + 3]] : this.tpl[w[i + 1]]).cloneNode(true), pre = [];
+            const walk = (x) => { pre.push(x); for (let c = x.firstChild; c; c = c.nextSibling) walk(c); };
+            walk(copy);
+            if (pre.length !== n) throw new Error("reference: the subtree has " + pre.length + " nodes, not " + n);
+            if (w[i] === 20) this.tpl[w[i + 1]] = copy;
+            else for (let q = 0; q < n; q++) N[w[i + 3 + q]] = pre[q];
+            i += 3 + n; break;
           }
           default: throw new Error("reference: opcode " + w[i]);
         }
@@ -107,6 +121,15 @@ function check() {
   const list = (b, ul, n, base) => { b.el(ul, 0, 7); for (let k = 0; k < n; k++) b.el(base + 2 * k, 0, 8).attr(base + 2 * k, 1, "r").txt(base + 2 * k + 1, "r" + k).app(base + 2 * k, base + 2 * k + 1).app(ul, base + 2 * k); return b; };
   const lists = (b) => { b.el(80, 0, 2); list(b, 90, 5, 100); list(b, 190, 3, 200); return b.app(80, 90).app(80, 190).mount(80); };
   const rmRow = (b, k) => b.rm(100 + 2 * k).free(101 + 2 * k).free(100 + 2 * k);
+  // a prototype of nine nodes, handles h..h+8 in pre-order: div > [svg > circle], [math > mi > "x"], "t", [p > "p"]
+  const proto = (b, h) => b.el(h, 0, 2).attr(h, 1, "row").el(h + 1, 1, 3).attr(h + 1, 1, "s").el(h + 2, 1, 4).app(h + 1, h + 2).app(h, h + 1)
+    .el(h + 3, 2, 5).el(h + 4, 2, 6).txt(h + 5, "x").app(h + 4, h + 5).app(h + 3, h + 4).app(h, h + 3)
+    .txt(h + 6, "t").app(h, h + 6).el(h + 7, 0, 10).attr(h + 7, 1, "q").txt(h + 8, "p").app(h + 7, h + 8).app(h, h + 7);
+  const nine = (h) => [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => h + k);
+  const withProto = (b) => proto(b, 300).tpl(1, nine(300));
+  // class on every element of a copy of the prototype whose nodes are `hs`
+  const classAll = (b, hs) => { for (const k of [0, 1, 2, 3, 4, 7]) b.attr(hs[k], 1, "c" + k); return b; };
+  const hydratedHtml = '<div class="a"><svg class="b"><circle class="c"></circle></svg><math><mi class="d">x</mi></math>text<!--t--></div>';
   // The runtime's observations where they differ from the reference's (null: they must not):
   // each record is one removal call (removed-node count), each disconnectedCallback logs the
   // children its old parent has left. The reference always removes one child per record.
@@ -143,7 +166,72 @@ function check() {
     removeRoot: ["", (b) => lists(names(b)), (b) => b.rm(80).free(80), null],
     crashInRun: ["", (b) => lists(names(b)), (b) => { rmRow(b, 0); rmRow(b, 1); return b.rm(9999); }, null],
     markers: ["<p><!--|-->a<!--|-->b</p>", (b) => names(b).hydrate(1, 3), (b) => b.rm(2).free(2).rm(3).free(3), null],
+    // ---- CLONE: a copy's handles take the kinds of the template's nodes ----
+    // class on every element of copies of templates rooted in each namespace
+    cloneKinds: ["", (b) => names(b).el(80, 0, 2).mount(80), (b) => {
+      withProto(b).app(80, 300).el(310, 1, 3).el(311, 1, 4).app(310, 311).tpl(2, [310, 311]).el(320, 2, 5).el(321, 2, 6).txt(322, "m").app(321, 322).app(320, 321).tpl(3, [320, 321, 322]);
+      b.clone(1, nine(400)).clone(2, [410, 411]).clone(3, [420, 421, 422]);
+      classAll(b, nine(400)).attr(410, 1, "s").attr(411, 1, "c").attr(420, 1, "m").attr(421, 1, "i");
+      return b.app(80, 400).app(80, 410).app(80, 420);
+    }, null],
+    // a list emptied by a batched REMOVE run that frees its handles; a copy bound to them (probes
+    // and texts become HTML, SVG, MathML and texts), class on its elements, appended to the list
+    cloneIntoFreedRun: ["", (b) => withProto(lists(names(b))),
+      (b) => { for (let k = 0; k < 5; k++) rmRow(b, k); return classAll(b.clone(1, nine(100)), nine(100)).app(90, 100); }, batched([5], zeros(5))],
+    // handles reused across namespaces: SVG as a copy's HTML root, HTML as a copy's SVG element;
+    // then the copy freed and its handles bound again by CREATE_ELEMENT in other namespaces
+    cloneReuseAcrossNs: ["", (b) => withProto(names(b).el(80, 0, 2).el(501, 1, 3).el(500, 0, 2).app(80, 501).app(80, 500).mount(80)),
+      (b) => {
+        const hs = [501, 500, 502, 503, 504, 505, 506, 507, 508];
+        classAll(b.rm(500).free(500).rm(501).free(501).clone(1, hs), hs).app(80, 501).rm(501);
+        for (const h of hs) b.free(h);
+        return b.el(500, 0, 2).attr(500, 1, "h").el(501, 1, 3).attr(501, 1, "s").el(507, 1, 4).attr(507, 1, "c").app(80, 500).app(500, 501).app(501, 507);
+      }, null],
+    // copies appended to a list, then one REMOVE run that empties it, copies and probes alike (one
+    // replaceChildren; only the probes have disconnectedCallbacks)
+    runAfterClone: ["", (b) => withProto(lists(names(b))),
+      (b) => {
+        b.clone(1, nine(600)).app(90, 600).clone(1, nine(700)).app(90, 700);
+        for (let k = 0; k < 5; k++) rmRow(b, k);
+        b.rm(600); for (const h of nine(600)) b.free(h);
+        b.rm(700); for (const h of nine(700)) b.free(h);
+        return b;
+      }, batched([7], zeros(5))],
+    // a REMOVE run broken by a CLONE (into handles the run freed) is two runs: the first leaves rows
+    // behind, so its removals are separate; the second empties the list
+    cloneSplitsRun: ["", (b) => withProto(lists(names(b))),
+      (b) => {
+        const hs = [100, 101, 102, 103, 104, 105, 120, 121, 122];
+        for (let k = 0; k < 3; k++) rmRow(b, k);
+        b.clone(1, hs);
+        for (let k = 3; k < 5; k++) rmRow(b, k);
+        return classAll(b, hs).app(90, 100);
+      }, batched([1, 1, 1, 2], [4, 3, 2, 0, 0])],
+    // after hydration: a template of new nodes and its copy, class on hydrated and copied elements
+    hydratedThenClone: [hydratedHtml, (b) => names(b).hydrate(1, 8),
+      (b) => classAll(withProto(b).app(1, 300).clone(1, nine(400)).app(1, 400), nine(400)).attr(1, 1, "A").attr(2, 1, "B").attr(3, 1, "C").attr(5, 1, "E"), null],
+    // a template of hydrated nodes (the <!--t--> text included) and a copy
+    templateOfHydrated: [hydratedHtml, (b) => names(b).hydrate(1, 8),
+      (b) => b.tpl(2, [1, 2, 3, 4, 5, 6, 7, 8]).clone(2, [601, 602, 603, 604, 605, 606, 607, 608])
+        .attr(601, 1, "A").attr(602, 1, "B").attr(603, 1, "C").attr(604, 1, "D").attr(605, 1, "E").app(1, 601), null],
+    // a prototype built on handles freed from an SVG subtree, its template, a copy; then the
+    // prototype freed and a copy bound to its handles in reverse order
+    templateFromReused: ["", (b) => names(b).el(80, 0, 2).el(300, 1, 3).el(301, 1, 4).app(300, 301).app(80, 300).mount(80),
+      (b) => {
+        classAll(withProto(b.rm(300).free(301).free(300)), nine(300)).app(80, 300);
+        classAll(b.clone(1, nine(400)), nine(400)).app(80, 400).rm(300);
+        for (const h of nine(300)) b.free(h);
+        const rev = nine(300).reverse();
+        return classAll(b.clone(1, rev), rev).app(80, 308);
+      }, null],
   };
+  // class on each text of a copy throws, as on any text node (each its own scenario: the first
+  // throw ends the buffer); once into fresh handles, once into the handle of a freed HTML element
+  for (const k of [5, 6, 8]) {
+    scenarios["cloneTextClass" + k] = ["", (b) => withProto(names(b).el(80, 0, 2).mount(80)), (b) => b.clone(1, nine(400)).app(80, 400).attr(400 + k, 1, "z"), null];
+    scenarios["cloneTextClassReused" + k] = ["", (b) => withProto(names(b).el(80, 0, 2).el(400 + k, 0, 2).app(80, 400 + k).mount(80)),
+      (b) => b.rm(400 + k).free(400 + k).clone(1, nine(400)).app(80, 400).attr(400 + k, 1, "z"), null];
+  }
 
   const app = () => document.getElementById("app");
   const observe = (impl, html, setup, buf) => {
@@ -168,7 +256,10 @@ function check() {
     const fail = (what) => failures.push(`${name}: ${what}\n     runtime   ${JSON.stringify(got)}\n     reference ${JSON.stringify(ref)}`);
     if (got.dom !== ref.dom || got.error !== ref.error || got.setupError !== ref.setupError) fail("the DOM or the error differs");
     else if (diff === null) { if (!same(got.records, ref.records) || !same(got.disc, ref.disc)) fail("an undocumented observable difference"); }
-    else if (!ref.records.every((n) => n === 1) || ref.records.length !== got.disc.length) fail("the reference does not remove one child per record");
+    // the reference removes the same nodes, one per record, with the same disconnectedCallbacks
+    // (removed nodes that are not probes have none)
+    else if (!ref.records.every((n) => n === 1) || ref.records.length !== diff.records.reduce((a, n) => a + n, 0) || ref.disc.length !== diff.disc.length)
+      fail("the reference does not remove the expected children one per record");
     else if (!same(got.records, diff.records) || !same(got.disc, diff.disc))
       fail(`expected records ${diff.records} and disconnectedCallbacks ${diff.disc} (one record per batched run, its callbacks after its last removal)`);
   }
