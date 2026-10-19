@@ -22,6 +22,7 @@
       this.busy = false;
       this.queue = [];
       this.after = [];
+      this.tpl = [];
       this.stats = { flushes: 0, ops: 0, bytes: 0 };
     }
 
@@ -106,6 +107,8 @@
           case 17: names[w[i + 1]] = S(i + 2); i += 4; break;
           case 18: { this.setContainer(S(i + 1)); this.container.replaceChildren(N[w[i + 3]]); i += 4; break; }
           case 19: { this.setContainer(S(i + 1)); this.hydrate(w[i + 3], w[i + 4]); i += 5; break; }
+          case 20: i = this.template(w, i); break;
+          case 21: i = this.clone(w, i); break;
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
           case 33: { const cb = w[i + 1]; setTimeout(() => this.callback(cb, true, ""), w[i + 2]); i += 3; break; }
           case 34: { const sub = w[i + 1]; this.timers.set(sub, setInterval(() => this.callback(sub, true, ""), w[i + 2])); i += 3; break; }
@@ -152,6 +155,38 @@
       };
       walk(this.container);
       if (h - first !== count) throw new Error("LeanUI: hydration found " + (h - first) + " nodes, expected " + count + "; the server and client views differ");
+    }
+
+    // TEMPLATE tid count h1..hcount: keep a copy of the subtree rooted at h1, whose nodes are
+    // h1..hcount in pre-order (Lean sends it before any property or listener touches the subtree).
+    template(w, i) {
+      const tid = w[i + 1], count = w[i + 2], snap = this.nodes[w[i + 3]].cloneNode(true), moves = [];
+      // the pre-order walk, as moves from each node to the next: 0 to the first child, u > 0 up
+      // u - 1 levels, then to the next sibling (a clone is walked without probing for children)
+      for (let n = snap; ; ) {
+        if (n.firstChild !== null) { n = n.firstChild; moves.push(0); continue; }
+        let u = 1;
+        while (n !== snap && n.nextSibling === null) { n = n.parentNode; u++; }
+        if (n === snap) break;
+        n = n.nextSibling; moves.push(u);
+      }
+      if (moves.length !== count - 1) throw new Error("LeanUI: TEMPLATE " + tid + " names " + count + " nodes, its subtree has " + (moves.length + 1));
+      this.tpl[tid] = { snap, moves: Uint8Array.from(moves) };
+      return i + 3 + count;
+    }
+    // CLONE tid count h1..hcount: a copy of template tid, whose nodes become h1..hcount in pre-order
+    // (the order mount allocates handles in).
+    clone(w, i) {
+      const N = this.nodes, t = this.tpl[w[i + 1]], moves = t.moves, m = moves.length;
+      let n = t.snap.cloneNode(true), k = i + 3;
+      N[w[k++]] = n;
+      for (let j = 0; j < m; j++) {
+        const u = moves[j];
+        if (u === 0) n = n.firstChild;
+        else { for (let q = 1; q < u; q++) n = n.parentNode; n = n.nextSibling; }
+        N[w[k++]] = n;
+      }
+      return k;
     }
 
     fetch(cb, method, url, body, headerLines) {

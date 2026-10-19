@@ -54,8 +54,13 @@ elements); the generated views name no form fields, so it is always empty. -/
 def expectedPayload (d : Dom) (h : UInt32) (ev : String) (code : UInt32) : Option String :=
   let n := d.get h
   let prop (k : String) := (n.props.find? (·.1 == k)).map (·.2)
+  let attr (k : String) := (n.attrs.find? (·.1 == k)).map (·.2)
   if code == Payload.value.code then
-    some (if n.tag == "li" then "0" else (prop "value").getD "")
+    some (if n.tag == "li" then "0"
+      -- a checkbox or radio button's value is its value attribute, "on" without one
+      else if n.tag == "input" && (attr "type" == some "checkbox" || attr "type" == some "radio") then
+        ((prop "value").orElse fun _ => attr "value").getD "on"
+      else (prop "value").getD "")
   else if code == Payload.checked.code then some (if prop "checked" == some "true" then "true" else "false")
   else if code == Payload.key.code then some (if ev == "keydown" then "Enter" else "")
   else if code == Payload.formData.code then some ""

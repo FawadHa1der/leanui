@@ -40,6 +40,12 @@ built against. It was first written on 2026-10-18 from the research in
   are patched in place and the middle is planned by `LeanUI.Keyed.plan` (an LIS stable set,
   proved correct and optimal in `LeanUI.Proofs.Keyed`) and applied right to left. A `lazy` node
   is skipped (not rendered, not diffed, handlers kept) while its key and `deps` are equal.
+  Repeated subtrees are created from templates: the second subtree of a shape (4 to 64 nodes:
+  tags, attribute and property names, structure) is built as a prototype (no properties or
+  listeners yet) that becomes the template, and every copy, the prototype included, is finished
+  with the texts and attribute values that differ, the properties and listeners
+  (`docs/PROTOCOL.md`, section 7); a clone yields exactly the mounted node and, in a browser, the
+  DOM a plain mount would (the tests compare both, natively and in Chromium and Firefox).
   Before any monadic work, a pure check (`unchanged`: `sameF` on subtrees whose cached size is
   within `sameBudget`) recognises subtrees that need no command; they keep the *same* mounted node
   and only have their listener slots re-pointed (`rebind`), runs of such siblings in one state
@@ -112,7 +118,7 @@ built against. It was first written on 2026-10-18 from the research in
 
 | Module / file | Role | Tests |
 |---|---|---|
-| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,depth}.mjs` |
+| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,templates,depth}.mjs` |
 | `LeanUI/Syntax.lean` | JSX-style templates (compile time only) | `leanui-syntax-tests` |
 | `LeanUI/Proofs/Keyed.lean` | machine-checked keyed reconciliation | `lake build` |
 | `LeanUI/Testing/*` | DOM model, harness, generators, reference model, protocol checker, SSR parser | `leanui-props` |

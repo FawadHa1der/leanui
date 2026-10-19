@@ -10,7 +10,8 @@ below. This document is normative for both.
 A buffer is two byte arrays:
 
 - **words**: little-endian unsigned 32-bit integers, a sequence of *commands*. Each command is an
-  opcode word followed by a fixed number of operand words (section 3).
+  opcode word followed by its operand words (section 3): a fixed number, except for `TEMPLATE`
+  and `CLONE`, whose operands end with a count and that many node handles.
 - **strings**: UTF-8 text. A string operand is two words, `(offset, length)`, counted in **UTF-16
   code units** from the start of the decoded string area. The receiver decodes the whole area once
   (`TextDecoder`) and slices it (`substr(offset, length)`), so a buffer costs one decode no matter
@@ -54,6 +55,8 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 17 | INTERN | id, s | define name `id` |
 | 18 | MOUNT | s, n | `querySelector(s).replaceChildren(n)`; `s` becomes the app's container |
 | 19 | HYDRATE | s, first, count | adopt the container's existing nodes (section 5) |
+| 20 | TEMPLATE | tid, count, n1..ncount | keep a copy of the subtree rooted at `n1`, whose nodes are `n1..ncount` in pre-order, as template `tid` (section 7) |
+| 21 | CLONE | tid, count, n1..ncount | `nodes[n1..ncount]` = a copy of template `tid`, in pre-order (section 7) |
 | 32 | FETCH | cb, s method, s url, s body, s headers | `fetch`; headers are `name: value` lines; reply `cb` with ok = 2xx and payload `"<status>\n<body>"` (status 0 on network error) |
 | 33 | TIMEOUT | cb, ms | reply `cb` (ok, `""`) after `ms` |
 | 34 | INTERVAL_SET | sub, ms | reply `sub` (ok, `""`) every `ms` until cleared |
@@ -72,7 +75,9 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 47 | SCROLL_INTO_VIEW | s selector | after this buffer, scroll the first match into view |
 
 Unknown opcodes are fatal (the receiver stops and reports). New commands get new numbers; numbers
-are never reused.
+are never reused. Opcode 22 is unused: an `INSERT_MANY` (insert a run of children with one
+DocumentFragment) was measured and left out, since it made creating rows slower in Chromium and
+no faster in Firefox.
 
 ## 4. Events
 
@@ -120,3 +125,51 @@ The page calls `LeanUI.connect({ endpoint, session })`. Every report is a `POST
 
 The response body is an encoded buffer (possibly empty). Requests are sent one at a time, in
 order.
+
+## 7. Template cloning
+
+Most created DOM comes from lists whose rows share one shape, so Lean creates repeated subtrees
+by copying a template (one `cloneNode(true)`) instead of one command per node.
+
+- `TEMPLATE tid count n1..ncount` follows, in the same buffer, the commands that built a
+  *prototype*: the subtree rooted at `n1`, detached, with its elements and texts and each
+  element's attributes up to its first property (an `input` with none), and no property and no
+  listener yet. `n1..ncount` are exactly the nodes of that subtree in pre-order (elements and
+  texts); the receiver keeps a copy taken now as template `tid` and rejects a `TEMPLATE` whose
+  subtree has another number of nodes. The commands after it finish the prototype as they finish
+  a clone (below). Template ids are ≥ 1, defined once per session; there are at most 256.
+- `CLONE tid count n1..ncount` makes `n1..ncount` (handles that are not live) the nodes of a new
+  copy of template `tid`, in pre-order; `count` is the template's size. The copy is detached and
+  carries the template's namespaces, tags, attributes and texts, and no listeners. The commands
+  that follow make it what a mount of the view builds: `SET_TEXT` for the texts that differ,
+  then element by element (pre-order) and in view order: `SET_ATTR` for the attributes before
+  the first property whose value differs from the template's, and from the first property on
+  everything a mount sends (`SET_PROP_*`, `SET_ATTR`), and every listener (`SET_LISTENER`). An
+  `input` gets all of its attributes this way.
+
+So every element of a copy reaches its first property in the state a fresh mount has there (the
+same attributes in the same order, no property set, no dirty value or checkedness), and from then
+on receives the same commands: a property that reflects onto an attribute (`className`, `id`,
+`hidden`, `value`), or the runtime's skip of a string property that already has its value, sees
+what it sees in a mount. `tests/browser/templates.mjs` checks this in Chromium and Firefox on
+engine-generated buffers, comparing every node with and without templates: attributes in order,
+`value`/`checked`/`selected`, listener slots, scripts run, and dirty flags.
+
+Lean templates element subtrees of 4 to 64 nodes that contain no lazy node and no property on an
+element with children (mount sets properties before the children exist; a copy has them
+already). A subtree's shape is its namespaces and tags, each element's attribute names (in
+order), property names (in order) and where its first property comes, and its structure;
+listeners, keys, texts and most attribute values are not part of it. The values *are* part of
+the shape on elements where setting an attribute does more than hold a value or where the order
+of a history matters (`select`, `textarea`, `option`, media and resource elements such as `img`,
+`script`, `iframe`, `link`; SVG `image`, `use`, `script`; custom elements; any element that
+repeats an attribute name), so a copy never re-sets an attribute there. The second subtree of a
+shape becomes the template, later ones are clones; shapes are compared exactly, never by hash
+alone. Candidates are the children a patch mounts and, in a new subtree, children with a
+neighbouring sibling of the same tag (list rows). `LeanUI/Testing/Dom.lean` models both commands
+(the model's copy carries attributes and texts, not properties).
+
+What a copy can still do differently from a mount: a custom element's callbacks run in another
+order (its attributes arrive while it is copied, before its children), and a property on a leaf
+is set while the leaf is already inside its (detached) parent, where a mount sets it before the
+leaf has a parent; no difference has been observed for radio groups and selects.

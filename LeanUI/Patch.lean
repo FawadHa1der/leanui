@@ -141,3 +141,33 @@ def encode (b : Buf) : ByteArray := pushU32 ByteArray.empty b.ops.size.toUInt32 
 
 end Buf
 end LeanUI
+
+/-! ## Template cloning (opcodes 20, 21)
+
+Commands with a variable number of operands: a count, then that many node handles. Opcode 22
+(INSERT_MANY, a DocumentFragment insertion of many children) was measured and left out: it made
+creating rows slower in Chromium and no faster in Firefox (`docs/PROTOCOL.md`). -/
+
+namespace LeanUI.Op
+def template      : UInt32 := 20  -- tid, count, h1..hcount  (snapshot the subtree h1 roots; hs = its nodes in pre-order)
+def clone         : UInt32 := 21  -- tid, count, h1..hcount  (a copy of template tid; its nodes become hs in pre-order)
+end LeanUI.Op
+
+namespace LeanUI.Buf
+
+/-- Write `count` then the handles `hs[lo:hi]` (only through `w`, whatever `ops` is). -/
+def handles (b : Buf) (hs : Array UInt32) (lo hi : Nat) : Buf := Id.run do
+  let mut b := b.w (hi - lo).toUInt32
+  for i in [lo:hi] do b := b.w hs[i]!
+  return b
+
+/-- `TEMPLATE tid count hs`: remember a copy of the subtree rooted at `hs[0]`, whose nodes are
+`hs` in pre-order. -/
+def template (b : Buf) (tid : UInt32) (hs : Array UInt32) : Buf :=
+  (b.w Op.template |>.w tid).handles hs 0 hs.size
+
+/-- `CLONE tid count hs`: copy template `tid`; its nodes, in pre-order, become `hs`. -/
+def clone (b : Buf) (tid : UInt32) (hs : Array UInt32) : Buf :=
+  (b.w Op.clone |>.w tid).handles hs 0 hs.size
+
+end LeanUI.Buf

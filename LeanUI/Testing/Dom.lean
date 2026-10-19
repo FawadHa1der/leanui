@@ -27,6 +27,17 @@ structure DNode where
   listeners : Array (String × UInt32 × UInt32 × UInt32) := #[]
   deriving Inhabited
 
+/-- A template the browser holds (`TEMPLATE`): what `cloneNode(true)` copies, as the model sees
+it: namespaces, tags, attributes and texts (no properties, no listeners). -/
+inductive Snap where
+  | text (s : String)
+  | elem (ns : UInt32) (tag : String) (attrs : Array (String × String)) (kids : Array Snap)
+  deriving Inhabited
+
+partial def Snap.size : Snap → Nat
+  | .text _ => 1
+  | .elem _ _ _ kids => kids.foldl (fun n k => n + k.size) 1
+
 structure Dom where
   nodes : Std.HashMap UInt32 DNode := {}
   names : Std.HashMap UInt32 String := {}
@@ -36,6 +47,8 @@ structure Dom where
   effects : Array String := #[]
   /-- Protocol violations found while applying (a correct engine produces none). -/
   errors : Array String := #[]
+  /-- Templates by id. -/
+  templates : Std.HashMap UInt32 Snap := {}
   deriving Inhabited
 
 /-- The string area as UTF-16 code units (what JavaScript slices). -/
@@ -90,6 +103,26 @@ partial def attached (d : Dom) (h : UInt32) (fuel : Nat := 100000) : Bool :=
 
 def setKV (xs : Array (String × String)) (k v : String) : Array (String × String) :=
   if xs.any (·.1 == k) then xs.map fun (a, b) => if a == k then (a, v) else (a, b) else xs.push (k, v)
+
+/-- The handles of a subtree in pre-order. -/
+partial def preorderOf (d : Dom) (h : UInt32) (acc : Array UInt32 := #[]) : Array UInt32 :=
+  (d.get h).kids.foldl (fun acc k => d.preorderOf k acc) (acc.push h)
+
+/-- What `cloneNode(true)` of `h` copies. -/
+partial def snap (d : Dom) (h : UInt32) : Snap :=
+  let n := d.get h
+  if n.isText then .text n.text else .elem n.ns n.tag n.attrs (n.kids.map d.snap)
+
+/-- Create the nodes of a copy of `t` at the handles `hs[i..]` (pre-order); returns the next index. -/
+partial def instantiate (d : Dom) (hs : Array UInt32) (t : Snap) (parent : Option UInt32) (i : Nat) : Dom × Nat :=
+  let h := hs[i]!
+  match t with
+  | .text s => (d.put h { isText := true, text := s, parent }, i + 1)
+  | .elem ns tag attrs kids =>
+    let (d, j, ks) := kids.foldl (init := (d, i + 1, (#[] : Array UInt32))) fun (d, j, ks) k =>
+      let (d, j') := d.instantiate hs k (some h) j
+      (d, j', ks.push hs[j]!)
+    (d.put h { ns, tag, attrs, kids := ks, parent }, j)
 
 /-- Apply one command buffer. -/
 def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
@@ -167,6 +200,22 @@ def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
       d := { d with roots := (d.roots.filter (·.1 != sel)).push (sel, h) }; pc := pc + 16
     else if op == Op.hydrate then
       d := { d with effects := d.effects.push s!"hydrate {str (pc + 4)} {word (pc + 12)} {word (pc + 16)}" }; pc := pc + 20
+    else if op == Op.template || op == Op.clone then
+      -- variable width: a count, then that many handles
+      let base := pc + 8
+      let count := (word base).toNat
+      let hs := (Array.range count).map fun k => word (base + 4 + 4 * k)
+      if op == Op.template then
+        let pre := if hs.isEmpty then #[] else d.preorderOf hs[0]!
+        if hs.isEmpty || pre != hs then d := d.err s!"template {a}: the handles are not the subtree of {hs[0]?.getD 0} in pre-order"
+        else d := { d with templates := d.templates.insert a (d.snap hs[0]!) }
+      else
+        match d.templates.get? a with
+        | none => d := d.err s!"clone: no template {a}"
+        | some t =>
+          if t.size != count then d := d.err s!"clone: template {a} has {t.size} nodes, not {count}"
+          else d := (d.instantiate hs t none 0).1
+      pc := base + 4 + 4 * count
     else if op == Op.fetch then
       d := { d with effects := d.effects.push s!"fetch cb={a} {str (pc + 8)} {str (pc + 16)}" }; pc := pc + 40
     else if op == Op.timeout || op == Op.intervalSet then
