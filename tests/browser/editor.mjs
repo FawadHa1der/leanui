@@ -119,6 +119,7 @@ check("layer steps", (await steps()).slice(-7).join("|") === "New layer|Brush|Vi
 // ---- geometry and crop ----
 await page.click("summary:has-text('Transform')");
 await page.click("#rot-cw");
+await idle();   // geometry runs as a job, over frames
 check("rotated", same(await dims(), [864, 1152]), await dims());
 await page.click("#undo");
 check("rotation undone", same(await dims(), [1152, 864]), await dims());
@@ -126,6 +127,8 @@ await page.click("#tool-crop");
 await drag([[100, 100], [400, 300]]);
 check("crop box", (await count("#crop-box")) === 1);
 await page.keyboard.press("Enter");
+await page.waitForFunction(() => document.querySelector("#busy"), null, { timeout: 5000 }).catch(() => {});
+await idle();
 const cd = await dims();
 check("cropped", Math.abs(cd[0] - 300) <= 2 && Math.abs(cd[1] - 200) <= 2, cd);
 
