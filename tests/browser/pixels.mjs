@@ -25,9 +25,10 @@ check("gradient top-left", same(await pixel("#px-canvas", 0, 0), [0, 0, 128, 255
 check("gradient bottom-right", same(await pixel("#px-canvas", 255, 127), [255, 255, 128, 255]), await pixel("#px-canvas", 255, 127));
 check("gradient middle", same(await pixel("#px-canvas", 128, 64), [128, 128, 128, 255]), await pixel("#px-canvas", 128, 64));
 
-// pointer: the canvas is 256×128 pixels shown at 512×256 CSS pixels
+// pointer: the canvas is 256×128 pixels shown at 512×256 CSS pixels; the pointer aims at the
+// middle of a canvas pixel (odd CSS offsets), since the canvas may sit at a fractional position
 const box = await page.$eval("#px-canvas", (c) => { const r = c.getBoundingClientRect(); return { x: r.left, y: r.top }; });
-await page.mouse.move(box.x + 100, box.y + 50);
+await page.mouse.move(box.x + 101, box.y + 51);
 check("hover", (await text("px-pointer")) === "50,25 buttons 0", await text("px-pointer"));
 check("hover paints nothing", (await text("px-dabs")) === "0");
 await page.mouse.down();
@@ -35,12 +36,12 @@ check("pointerdown paints", (await text("px-dabs")) === "1" && (await text("px-c
 check("painted pixel", same(await pixel("#px-canvas", 50, 25), [0, 0, 0, 255]), await pixel("#px-canvas", 50, 25));
 check("unpainted neighbour", same(await pixel("#px-canvas", 54, 25), [cv(54, 256), cv(25, 128), 128, 255]), await pixel("#px-canvas", 54, 25));
 function cv(v, n) { return Math.floor(v * 255 / (n - 1)); }
-await page.mouse.move(box.x + 140, box.y + 60, { steps: 4 });
+await page.mouse.move(box.x + 141, box.y + 61, { steps: 4 });
 const dabs = +(await text("px-dabs"));
 check("moves paint", dabs >= 3, dabs);
 check("dragged pixel", same(await pixel("#px-canvas", 70, 30), [0, 0, 0, 255]), await pixel("#px-canvas", 70, 30));
 // captured: the canvas keeps getting moves far outside it while the button is down
-await page.mouse.move(box.x + 100, box.y + 400, { steps: 2 });
+await page.mouse.move(box.x + 101, box.y + 401, { steps: 2 });
 check("captured move", (await text("px-pointer")).startsWith("50,200 buttons 1"), await text("px-pointer"));
 await page.mouse.up();
 check("released", (await text("px-capturing")) === "false");
