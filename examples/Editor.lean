@@ -528,11 +528,14 @@ def fmt1 (x : Float) : String :=
   let i := (if t < 0 then -t else t).toUInt64.toNat
   (if t < 0 then "-" else "") ++ s!"{i / 10}.{i % 10}"
 
-def slider (label ident : String) (lo hi step v : Int) (shown : String) (f : Int → Msg) : Html Msg :=
+/-- A labelled range input. `commit`: report only when it is released (`change`), for settings
+that record a history step. -/
+def slider (label ident : String) (lo hi step v : Int) (shown : String) (f : Int → Msg) (commit := false) : Html Msg :=
   el "label" #[cls "row"] #[
     el "span" #[] #[text label],
     el "input" #[Attr.id ident, .attr "type" "range", .attr "min" (toString lo), .attr "max" (toString hi),
-      .attr "step" (toString step), .prop "value" (.str (toString v)), onInput fun s => f (parseInt s)] #[],
+      .attr "step" (toString step), .prop "value" (.str (toString v)),
+      if commit then onChange fun s => f (parseInt s) else onInput fun s => f (parseInt s)] #[],
     el "output" #[] #[text shown]]
 
 def check (label ident : String) (v : Bool) (f : Bool → Msg) : Html Msg :=
@@ -714,7 +717,7 @@ def layersPanel (d : Doc) (active : Nat) (renamingId : Option Nat) (dis : Bool) 
         fun _ => layerRow (l.id == active) (renamingId == some l.id) l),
     match cur with
     | some l => el "div" #[cls "sec", .attr "style" "padding:0"] #[
-        slider "Opacity" "layer-opacity" 0 100 1 l.opacity s!"{l.opacity}%" fun v => .layerOpacity v.toNat,
+        slider "Opacity" "layer-opacity" 0 100 1 l.opacity s!"{l.opacity}%" (fun v => .layerOpacity v.toNat) (commit := true),
         el "label" #[cls "row"] #[el "span" #[] #[text "Blend"],
           el "select" #[Attr.id "layer-blend", .prop "value" (.str l.blend.name), onChange .layerBlend]
             (Blend.all.map fun b => el "option" #[.attr "value" b.name] #[text b.name]), el "span" #[] #[]]]
