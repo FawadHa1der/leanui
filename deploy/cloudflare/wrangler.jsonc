@@ -5,6 +5,9 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // Served at leanui-site.<subdomain>.workers.dev; no extra preview URL per uploaded version.
+  "workers_dev": true,
+  "preview_urls": false,
   "containers": [
     {
       "class_name": "SiteServer",
