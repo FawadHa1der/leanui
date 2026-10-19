@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labelled: adding the `bench` label runs the editor benchmarks (below)
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 concurrency:
