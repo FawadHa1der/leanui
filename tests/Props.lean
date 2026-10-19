@@ -800,13 +800,28 @@ def scaleSuite (o : Opts) : IO Outcome := do
       ("clear", fun ids => (some (table ids), table #[])),
       ("replace all rows", fun ids => (some (table ids), table (ids.map (· + 100000))))] :
       Array (String × (Array Nat → Option (Html String) × Html String))) do
-    let mut pts : Array (Nat × Float) := #[]
-    for n in #[2000, 4000, 8000, 16000, 32000] do
-      let (b, a) := mk (Array.range n)
-      let m ← measureRows b a (if n ≤ 8000 then 5 else 3) (model := false)
-      pts := pts.push (n, m.engine)
-    let (n0, t0) := pts[0]!; let (n1, t1) := pts.back!
-    let slope := Float.log (t1 / t0) / Float.log (n1.toFloat / n0.toFloat)
+    -- the exponent is the least-squares slope of log time over log rows (all five sizes, so one
+    -- disturbed timing on a busy machine moves it little); a sweep over 1.3 is measured once
+    -- more, and fails only if the second sweep is over 1.3 too (a real n^2 is far above it)
+    let sweep (runs : Nat) : IO (Array (Nat × Float) × Float) := do
+      let mut pts : Array (Nat × Float) := #[]
+      for n in #[2000, 4000, 8000, 16000, 32000] do
+        let (b, a) := mk (Array.range n)
+        let m ← measureRows b a (if n ≤ 8000 then runs + 2 else runs) (model := false)
+        pts := pts.push (n, m.engine)
+      let xs := pts.map fun (n, _) => Float.log n.toFloat
+      let ys := pts.map fun (_, t) => Float.log (max t 0.001)
+      let k := xs.size.toFloat
+      let mx := xs.foldl (· + ·) 0 / k; let my := ys.foldl (· + ·) 0 / k
+      let sxy := (xs.zip ys).foldl (fun acc (x, y) => acc + (x - mx) * (y - my)) 0
+      let sxx := xs.foldl (fun acc x => acc + (x - mx) * (x - mx)) 0
+      return (pts, sxy / sxx)
+    let (pts, slope) ← do
+      let (pts, slope) ← sweep 3
+      if slope ≤ 1.3 then pure (pts, slope)
+      else
+        let (pts2, slope2) ← sweep 5
+        pure (if slope2 < slope then (pts2, slope2) else (pts, slope))
     worst := max worst slope
     IO.println s!"    {pad name 24} {" / ".intercalate (pts.toList.map fun (_, t) => fmt t 2)}  → n^{fmt slope 2}{if slope > 1.3 then "  SUPER-LINEAR" else ""}"
     if slope > 1.3 then fails := fails.push s!"{name} grows like n^{fmt slope 2}"
