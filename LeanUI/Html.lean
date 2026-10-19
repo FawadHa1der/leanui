@@ -54,7 +54,8 @@ inductive Payload where
   and `Cmd.decodeImage` (`LeanUI.Input`, `FileInfo.parse`). -/
   | files
   /-- A pointer, mouse or wheel event, relative to the listening element: `x y width height
-  buttons modifiers pointerId pressure deltaX deltaY` (`LeanUI.Input`, `Pointer.parse`). -/
+  buttons modifiers pointerId pressure deltaX deltaY clientX clientY` (`LeanUI.Input`,
+  `Pointer.parse`). -/
   | pointer
   deriving BEq, Inhabited, Repr
 

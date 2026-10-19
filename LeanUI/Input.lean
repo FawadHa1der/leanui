@@ -54,18 +54,22 @@ structure Pointer where
   /-- Wheel deltas in CSS pixels (lines and pages converted); 0 for other events. -/
   deltaX : Float := 0
   deltaY : Float := 0
+  /-- Position in the viewport (`clientX`, `clientY`), for drags that move the element itself. -/
+  clientX : Float := 0
+  clientY : Float := 0
   deriving Inhabited, Repr
 
-/-- Read `x y width height buttons modifiers pointerId pressure deltaX deltaY` (modifiers: 1
-shift, 2 ctrl, 4 alt, 8 meta). -/
+/-- Read `x y width height buttons modifiers pointerId pressure deltaX deltaY clientX clientY`
+(modifiers: 1 shift, 2 ctrl, 4 alt, 8 meta). -/
 def Pointer.parse (s : String) : Option Pointer :=
   match s.splitOn " " with
-  | [x, y, w, h, b, m, i, p, dx, dy] =>
+  | [x, y, w, h, b, m, i, p, dx, dy, cx, cy] =>
     let mods := m.toNat?.getD 0
     some { x := parseDecimal x, y := parseDecimal y, width := parseDecimal w, height := parseDecimal h,
            buttons := b.toNat?.getD 0, shift := mods &&& 1 != 0, ctrl := mods &&& 2 != 0,
            alt := mods &&& 4 != 0, metaKey := mods &&& 8 != 0, id := i.toNat?.getD 0,
-           pressure := parseDecimal p, deltaX := parseDecimal dx, deltaY := parseDecimal dy }
+           pressure := parseDecimal p, deltaX := parseDecimal dx, deltaY := parseDecimal dy,
+           clientX := parseDecimal cx, clientY := parseDecimal cy }
   | _ => none
 
 /-- The position in the coordinates of something `w × h` drawn over the whole element (a canvas

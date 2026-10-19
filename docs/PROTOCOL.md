@@ -100,12 +100,13 @@ listener of its target, as it would without delegation.
   5 the event's files (`dataTransfer.files` if it has any, else the node's `files`), one line
   per file, `id\tsize\ttype\tname`: the runtime keeps each file under a new id (≥ 1; the 64
   most recent are kept) for `FILE_READ` and `IMAGE_DECODE`;
-  6 a pointer: `x y width height buttons modifiers pointerId pressure deltaX deltaY`, space
-  separated, where `x`, `y` are the pointer's position relative to the node's bounding box and
-  `width`, `height` that box's size (CSS pixels, after transforms), `modifiers` is 1 shift + 2
-  ctrl + 4 alt + 8 meta, `pointerId` 0 for events that have none, and the deltas are a wheel
-  event's in CSS pixels (lines count 16, pages the box's height; 0 for other events); numbers
-  have at most two decimals and no exponent.
+  6 a pointer: `x y width height buttons modifiers pointerId pressure deltaX deltaY clientX
+  clientY`, space separated, where `x`, `y` are the pointer's position relative to the node's
+  bounding box and `width`, `height` that box's size (CSS pixels, after transforms),
+  `modifiers` is 1 shift + 2 ctrl + 4 alt + 8 meta, `pointerId` 0 for events that have none,
+  the deltas are a wheel event's in CSS pixels (lines count 16, pages the box's height; 0 for
+  other events), and `clientX`, `clientY` the position in the viewport; numbers have at most two
+  decimals and no exponent.
 - **flags**: bit 0 `preventDefault`, bit 1 `stopPropagation`, bit 2 capture the pointer: on a
   `pointerdown`, `setPointerCapture` on the node, so the pointer's later events target it
   until it is released. Listeners for `wheel`, `touchstart` and `touchmove` are registered as

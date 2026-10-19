@@ -867,10 +867,10 @@ def uniqueProgram : Program (ByteArray × Array USize) Unit where
 def testInput : T Unit := section_ "input payloads" do
   expectEq "decimal" ([parseDecimal "12.5", parseDecimal "-3", parseDecimal "0.25", parseDecimal "-0.05", parseDecimal "7.", parseDecimal "x", parseDecimal ""].map (·.toString))
     ["12.500000", "-3.000000", "0.250000", "-0.050000", "7.000000", "0.000000", "0.000000"]
-  match Pointer.parse "10.5 -2 200 100 1 3 7 0.5 0 -120" with
+  match Pointer.parse "10.5 -2 200 100 1 3 7 0.5 0 -120 30.25 40" with
   | some p =>
-    expectEq "pointer" (p.x, p.y, p.width, p.height, p.buttons, p.shift, p.ctrl, p.alt, p.metaKey, p.id, p.pressure, p.deltaY)
-      (10.5, -2, 200, 100, 1, true, true, false, false, 7, 0.5, -120)
+    expectEq "pointer" (p.x, p.y, p.width, p.height, p.buttons, p.shift, p.ctrl, p.alt, p.metaKey, p.id, p.pressure, p.deltaY, p.clientX, p.clientY)
+      (10.5, -2, 200, 100, 1, true, true, false, false, 7, 0.5, -120, 30.25, 40)
     expectEq "pointer scaled" (p.scaledTo 400 50) (21, -1)
   | none => expect "pointer parses" false
   expect "pointer: wrong field count" (Pointer.parse "1 2 3").isNone
@@ -907,16 +907,16 @@ def testPixelsApp : T Unit := section_ "pixels lab (DOM model)" do
   let canvas ← r.find "id" "px-canvas"
   -- a move without a button paints nothing; with it, a 5×5 square at the scaled position
   let mark := (← r.dom.get).effects.size
-  r.fire canvas "pointermove" "100 50 512 256 0 0 1 0 0 0"
+  r.fire canvas "pointermove" "100 50 512 256 0 0 1 0 0 0 0 0"
   expectEq "hover" (← textOf r "px-pointer") "50,25 buttons 0"
-  r.fire canvas "pointerdown" "100 50 512 256 1 1 1 0.5 0 0"
-  r.fire canvas "pointermove" "1 1 512 256 1 0 1 0.5 0 0"
+  r.fire canvas "pointerdown" "100 50 512 256 1 1 1 0.5 0 0 0 0"
+  r.fire canvas "pointermove" "1 1 512 256 1 0 1 0.5 0 0 0 0"
   expectEq "painted" (← effectsSince r mark) #["putImage #px-canvas blob=0 256x128 dirty=48,23,5,5", "putImage #px-canvas blob=0 256x128 dirty=0,0,3,3"]
   expectEq "dabs" (← textOf r "px-dabs") "2"
   expectEq "captured" (← textOf r "px-capturing") "true"
-  r.fire canvas "pointerup" "1 1 512 256 0 0 1 0 0 0"
+  r.fire canvas "pointerup" "1 1 512 256 0 0 1 0 0 0 0 0"
   expectEq "released" (← textOf r "px-capturing") "false"
-  r.fire canvas "wheel" "1 1 512 256 0 0 0 0 0 -240"
+  r.fire canvas "wheel" "1 1 512 256 0 0 0 0 0 -240 0 0"
   expectEq "wheel" (← textOf r "px-wheel") "-240"
   -- files: bytes and pixels come back through byte callbacks
   let mark := (← r.dom.get).effects.size

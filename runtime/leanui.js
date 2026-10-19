@@ -376,7 +376,8 @@
         if (e.type === "wheel") { const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1; dx = e.deltaX * k; dy = e.deltaY * k; }
         const mods = (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
         return num((e.clientX ?? 0) - r.left) + " " + num((e.clientY ?? 0) - r.top) + " " + num(r.width) + " " + num(r.height) + " " +
-          (e.buttons | 0) + " " + mods + " " + (e.pointerId | 0) + " " + num(e.pressure ?? 0) + " " + num(dx) + " " + num(dy);
+          (e.buttons | 0) + " " + mods + " " + (e.pointerId | 0) + " " + num(e.pressure ?? 0) + " " + num(dx) + " " + num(dy) + " " +
+          num(e.clientX ?? 0) + " " + num(e.clientY ?? 0);
       }
       default: return "";
     }
