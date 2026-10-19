@@ -11,9 +11,7 @@
 //   node tests/browser/keyed-dom.mjs [steps] [seed] [engines]     (run under the host browser lock)
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
+import { pw } from "./playwright.mjs";
 
 const root = new URL("../..", import.meta.url).pathname;
 const bin = process.env.HOME + "/.elan/toolchains/leanprover--lean4---v4.34.0/bin";

@@ -14,13 +14,11 @@
 //    assignment the runtime skips because the value is already there, controls' dirty flags.
 // 2. Hand-encoded: a template with SVG and MathML, empty and adjacent texts; and a TEMPLATE whose
 //    handles are not its subtree is rejected.
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runtime = fs.readFileSync(path.join(here, "../../runtime/leanui.js"), "utf8");
 const [casesFile, which = "both"] = process.argv.slice(2);

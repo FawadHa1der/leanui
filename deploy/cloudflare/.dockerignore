@@ -1,0 +1,3 @@
+# The image needs only site/ (deploy/cloudflare/stage.sh).
+*
+!site/

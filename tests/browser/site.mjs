@@ -4,12 +4,10 @@
 // stops it (by its PID) at the end.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const require = createRequire(process.env.LEANUI_PLAYWRIGHT_FROM || "/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 const PORT = 5361, BASE = `http://127.0.0.1:${PORT}`;
 
 const server = spawn(path.join(ROOT, ".lake/build/bin/leanui-site"), ["--port", String(PORT), "--quiet"], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });

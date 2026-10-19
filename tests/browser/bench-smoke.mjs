@@ -4,10 +4,8 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import { fileURLToPath } from "node:url";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const engine = process.argv[2] || "chromium";
 let url = process.argv[3], server = null;

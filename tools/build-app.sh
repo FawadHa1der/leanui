@@ -16,6 +16,7 @@ MOD="$1"; NAME="${2:-$(echo "$MOD" | tr '.' '-' | tr 'A-Z' 'a-z')}"; MODE="${3:-
 L="${LEAN_BIN:-$HOME/.elan/toolchains/leanprover--lean4---v4.34.0/bin}"
 . "$ROOT/toolchain/fork.lock"
 TC="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}/wasm64"; [ -f "$TC/lib/libInit.a" ] || { echo "run toolchain/build-archives.sh first" >&2; exit 2; }
+"$ROOT/toolchain/image.sh"
 OUT="$ROOT/dist/$NAME"; WORK="$ROOT/.lake/wasm/$NAME"
 rm -rf "$WORK" && mkdir -p "$WORK/obj" "$OUT"
 # precompressed siblings of an earlier build (leanui build --compress) would be served instead

@@ -1,0 +1,142 @@
+# Build and test everything (native, then wasm64 in Chromium and Firefox); on main, deploy the
+# LeanUI site to Cloudflare Containers. Setup and secrets: docs/DEPLOY.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache the Lean toolchain
+        id: elan
+        uses: actions/cache@v6
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
+      - name: Install the Lean toolchain
+        if: steps.elan.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache the Lake build
+        uses: actions/cache@v6
+        with:
+          path: .lake/build
+          key: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-${{ github.sha }}
+          restore-keys: lake-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lakefile.toml') }}-
+      - name: Build (native)
+        run: lake build
+
+      - name: Native tests
+        run: |
+          failed=""
+          for t in leanui-tests leanui-props leanui-syntax-tests leanui-kit-tests leanui-server-tests \
+                   leanui-todomvc-tests leanui-notes-tests; do
+            echo "::group::$t"
+            .lake/build/bin/$t || failed="$failed $t"
+            echo "::endgroup::"
+          done
+          [ -z "$failed" ] || { echo "::error::failed:$failed"; exit 1; }
+
+      # The single-threaded wasm64 Lean archives (toolchain/build-archives.sh, ~30 min cold) depend
+      # only on the pinned fork, the patch and the script.
+      - name: Cache the wasm64 archives
+        id: archives
+        uses: actions/cache@v6
+        with:
+          path: .toolchain/wasm64
+          key: wasm64-archives-${{ hashFiles('toolchain/fork.lock', 'toolchain/lean-wasm-threads.patch', 'toolchain/build-archives.sh') }}
+      - name: Toolchain image
+        run: toolchain/image.sh
+      - name: Build the wasm64 archives
+        if: steps.archives.outputs.cache-hit != 'true'
+        run: toolchain/build-archives.sh
+
+      - name: Build the apps (wasm64)
+        run: tests/browser/run-all.sh --build-only
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install Playwright (outside the checkout)
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          echo '{ "private": true }' > package.json
+          npm install --no-audit --no-fund playwright@1.62.1
+          npx playwright install --with-deps chromium firefox
+          echo "LEANUI_PLAYWRIGHT_FROM=$RUNNER_TEMP/pw/package.json" >> "$GITHUB_ENV"
+      - name: Browser tests (Chromium, Firefox)
+        run: tests/browser/run-all.sh
+
+      - name: Stage and smoke-test the site container
+        run: |
+          deploy/cloudflare/stage.sh
+          docker build --platform linux/amd64 -t leanui-site:ci deploy/cloudflare
+          id=$(docker run -d -p 127.0.0.1:8080:8080 leanui-site:ci)
+          trap 'docker rm -f "$id" > /dev/null' EXIT
+          for _ in $(seq 1 100); do curl -fsS -o "$RUNNER_TEMP/home.html" http://127.0.0.1:8080/ && break; sleep 0.2; done
+          grep -q "Web UIs, written in Lean 4." "$RUNNER_TEMP/home.html"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/assets/site/app.wasm
+          curl -fsS -o /dev/null http://127.0.0.1:8080/site.css
+          tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
+      - uses: actions/upload-artifact@v7
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: site-container
+          path: ${{ runner.temp }}/site-container.tgz
+          retention-days: 7
+
+  deploy:
+    name: Deploy the site to Cloudflare
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-cloudflare
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check for Cloudflare credentials
+        id: creds
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set: skipping the deploy (docs/DEPLOY.md)"; fi
+      - uses: actions/checkout@v7
+        if: steps.creds.outputs.ok == 'true'
+      - uses: actions/download-artifact@v8
+        if: steps.creds.outputs.ok == 'true'
+        with:
+          name: site-container
+          path: ${{ runner.temp }}
+      - uses: actions/setup-node@v7
+        if: steps.creds.outputs.ok == 'true'
+        with:
+          node-version: 22
+      - name: Deploy (wrangler builds and pushes the container image)
+        if: steps.creds.outputs.ok == 'true'
+        working-directory: deploy/cloudflare
+        run: |
+          tar -xzf "$RUNNER_TEMP/site-container.tgz"
+          npm install --no-audit --no-fund
+          npx wrangler deploy

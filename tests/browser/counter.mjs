@@ -1,8 +1,6 @@
 // Browser smoke test for dist/counter: boots the wasm app, clicks and types, checks the DOM.
 // node tests/browser/counter.mjs [baseUrl] [chromium|firefox]   (run under the host browser lock)
-import { createRequire } from "node:module";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
+import { pw } from "./playwright.mjs";
 const base = process.argv[2] || "http://127.0.0.1:5330/counter/plain-not-used";
 const engine = process.argv[3] || "chromium";
 const browser = await pw[engine].launch({ headless: true });

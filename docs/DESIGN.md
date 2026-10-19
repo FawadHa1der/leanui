@@ -116,8 +116,9 @@ built against. It was first written on 2026-10-18 from the research in
   test executables are listed in the README.
 - Browser runs go through the host lock:
   `"/Users/fawadhaider/code/lean questions/infoview-widget-research/widgets-v4.34/qed64-showcase/scripts/with-browser-lock.sh" <name> <cmd>`.
-  Playwright is imported read-only from QED64's `node_modules`
-  (`createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json")`). Playwright's
+  `tests/browser/playwright.mjs` loads Playwright: from `LEANUI_PLAYWRIGHT_FROM` (a `package.json`
+  whose `node_modules` has it; CI installs one), else from QED64's `node_modules`, read-only.
+  `tests/browser/run-all.sh` runs every suite. Playwright's
   Firefox build runs wasm about 8x slower than release Firefox: use it for correctness, and
   `tests/browser/selfbench.mjs` (release browsers, no automation) for speed.
 - Lean binaries by absolute path: `~/.elan/toolchains/leanprover--lean4---v4.34.0/bin/{lake,lean,leanc}`

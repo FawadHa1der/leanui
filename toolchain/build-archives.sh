@@ -3,7 +3,7 @@
 #   .toolchain/wasm64/lib/{libleanrt,libInit,libStd,libuv}.a  and  .toolchain/wasm64/include/lean/lean.h
 # from the fork pinned in toolchain/fork.lock, with toolchain/lean-wasm-threads.patch applied
 # (MULTI_THREAD=OFF, no -pthread: no SharedArrayBuffer, so pages need no COOP/COEP).
-# Requires Docker and the image named in fork.lock (built from the fork's docker-wasm64/Dockerfile).
+# Requires Docker; toolchain/image.sh builds the image named in fork.lock when it is missing.
 # Env: LEANUI_FORK_SRC=<path to an existing clone of the fork> skips the network clone.
 # About 10 minutes cold (stage 0 + runtime + Init + Std), a few minutes with a warm ccache.
 set -euo pipefail
@@ -19,7 +19,7 @@ fi
 git -C "$SRC" checkout -q -- src/CMakeLists.txt
 git -C "$SRC" apply "$ROOT/toolchain/lean-wasm-threads.patch"
 trap 'git -C "$SRC" checkout -q -- src/CMakeLists.txt' EXIT
-docker info >/dev/null 2>&1 || { echo "Docker is not running" >&2; exit 30; }
+"$ROOT/toolchain/image.sh"
 docker run --rm -v "$SRC":/lean4 -v "$B":/build -v "$T/ccache":/root/.ccache -e EM_COMPILER_WRAPPER=ccache "$image" bash -lc '
   set -e; git config --global --add safe.directory /lean4
   cmake /lean4 --preset release -B /build -DCMAKE_C_COMPILER_WORKS=1 \

@@ -1,0 +1,12 @@
+{
+  "name": "leanui-site-deploy",
+  "private": true,
+  "description": "Deploys the LeanUI site to Cloudflare Containers (docs/DEPLOY.md). Installed in CI only.",
+  "type": "module",
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
+  },
+  "devDependencies": {
+    "wrangler": "4.146.0"
+  }
+}

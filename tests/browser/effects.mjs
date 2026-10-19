@@ -5,20 +5,18 @@
 //   "<lock>/with-browser-lock.sh" effects node tests/browser/effects.mjs [--no-build] [chromium] [firefox]
 //
 // Builds dist/effects (tools/build-app.sh EffectsApp effects), copies examples/effects-assets/* into it,
-// serves dist/ with the native Lean static server on port 5341 (/plain/: no COOP/COEP), runs both
+// serves dist/ with `leanui serve` (.lake/build/bin/leanui, `lake build leanui`) on port 5341, runs both
 // engines, and stops the server by its PID. Exit code 0 iff every check passed in every engine.
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PORT = 5341;
-const SERVER = "/Users/fawadhaider/code/wasm64-lean-fable/research/prototype/app/out/leandom-server";
-const BASE = "/plain/effects/";
+const SERVER = path.join(ROOT, ".lake/build/bin/leanui");
+const BASE = "/effects/";
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const INDEX = ORIGIN + BASE + "index.html";
 
@@ -28,8 +26,7 @@ if (engines.length === 0) engines.push("chromium", "firefox");
 
 // ---- build, assets, server ----
 if (!argv.includes("--no-build")) {
-  const env = { ...process.env, LEANUI_TOOLCHAIN: process.env.LEANUI_TOOLCHAIN || "/Users/fawadhaider/code/wasm64-lean-fable/leanui/.toolchain" };
-  const r = spawnSync(path.join(ROOT, "tools/build-app.sh"), ["EffectsApp", "effects"], { cwd: ROOT, stdio: "inherit", env });
+  const r = spawnSync(path.join(ROOT, "tools/build-app.sh"), ["EffectsApp", "effects"], { cwd: ROOT, stdio: "inherit" });
   if (r.status !== 0) { console.error("build failed"); process.exit(2); }
 }
 const dist = path.join(ROOT, "dist");
@@ -39,7 +36,7 @@ const assets = path.join(ROOT, "examples/effects-assets");
 for (const f of fs.readdirSync(assets)) fs.copyFileSync(path.join(assets, f), path.join(out, f));
 const wasmBytes = fs.statSync(path.join(out, "app.wasm")).size;
 
-const server = spawn(SERVER, [dist, String(PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(SERVER, ["serve", dist, "--port", String(PORT), "--quiet"], { stdio: ["ignore", "pipe", "pipe"] });
 const serverPid = server.pid;
 const stopServer = () => { try { process.kill(serverPid, "SIGTERM"); } catch (e) { /* already gone */ } };
 process.on("exit", stopServer);

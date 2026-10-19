@@ -8,13 +8,11 @@
 //  - a server-driven ticker: subscriptions (c bodies from setInterval), fetch results, document.title;
 //  - pages without JavaScript; static serving: MIME types, HEAD, ETag/304, COOP/COEP, traversal refused;
 // and reports the latency of a server-driven round trip (click -> DOM updated) on localhost.
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
 const DEMO = 5351, STATIC = 5352;

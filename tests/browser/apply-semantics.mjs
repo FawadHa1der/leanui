@@ -21,9 +21,7 @@
 //   node tests/browser/apply-semantics.mjs [chromium,firefox] [--runtime runtime/leanui.js]
 //   (run under the host browser lock)
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
+import { pw } from "./playwright.mjs";
 
 const root = new URL("../..", import.meta.url).pathname;
 const argv = process.argv.slice(2);

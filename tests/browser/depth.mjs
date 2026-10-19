@@ -5,9 +5,7 @@
 // mount d levels deep) and changes the innermost text (one patch d levels deep); a binary search
 // finds the largest depth that works. Then it checks what an overflow does to the app.
 //   node tests/browser/depth.mjs [baseUrl] [chromium|firefox|both]   (run under the host browser lock)
-import { createRequire } from "node:module";
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
+import { pw } from "./playwright.mjs";
 const base = process.argv[2] || "http://127.0.0.1:5391/plain/depth-probe/index.html";
 const engines = (process.argv[3] || "both") === "both" ? ["chromium", "firefox"] : [process.argv[3]];
 

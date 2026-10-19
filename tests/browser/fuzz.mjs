@@ -12,13 +12,11 @@
 // for every listener a dispatched event: which slots it reaches (bubbling, stopPropagation), the
 // payload the runtime extracts, and whether the default is prevented. Hydration sessions start
 // from the server-rendered HTML parsed by the browser's own HTML parser.
-import { createRequire } from "node:module";
+import { pw } from "./playwright.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire("/Users/fawadhaider/code/wasm64-lean-fable/qed64/package.json");
-const pw = require("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runtime = fs.readFileSync(path.join(here, "../../runtime/leanui.js"), "utf8");
 
