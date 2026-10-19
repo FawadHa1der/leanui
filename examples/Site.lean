@@ -128,6 +128,9 @@ def subscriptions (m : Model) : LeanUI.Sub Msg :=
 
 /-! ## View -/
 
+/-- The source repository (an ordinary link: it leaves the site). -/
+def sourceUrl := "https://github.com/FawadHa1der/leanui"
+
 def navLink (current p : Page) (label : String) : Html Msg :=
   router.link p #[cls (if current == p then "active" else "")] #[text label]
 
@@ -138,6 +141,7 @@ def header (m : Model) : Html Msg :=
       {navLink m.page .home "Home"}
       {navLink m.page .examples "Examples"}
       {navLink m.page .benchmarks "Benchmarks"}
+      <a href={sourceUrl}>GitHub</a>
     </nav>
   </header>
 
@@ -290,7 +294,8 @@ def view (m : Model) : Html Msg :=
       | .benchmarks => benchmarks m
       | .notFound => notFound}
     <footer class="site-footer">
-      <p>LeanUI: Lean 4.34, single-threaded wasm64. This page is a LeanUI program.</p>
+      <p>LeanUI: Lean 4.34, single-threaded wasm64. This page is a LeanUI program;
+        its source is <a href={sourceUrl}>on GitHub</a> (MIT).</p>
     </footer>
   </div>
 

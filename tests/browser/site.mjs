@@ -28,6 +28,7 @@ try {
   // server-side rendering, without any browser
   const html = await (await fetch(BASE + "/")).text();
   check("http", "home is complete HTML before any script", html.includes("Web UIs, written in Lean 4.") && html.includes('<output id="value" class="pos">0</output>'));
+  check("http", "links to the source repository", html.includes('href="https://github.com/FawadHa1der/leanui"'));
   const deep = await fetch(BASE + "/benchmarks");
   check("http", "a deep link renders its page (results still loading)", (await deep.text()).includes("Loading the results"));
   const missing = await fetch(BASE + "/no-such-page");
