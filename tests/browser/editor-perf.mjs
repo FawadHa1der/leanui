@@ -83,7 +83,7 @@ async function waitIdle(page) {
 // Time a full-resolution job (click to done) and the longest frame gap while it runs.
 async function job(page, sel) {
   await page.evaluate(() => { Object.assign(window.__gaps, { on: true, last: 0, max: 0, n: 0 }); window.__t0 = performance.now(); });
-  await page.click(sel);
+  await page.evaluate((sel) => document.querySelector(sel).click(), sel);   // panels may be collapsed
   await waitIdle(page);
   return page.evaluate(() => { const g = window.__gaps; g.on = false; return { ms: r(performance.now() - window.__t0), maxGap: r(g.max), frames: g.n }; function r(x) { return Math.round(x * 10) / 10; } });
 }
