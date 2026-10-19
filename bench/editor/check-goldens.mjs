@@ -118,6 +118,11 @@ for (const [img, level] of [[noise(301, 203, 3), 0], [noise(301, 203, 3), 1], [E
   else { bad++; console.log(`DIFF png round trip ${img.width}x${img.height} level ${level}`); }
 }
 
+// ---- the test image is Editor.testImage (the value tests/Editor.lean pins) ----
+const tiWant = (src.match(/expectEq "test image" \(testImage 333 250\)\.checksum (\d+)/) || [])[1];
+const tiGot = E.checksum(E.testImage(333, 250)).toString();
+if (tiGot !== tiWant) { bad++; console.log(`DIFF test image: js ${tiGot}, lean ${tiWant}`); }
+
 // ---- the operation list matches examples/EditorBench.lean ----
 const benchSrc = fs.readFileSync(path.join(repo, "examples/EditorBench.lean"), "utf8");
 const leanOps = [...benchSrc.match(/def ops : List String :=\s*\[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);

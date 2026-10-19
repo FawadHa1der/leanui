@@ -31,6 +31,8 @@ structure Layer where
   img : Image
   /-- The preview, if the image is larger than `previewMax` on a side. -/
   prev : Option Image := none
+  /-- Known to be fully transparent (a new layer nothing was painted on): compositing skips it. -/
+  blank : Bool := false
   deriving Inhabited
 
 def Layer.preview (l : Layer) : Image :=
@@ -101,13 +103,13 @@ def modifyLayer (d : Doc) (id : Nat) (f : Layer → Layer) : Doc :=
 /-- Replace a layer's full-resolution image (and remake its preview). -/
 def setLayerImage (d : Doc) (id : Nat) (img : Image) : Doc :=
   let prev := mkPreview img d.pw d.ph
-  d.modifyLayer id fun l => { l with img, prev }
+  d.modifyLayer id fun l => { l with img, prev, blank := false }
 
 /-- A new transparent layer above `above`; returns the document and the new layer's id. -/
 def addLayer (d : Doc) (above : Nat) : Doc × Nat :=
   let id := d.nextId
   let blank := Image.blank d.width d.height
-  let l : Layer := { id, name := s!"Layer {id}", img := blank, prev := mkPreview blank d.pw d.ph }
+  let l : Layer := { id, name := s!"Layer {id}", img := blank, prev := mkPreview blank d.pw d.ph, blank := true }
   let pos := ((d.layerIndex? above).map (· + 1)).getD d.layers.size
   let (ls, d) := d.takeLayers
   ({ d with layers := ls.insertIdxIfInBounds pos l, nextId := id + 1 }, id)
@@ -146,16 +148,32 @@ def clearRows (img : Image) (y0 y1 : Nat) : Image :=
     termination_by n - i
     { width, height, data := go data (4 * width * min y0 height) (4 * width * min y1 height) }
 
-/-- Composite rows `[y0, y1)` of the visible layers' previews into `out` (cleared first), with
-`swap` replacing one layer's preview (a pending operation's result). -/
+/-- Copy rows `[y0, y1)` of `src` into `dst` (same size), in place. -/
+def copyRows (src dst : Image) (y0 y1 : Nat) : Image :=
+  match dst with
+  | { width, height, data } =>
+    let o := 4 * width * min y0 height
+    { width, height, data := src.data.copySlice o data o (4 * width * min y1 height - o) }
+
+/-- Composite rows `[y0, y1)` of the visible layers' previews into `out`, with `swap` replacing
+one layer's preview (a pending operation's result). Blank layers are skipped, and the bottom
+visible layer, when it is normal at full opacity, is copied rather than composited onto
+transparent (the same pixels: `tests/Editor.lean`). -/
 def compositeRowsInto (d : Doc) (out : Image) (y0 y1 : Nat) (swap : Option (Nat × Image) := none) : Image := Id.run do
-  let mut out := clearRows out y0 y1
+  let mut out := out
+  let mut first := true
   for h : i in [0:d.layers.size] do
     let l := d.layers[i]
-    if l.visible && l.opacity > 0 then
-      match swap with
-      | some (j, img) => out := compositeRows out (if j == i then img else l.preview) l.opacity l.blend y0 y1
-      | none => out := compositeRows out l.preview l.opacity l.blend y0 y1
+    if l.visible && l.opacity > 0 && !l.blank then
+      let top := match swap with
+        | some (j, img) => if j == i then img else l.preview
+        | none => l.preview
+      if first && l.opacity == 100 && l.blend == .normal then out := copyRows top out y0 y1
+      else
+        if first then out := clearRows out y0 y1
+        out := compositeRows out top l.opacity l.blend y0 y1
+      first := false
+  if first then out := clearRows out y0 y1
   return out
 
 /-- The composite of the visible layers' previews. -/
@@ -196,7 +214,7 @@ def paint (d : Doc) (id : Nat) (a b : Float × Float) (brush : Brush) : Doc × R
           let y0 := dirty.y * ph / h
           let y1 := min ph (((dirty.y + dirty.h) * ph + h - 1) / h)
           some (downscaleBoxRows img p y0 y1)
-    ({ d with layers := ls.set! i { l with img, prev } }, dirty)
+    ({ d with layers := ls.set! i { l with img, prev, blank := l.blank && dirty.w == 0 } }, dirty)
 
 /-- Apply a geometric operation to every layer. -/
 def transform (d : Doc) (g : Geo) : Doc :=
@@ -208,39 +226,53 @@ def transform (d : Doc) (g : Geo) : Doc :=
     { d with width := l0.img.width, height := l0.img.height, pw, ph,
              layers := ls.map fun l => { l with prev := mkPreview l.img pw ph } }
 
-/-- The full-resolution composite of the visible layers (for export). -/
+/-- The full-resolution composite of the visible layers (for export), by the rules of
+`compositeRowsInto`. -/
 def flatten (d : Doc) : Image := Id.run do
   let mut out := Image.blank d.width d.height
+  let mut first := true
   for l in d.layers do
-    if l.visible && l.opacity > 0 then out := Editor.composite out l.img l.opacity l.blend
+    if l.visible && l.opacity > 0 && !l.blank then
+      out := if first && l.opacity == 100 && l.blend == .normal then copyRows l.img out 0 d.height
+        else Editor.composite out l.img l.opacity l.blend
+      first := false
   return out
 
 end Doc
 
 /-! ## Test images -/
 
-/-- A synthetic photo-like test image: smooth gradients, a few discs, fine stripes and a grain
+/-- One pixel of `testImage`, from coordinates scaled to `0..1023`, in integer arithmetic (the same
+image in Lean and in `bench/editor/ops.js`, and no float conversions per pixel). -/
+@[inline] def testPixel (x y fx fy : UInt64) : UInt8 × UInt8 × UInt8 :=
+  let sq (a b : UInt64) : UInt64 := if a ≥ b then (a - b) * (a - b) else (b - a) * (b - a)
+  -- an ellipse: 1.78 x² + y² < r² in the unit square, scaled by 100
+  let disc (cx cy r : UInt64) : Bool := sq fx cx * 178 + sq fy cy * 100 < r * r * 100
+  let grain := (x * 7919 + y * 104729) % 31
+  let (r, g, b) : UInt64 × UInt64 × UInt64 :=
+    if disc 307 410 184 then (230, 90 + 80 * fy / 1024, 60)
+    else if disc 717 614 225 then (50 + 100 * fx / 1024, 150, 220)
+    else if fy > 839 && (x / 6) % 2 == 0 then (240, 240, 240)
+    else (40 + 180 * fx / 1024, 60 + 150 * fy / 1024, 120 + 100 * (1024 - fx) / 1024)
+  -- add grain - 15, clamped to 0..255
+  let c (v : UInt64) : UInt8 := (min 255 ((v + grain) - min (v + grain) 15)).toUInt8
+  (c r, c g, c b)
+
+/-- A synthetic photo-like test image: smooth gradients, two discs, fine stripes and a grain
 pattern, opaque. Deterministic, so tests and benchmarks need no binary fixtures. -/
 def testImage (w h : Nat) : Image :=
-  let rec row (d : ByteArray) (x y : Nat) (fuel : Nat) : ByteArray :=
+  let (w64, h64) := (w.toUInt64, h.toUInt64)
+  let rec row (d : ByteArray) (x y fy : UInt64) (fuel : Nat) : ByteArray :=
     match fuel with
     | 0 => d
     | fuel + 1 =>
-      if x ≥ w then d else
-      let fx := Float.ofNat x / Float.ofNat w; let fy := Float.ofNat y / Float.ofNat h
-      let disc (cx cy r : Float) : Bool := (fx - cx) * (fx - cx) * 1.78 + (fy - cy) * (fy - cy) < r * r
-      let grain := ((x * 7919 + y * 104729) % 31).toFloat - 15
-      let (r, g, b) :=
-        if disc 0.3 0.4 0.18 then (230.0, 90.0 + 80 * fy, 60.0)
-        else if disc 0.7 0.6 0.22 then (50.0 + 100 * fx, 150.0, 220.0)
-        else if fy > 0.82 && (x / 6) % 2 == 0 then (240.0, 240.0, 240.0)
-        else (40 + 180 * fx, 60 + 150 * fy, 120 + 100 * (1 - fx))
-      let c (v : Float) : UInt8 := (max 0 (min 255 (v + grain))).toUInt8
-      row (d.push (c r) |>.push (c g) |>.push (c b) |>.push 255) (x + 1) y fuel
-  let rec rows (d : ByteArray) (y : Nat) (fuel : Nat) : ByteArray :=
+      if x ≥ w64 then d else
+      let (r, g, b) := testPixel x y (x * 1024 / w64) fy
+      row (d.push r |>.push g |>.push b |>.push 255) (x + 1) y fy fuel
+  let rec rows (d : ByteArray) (y : UInt64) (fuel : Nat) : ByteArray :=
     match fuel with
     | 0 => d
-    | fuel + 1 => if y ≥ h then d else rows (row d 0 y (w + 1)) (y + 1) fuel
+    | fuel + 1 => if y ≥ h64 then d else rows (row d 0 y (y * 1024 / h64) (w + 1)) (y + 1) fuel
   { width := w, height := h, data := rows (ByteArray.emptyWithCapacity (4 * w * h)) 0 (h + 1) }
 
 end Editor

@@ -58,20 +58,22 @@
   // Test image (Editor.testImage, examples/Editor/Doc.lean)
 
   function testImage(w, h) {
+    // integer arithmetic, as Editor.testPixel: coordinates scaled to 0..1023, grain - 15, clamped
     const d = new Uint8ClampedArray(4 * w * h);
-    const c = (v) => { v = Math.max(0, Math.min(255, v)); return v | 0; };   // clamp, then truncate
+    const c = (v, grain) => Math.min(255, Math.max(0, v + grain - 15));
+    const disc = (fx, fy, cx, cy, r) => (fx - cx) * (fx - cx) * 178 + (fy - cy) * (fy - cy) * 100 < r * r * 100;
     let i = 0;
     for (let y = 0; y < h; y++) {
+      const fy = Math.floor(y * 1024 / h);
       for (let x = 0; x < w; x++) {
-        const fx = x / w, fy = y / h;
-        const disc = (cx, cy, r) => (fx - cx) * (fx - cx) * 1.78 + (fy - cy) * (fy - cy) < r * r;
-        const grain = ((x * 7919 + y * 104729) % 31) - 15;
+        const fx = Math.floor(x * 1024 / w);
+        const grain = (x * 7919 + y * 104729) % 31;
         let r, g, b;
-        if (disc(0.3, 0.4, 0.18)) { r = 230; g = 90 + 80 * fy; b = 60; }
-        else if (disc(0.7, 0.6, 0.22)) { r = 50 + 100 * fx; g = 150; b = 220; }
-        else if (fy > 0.82 && Math.floor(x / 6) % 2 === 0) { r = 240; g = 240; b = 240; }
-        else { r = 40 + 180 * fx; g = 60 + 150 * fy; b = 120 + 100 * (1 - fx); }
-        d[i] = c(r + grain); d[i + 1] = c(g + grain); d[i + 2] = c(b + grain); d[i + 3] = 255;
+        if (disc(fx, fy, 307, 410, 184)) { r = 230; g = 90 + Math.floor(80 * fy / 1024); b = 60; }
+        else if (disc(fx, fy, 717, 614, 225)) { r = 50 + Math.floor(100 * fx / 1024); g = 150; b = 220; }
+        else if (fy > 839 && Math.floor(x / 6) % 2 === 0) { r = 240; g = 240; b = 240; }
+        else { r = 40 + Math.floor(180 * fx / 1024); g = 60 + Math.floor(150 * fy / 1024); b = 120 + Math.floor(100 * (1024 - fx) / 1024); }
+        d[i] = c(r, grain); d[i + 1] = c(g, grain); d[i + 2] = c(b, grain); d[i + 3] = 255;
         i += 4;
       }
     }

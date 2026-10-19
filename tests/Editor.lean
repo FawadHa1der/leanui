@@ -717,6 +717,8 @@ def testDoc : T Unit := do
   expectEq "preview size: large" (previewSize 4000 3000) (1280, 960)
   expectEq "preview size: tall" (previewSize 1000 2000) (640, 1280)
   expectEq "preview size: small" (previewSize 800 600) (800, 600)
+  -- the test image is the same in bench/editor/ops.js (checked there against this value)
+  expectEq "test image" (testImage 333 250).checksum 9856192619645684931
   let big := Doc.ofImage (testImage 2000 1000) "Background"
   expectEq "doc preview" (big.pw, big.ph, big.layers[0]!.prev.map (·.width)) (1280, 640, some 1280)
   let small := Doc.ofImage (testImage 300 200) "Background"
@@ -749,6 +751,22 @@ def testDoc : T Unit := do
   expectEq "preview = downscale of the painted layer" e1.layers[0]!.prev.get!.checksum (downscaleBox e1.layers[0]!.img 1280 640).checksum
   let p := e1.toPreviewRect r
   expect "preview rect covers the stroke" (p.x ≤ 250 && p.x + p.w ≥ 450 && p.y ≤ 250 && p.y + p.h ≥ 320) s!"{repr p}"
+  -- the bottom layer is copied, not composited onto transparent: the same pixels, also for a
+  -- translucent layer; a blank layer is skipped
+  let trans := noise 300 200 11
+  let over := composite (Image.blank 300 200) trans 100 .normal
+  let worst := (List.range (300 * 200)).foldl (init := 0) fun w i =>
+    if trans.data[4 * i + 3]! == 0 then w
+    else (List.range 4).foldl (init := w) fun w c =>
+      let a := trans.data[4 * i + c]!.toNat; let b := over.data[4 * i + c]!.toNat
+      max w (if a > b then a - b else b - a)
+  expect "normal over transparent = top, up to rounding (the copy is exact)" (worst ≤ 1) s!"{worst}"
+  let td := Doc.ofImage trans "T"
+  let comp1 := td.composite
+  let (td2, _) := td.addLayer 1
+  expectEq "copied bottom layer, skipped blank layer" (comp1.checksum, td2.composite.checksum) (trans.checksum, trans.checksum)
+  let td3 := td.modifyLayer 1 fun l => { l with opacity := 50 }
+  expectEq "a bottom layer at 50% is composited" td3.composite.checksum (composite (Image.blank 300 200) trans 50 .normal).checksum
   -- layers
   let (l2, id2) := small.addLayer 1
   let l2 := l2.modifyLayer id2 fun l => { l with name := "Top" }
