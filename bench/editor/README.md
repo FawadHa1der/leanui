@@ -57,7 +57,8 @@ Lean ÷ JS and Lean ÷ canvas time ratios.
   the sum of the histogram's counts, the PNG's size. It prints MATCH or DIFF per operation, and
   whether the canvas built-in gives the same pixels (rotations, flips and crop do). The
   floating-point steps (the adjustment table, the colour matrix, the Gaussian weights, Sobel's
-  square root, `testImage`) use the same IEEE double operations in the same order; `Math.pow`,
+  square root) use the same IEEE double operations in the same order (`testImage` is integer
+  arithmetic); `Math.pow`,
   `exp`, `sin` and `cos` may differ from the C library's in the last bit, which only matters for a
   value within an ulp of a rounding boundary.
 
@@ -75,8 +76,8 @@ Playwright comes from `LEANUI_PLAYWRIGHT_FROM` (see `tests/browser/playwright.mj
 Playwright's own build, else `$LEANUI_CHROMIUM` / `$LEANUI_FIREFOX`, else
 `$PLAYWRIGHT_BROWSERS_PATH/<engine>`. An operation whose warm-up takes over 1.5 s (`--slow-ms`)
 gets 3 runs (`--slow-runs`) at that size, marked † in the tables; at 1, 4 and 12 MP with 5 runs
-Chromium takes about 6.5 minutes on a 4-core cloud machine, 1.6 of them Lean making the test images
-(below). Other sizes: `--sizes 640x480,…`. The JSON holds every run's time, the browser version and
+Chromium takes under 4 minutes on a 4-core cloud machine (221 s at `eb0414f`), 7 s of them Lean
+making the test images (below). Other sizes: `--sizes 640x480,…`. The JSON holds every run's time, the browser version and
 user agent, the bytes check, and the date if given.
 
 ## Caveats
@@ -98,9 +99,10 @@ user agent, the bytes check, and the date if given.
   50 ms into a fresh array and 19 ms into a reused one), and it may include a collection of earlier
   outputs. Lean's allocator reuses wasm memory that has already grown (memory never shrinks), so
   copy-bound operations (flip-v, crop) favour Lean for that reason alone.
-- Making the test image is slow in Lean (about 6 µs per pixel in wasm, 70 s at 12 MP; not timed):
-  `Editor.testImage` converts five `Nat`s to `Float` per pixel, and `Float.ofNat` (Lean 4.34's
-  compiled `Float.ofScientific`) parses the literal `2^53` from a decimal string on every call.
+- Making the test image is not timed, and not optimised: Lean takes 4.7 s at 12 MP (JS 0.4 s),
+  pushing the image a byte at a time. It is integer arithmetic since the first version, which
+  converted five `Nat`s to `Float` per pixel and took 70 s at 12 MP: `Float.ofNat` (Lean 4.34's
+  compiled `Float.ofScientific`) parsed the literal `2^53` from a decimal string on every call.
 - Results: `results-<engine>.json` hold the raw timings of a run (the machine is in the user
   agent; the numbers that go into [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) say where they
   were measured).
