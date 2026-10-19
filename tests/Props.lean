@@ -801,8 +801,10 @@ def scaleSuite (o : Opts) : IO Outcome := do
       ("replace all rows", fun ids => (some (table ids), table (ids.map (· + 100000))))] :
       Array (String × (Array Nat → Option (Html String) × Html String))) do
     -- the exponent is the least-squares slope of log time over log rows (all five sizes, so one
-    -- disturbed timing on a busy machine moves it little); a sweep over 1.3 is measured once
-    -- more, and fails only if the second sweep is over 1.3 too (a real n^2 is far above it)
+    -- disturbed timing on a busy machine moves it little); a sweep over 1.5 is measured once
+    -- more, and fails only if the second sweep is over 1.5 too. The limit catches the accidental
+    -- quadratic work this sweep is for (n^2 fits about 2.0); linear operations fit 1.1-1.35 on
+    -- GitHub's runners, where the 16k and 32k-row tables no longer fit in the caches
     let sweep (runs : Nat) : IO (Array (Nat × Float) × Float) := do
       let mut pts : Array (Nat × Float) := #[]
       for n in #[2000, 4000, 8000, 16000, 32000] do
@@ -818,13 +820,13 @@ def scaleSuite (o : Opts) : IO Outcome := do
       return (pts, sxy / sxx)
     let (pts, slope) ← do
       let (pts, slope) ← sweep 3
-      if slope ≤ 1.3 then pure (pts, slope)
+      if slope ≤ 1.5 then pure (pts, slope)
       else
         let (pts2, slope2) ← sweep 5
         pure (if slope2 < slope then (pts2, slope2) else (pts, slope))
     worst := max worst slope
-    IO.println s!"    {pad name 24} {" / ".intercalate (pts.toList.map fun (_, t) => fmt t 2)}  → n^{fmt slope 2}{if slope > 1.3 then "  SUPER-LINEAR" else ""}"
-    if slope > 1.3 then fails := fails.push s!"{name} grows like n^{fmt slope 2}"
+    IO.println s!"    {pad name 24} {" / ".intercalate (pts.toList.map fun (_, t) => fmt t 2)}  → n^{fmt slope 2}{if slope > 1.5 then "  SUPER-LINEAR" else ""}"
+    if slope > 1.5 then fails := fails.push s!"{name} grows like n^{fmt slope 2}"
   -- server rendering and hydration at 10k rows
   let big := rows (Array.range 10000)
   let bigH := big.toHtml'
