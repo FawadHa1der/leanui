@@ -10,8 +10,8 @@ diffing the current set against the previous one, as it does for the DOM.
 
 Effects are commands in the same buffer as DOM changes, so they work identically whether Lean
 runs in the page or on a server driving the page. The pixel and file commands (`putImage`,
-`download`, `readFile`, `decodeImage`) move bytes rather than strings, and work in the in-page
-wasm host only (`docs/PROTOCOL.md`, section 8).
+`download`, `readFile`, `decodeImage`, `grabFrame`) move bytes rather than strings, and work in
+the in-page wasm host only (`docs/PROTOCOL.md`, section 8).
 -/
 public section
 namespace LeanUI
@@ -79,8 +79,9 @@ inductive Cmd (Msg : Type) where
   /-- A file decoded by the browser's image decoders (PNG, JPEG, WebP, GIF's first frame, …) to
   RGBA pixels, or why it could not be. -/
   | decodeImage (file : Nat) (k : Except String Bitmap → Msg)
-  /-- The frame a `<video>` (the first match of `video`) shows now, as RGBA pixels with its time in
-  milliseconds (WebCodecs' `VideoFrame`), or why there is none (no video, no frame yet). -/
+  /-- The frame a `<video>` (the first match of `video`) shows now, as RGBA pixels, with the
+  frame's timestamp in milliseconds (WebCodecs' `VideoFrame.timestamp`: the same for as long as
+  the video shows the same frame), or why there is none (no video, no frame yet). -/
   | grabFrame (video : String) (k : Except String (Bitmap × Nat) → Msg)
   /-- A URL for a file the browser holds (an object URL), for a `<video>` or `<img>` to load it. -/
   | fileUrl (file : Nat) (k : String → Msg)

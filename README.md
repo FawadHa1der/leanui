@@ -184,11 +184,14 @@ Gaussian blur, unsharp mask, convolutions and edges, crop, rotation, resize, eig
 a soft brush, histogram, undo history, PNG encoding and decoding), compiled to wasm64. The
 browser decodes JPEGs and shows pixels: the canvas is filled straight from wasm memory
 (`Cmd.putImage`). Sliders preview on a downscaled copy; full-resolution work runs a slice of
-rows per animation frame. It is served as its own page, `/editor/`, on the site.
+rows per animation frame. It is served as its own page, `/editor/`, on the site. Its video lab,
+`/editor/video/` (`examples/Video.lean`), plays a video file and runs the same Lean filters on
+every frame (the frame comes from WebCodecs' `VideoFrame`), at the frame rates measured in the
+benchmarks.
 
 ```bash
-tools/build-app.sh EditorApp editor
-./.lake/build/bin/leanui serve dist        # http://127.0.0.1:8000/editor/
+tools/build-app.sh EditorApp editor && tools/build-app.sh VideoApp editor/video
+./.lake/build/bin/leanui serve dist        # http://127.0.0.1:8000/editor/ and /editor/video/
 ```
 
 Keys: B brush, E eraser, H hand, C crop (Enter applies), + − 0 1 zoom, [ ] brush size,
@@ -229,7 +232,7 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-editor-tests     # the photo editor: image operations, PNG, jobs, the program
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
-                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, depth
+                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
 ```

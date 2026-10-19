@@ -211,7 +211,7 @@ exactly `4 × w × h` bytes (RGBA, straight alpha, rows top to bottom). A `PUT_I
 be done (another size, no such canvas or no 2D context) is logged and skipped. The canvas keeps its own
 size (`width` and `height` attributes, from the view).
 
-Results with bytes (`FILE_READ`, `IMAGE_DECODE`) come back through a second callback,
+Results with bytes (`FILE_READ`, `IMAGE_DECODE`, `FRAME_GRAB`) come back through a second callback,
 `callbackBytes(cb, ok, payload, bytes)`. In the wasm host the runtime asks the module for a Lean
 `ByteArray` of the right size (`leanui_bytes_alloc`, `leanui_bytes_data`), writes the bytes into
 it and passes it to `leanui_callback_bytes`, which hands it to Lean: one copy, from the browser's
@@ -220,7 +220,11 @@ no bytes; that includes a result too large for the module's memory (`leanui_byte
 returns null rather than stopping the program). `IMAGE_DECODE` decodes with `createImageBitmap` (no premultiplication, no colour space
 conversion) and reads the pixels back from a 2D canvas, so it decodes whatever the browser
 decodes (PNG, JPEG, WebP, GIF's first frame, …); semi-transparent pixels may lose precision in
-the canvas's premultiplied storage.
+the canvas's premultiplied storage. `FRAME_GRAB` makes a `VideoFrame` of the video and copies it
+with `copyTo(…, { format: "RGBA" })` (one copy into a browser buffer, then the copy into wasm
+memory); its timestamp, not `currentTime`, names the frame, so two grabs of the same frame have
+the same `timeMs`. Where the conversion is missing it draws the frame on a 2D canvas instead.
+`FILE_URL` replies with a string and works in either host.
 
 The server-driven host carries no bytes: its buffers have no blobs (`PUT_IMAGE` and `DOWNLOAD`
 are skipped, with one console warning), and a result with bytes arrives as an ordinary callback

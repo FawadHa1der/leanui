@@ -541,6 +541,10 @@ in the same browser process on the same input.
 - **Memory:** 16 MB at load, 57 MB with a 12 MP image open, 1.26 GB after 50 brush strokes on it
   (the undo history's 1 GiB budget then holds 23 steps); wasm memory never shrinks.
 - **Download:** 288 KB with brotli (wasm 264 KB, glue 15 KB, runtime 9 KB).
+- **Video** (the [video lab](../examples/Video.lean), the same filters on every frame of a 30 fps
+  video): every filter keeps up at 640×360, except blur at 24 fps. At 1280×720 the colour filters
+  and edge detection keep up, emboss runs at 18 fps, and sharpen and blur at 7–8 fps. At 1920×1080
+  the copy alone keeps up and the colour filters reach 16–20 fps.
 
 ### Each operation: Lean (wasm) against plain JavaScript and the canvas
 
@@ -720,6 +724,54 @@ page 1.9 KB.
   decoding (`createImageBitmap`, off the main thread), reading the pixels back, copying them into
   wasm memory, and Lean's preview and first composite (not measured separately).
 
+### Video: the filters on every frame
+
+The [video lab](../examples/Video.lean) (`/editor/video/`) plays a video file in a `<video>`,
+which the browser decodes. On each animation frame it asks for the frame the video shows
+(`Cmd.grabFrame`: a WebCodecs `VideoFrame` copied into wasm memory as RGBA), runs one of the
+editor's filters on it in Lean, draws it (`Cmd.drawBitmap`) and waits for the next animation
+frame. A frame already filtered is not filtered again, and a filter slower than the video drops
+frames rather than queueing them. The number below is **frames filtered and drawn per second**.
+[`tests/browser/video.mjs`](../tests/browser/video.mjs) `--perf` makes each test video in the
+page: an animated canvas encoded by `VideoEncoder` (VP8, 4 s, exactly 30 fps, a keyframe a second)
+into a WebM file. It plays each video once on its own to see what the browser presents (first
+row). It then plays the video in the lab for 3 s per filter, and times each grab (the request to
+the reply, asynchronous) and the Lean side of each new frame (the bytes into wasm, the filter,
+the view and the `putImageData`, synchronous).
+
+Cloud VM, Chromium 141 (headless, software video decoding and canvas), 2026-10-19: *CI machine,
+to be re-measured on the reference Mac*.
+
+| filter | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 30 | 29.7 | 27.7 |
+| none (grab and draw) | 30 · 1.7 · 0.8 | 29 · 5.9 · 2.1 | 29 · 11.9 · 4.6 |
+| vivid (contrast, saturation) | 30 · 1.7 · 4.6 | 30 · 5.8 · 16.8 | 15.7 · 12.6 · 40.4 |
+| black and white | 30 · 1.8 · 5.0 | 30 · 5.5 · 16.6 | 17.0 · 12.2 · 38.3 |
+| invert (a lookup table) | 30 · 1.8 · 4.2 | 30 · 5.6 · 13.3 | 20.3 · 12.1 · 29.3 |
+| edge detect (Sobel) | 30 · 1.8 · 7.6 | 27.5 · 5.8 · 24.3 | 12.5 · 13.8 · 54.9 |
+| emboss (3×3) | 30 · 1.8 · 10.6 | 17.7 · 6.0 · 41.1 | 9.3 · 12.2 · 83.8 |
+| sharpen (unsharp mask, radius 2) | 29.5 · 1.7 · 26.9 | 8.2 · 6.0 · 104.7 | 3.5 · 13.2 · 260.4 |
+| blur (Gaussian, radius 4) | 24 · 1.6 · 34.3 | 7.3 · 5.5 · 126.9 | 2.8 · 12.3 · 304.7 |
+
+- **The frame rate follows the per-frame cost.** One frame costs a grab plus the Lean side, and
+  the loop waits for an animation frame between frames. So a frame costing 47 ms (emboss at
+  720p) takes three 16.7 ms animation frames, and the lab draws about 20 fps of a 30 fps video;
+  the measurement is 17.7.
+- **Moving the pixels is cheap.** Without a filter, a 1080p frame is grabbed in 12 ms (the
+  asynchronous `VideoFrame` conversion to RGBA), then handed to Lean and drawn in 4.6 ms (8 MB
+  copied into wasm memory, then `putImageData` from it).
+- **The filters cost what they cost in the editor** (the Lean side minus the copy, per pixel, at
+  720p and 1080p): 15–17 ns for a lookup table and a colour matrix, 24 ns for edges, 38–42 ns for
+  emboss, 110–145 ns for the unsharp mask and the blur. The neighbourhood filters are the gap, as
+  in the editor's previews.
+- **What would raise the rates**, none of it done: a box-filter blur, whose cost does not grow
+  with the radius; filtering at preview size, as the editor's blur preview does; grabbing the
+  next frame while the current one is filtered (this hides the grab); and filtering in a worker.
+  The worker is the largest change, because frames would then be filtered in parallel.
+
+Firefox and GitHub's runners: the `bench` label runs the same measurement (below).
+
 ### Reproducing (the editor)
 
 ```bash
@@ -731,10 +783,13 @@ node bench/editor/check-goldens.mjs     # the JavaScript port against the Lean g
 LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorBenchApp editor-bench-allocs
 LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorApp editor-allocs
 node tests/browser/editor-allocs.mjs http://127.0.0.1:5331/   # allocations per operation and event
+tools/build-app.sh VideoApp editor/video
+node tests/browser/video.mjs http://127.0.0.1:5331/editor/video/index.html chromium --perf --out video.json
 ```
 
-CI runs both (Chromium at 1, 4 and 12 MP; Firefox at 1 MP) on a pull request with the `bench`
-label and uploads the JSON as the `editor-bench` artifact; [`bench/editor/README.md`](../bench/editor/README.md)
+CI runs them (the operations in Chromium at 1, 4 and 12 MP and in Firefox at 1 MP; the editor and
+the video lab in both) on a pull request with the `bench` label and uploads the JSON as the
+`editor-bench` artifact; [`bench/editor/README.md`](../bench/editor/README.md)
 has the details and caveats.
 
 ## Method

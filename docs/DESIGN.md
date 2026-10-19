@@ -97,6 +97,8 @@ built against. It was first written on 2026-10-18 from the research in
   2026-10-19: added `Host.blobs` (byte arrays a buffer's commands refer to), `Instance.callbackBytes`,
   `Cmd.putImage`, `Cmd.download`, `Cmd.readFile`, `Cmd.decodeImage`, `Sub.keys`, payloads
   `files` and `pointer`, and `Handler.capturePointer` (`docs/PROTOCOL.md`, sections 4 and 8).
+  Then `Cmd.grabFrame` (a `<video>`'s current frame as RGBA, with its timestamp) and
+  `Cmd.fileUrl` (an object URL for a file), ops 53 and 54.
 - Browser globals: `LeanUI.start`, `LeanUI.connect`, `LeanUI.boot`, `LeanUI.__flush`.
 - The wasm exports (`runtime/leanui_wasm.c`): `leanui_boot(flags, flagsLen, selector,
   selectorLen, hydrate)`, `leanui_event(slot, payload, len)`, `leanui_callback(cb, ok, payload,
@@ -159,6 +161,7 @@ built against. It was first written on 2026-10-18 from the research in
 | `examples/Site.lean`, `examples/SiteServer.lean` | the LeanUI site (`leanui-site`) | `tests/browser/site.mjs` |
 | `examples/Pixels.lean` | the pixels lab: canvas, pointer, files, downloads, keys | `leanui-kit-tests`, `tests/browser/pixels.mjs` |
 | `examples/Editor.lean`, `examples/Editor/*.lean` | LeanUI Photo: image operations, PNG, layers, jobs, the editor | `leanui-editor-tests`, `tests/browser/editor.mjs` |
+| `examples/Video.lean` | the video lab: the editor's filters on every frame of a video | `leanui-editor-tests`, `tests/browser/video.mjs` |
 | `examples/Bench.lean`, `bench/*` | the benchmark app, the vanilla reference, the runner | `leanui-perf`, `tests/browser/{bench,selfbench,bench-smoke}.mjs` |
 | `toolchain/*`, `tools/*` | wasm64 archives, app builds, site data | |
 
