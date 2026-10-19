@@ -144,6 +144,67 @@ theorem usize_le3 (k : USize) (hk : k.toNat ≤ 3) : k ≤ 3 := by
     ByteArray :=
   put4 dst o ho (px src s hs 0) (px src s hs 1) (px src s hs 2) (px src s hs 3)
 
+/-! ## Whole-pixel access (inline C)
+
+A pixel is read and written as one little-endian word, `r ||| g <<< 8 ||| b <<< 16 ||| a <<< 24`.
+The Lean bodies below are the specification (what proofs see); compiled code uses the C
+expression of `extern c inline` instead, pasted at each call site, natively and in wasm (as
+`LeanUI.Patch` does for its buffer: no C file). The C reads or writes the four bytes with one
+exclusivity check per pixel instead of four, as one 32-bit access. That matters most in wasm64,
+where every memory access is bounds-checked: a pixel loop then does a quarter of the loads and
+stores. The store is a `uint32_t` store (of an unaligned type, little-endian on any host), not four
+byte stores: a byte store may alias anything, so after it the C compiler reloads every array's size
+and reference count; after a `uint32_t` store it can keep the sizes (`size_t`) in registers. -/
+
+/-- The pixel at byte `i` as a little-endian word (one unaligned 32-bit load: a `memcpy` of 4
+bytes). -/
+@[extern c inline "({ uint32_t v_; __builtin_memcpy(&v_, lean_sarray_cptr(#1) + #2, 4); \
+  __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); })"]
+def get32 (a : @& ByteArray) (i : USize) (h : InPx a i) : UInt32 :=
+  px32 a i h 0 ||| (px32 a i h 1 <<< 8) ||| (px32 a i h 2 <<< 16) ||| (px32 a i h 3 <<< 24)
+
+/-- Write the pixel at byte `i` from a little-endian word (in place when `a` is unique). -/
+@[extern c inline "({ lean_object *a_ = #1; size_t i_ = #2; uint32_t v_ = #3; \
+  if (LEAN_UNLIKELY(!lean_is_exclusive(a_))) a_ = lean_copy_byte_array(a_); \
+  typedef uint32_t __attribute__((aligned(1))) u32u_; \
+  *(u32u_ *)(lean_sarray_cptr(a_) + i_) = \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); a_; })"]
+def set32 (a : ByteArray) (i : USize) (v : UInt32) (h : InPx a i) : ByteArray :=
+  put4w a i h v (v >>> 8) (v >>> 16) (v >>> 24)
+
+theorem size_set32 (a : ByteArray) (i : USize) (v : UInt32) (h : InPx a i) : (set32 a i v h).size = a.size := by
+  simp [set32, put4w, put4, setPx, size_uset]
+
+theorem usize_set32 (a : ByteArray) (i : USize) (v : UInt32) (h : InPx a i) : (set32 a i v h).usize = a.usize := by
+  simp only [ByteArray.usize, size_set32]
+
+theorem InPx.set32 {a : ByteArray} {i : USize} (j : USize) (v : UInt32) (hj : InPx a j) (h : InPx a i) :
+    InPx (Editor.set32 a j v hj) i := by
+  unfold InPx at *; rw [usize_set32]; exact h
+
+/-! ### Two channels per multiplication
+
+Red and blue (`rbOf`), or green and alpha (`gaOf`), of a pixel word sit 16 bits apart; `spread`
+moves the two lanes to the halves of a 64-bit word, where one multiplication by a weight of at most
+65536 handles both without a carry between them: a sum of such products with weights totalling
+65536 stays below `255 · 65536 < 2²⁴` per lane. Adding two `rbOf` values before spreading is safe
+too (each lane at most 510). -/
+
+/-- Red and blue of a pixel word, 16 bits apart. -/
+@[inline] def rbOf (v : UInt32) : UInt32 := v &&& 0x00ff00ff
+/-- Green and alpha of a pixel word, 16 bits apart. -/
+@[inline] def gaOf (v : UInt32) : UInt32 := (v >>> 8) &&& 0x00ff00ff
+/-- Two 16-bit lanes spread to the two halves of a 64-bit word. -/
+@[inline] def spread (x : UInt32) : UInt64 := (x &&& 0xffff).toUInt64 ||| ((x >>> 16).toUInt64 <<< 32)
+@[inline] def lane0 (v : UInt64) : UInt32 := (v &&& 0xffffffff).toUInt32
+@[inline] def lane1 (v : UInt64) : UInt32 := (v >>> 32).toUInt32
+
+/-- The pixel word of lane sums (`rb`: red and blue, `ga`: green and alpha) with weights
+totalling 65536, each rounded to 8 bits. -/
+@[inline] def roundWord (rb ga : UInt64) : UInt32 :=
+  ((lane0 rb + 32768) >>> 16) ||| (((lane0 ga + 32768) >>> 16) <<< 8) ||| (((lane1 rb + 32768) >>> 16) <<< 16) |||
+    (((lane1 ga + 32768) >>> 16) <<< 24)
+
 theorem byte_lt {t : ByteArray} (ht : 256 ≤ t.size) (v : UInt8) : v.toUSize.toNat < t.size := by
   have := v.toNat_lt
   simp only [UInt8.toNat_toUSize] at *
@@ -201,6 +262,37 @@ theorem RowIn.uset {a : ByteArray} {base len : USize} (j : USize) (v : UInt8) (h
     (h : RowIn a base len) : RowIn (a.uset j v hj) base len := by
   unfold RowIn at *; rw [usize_uset]; exact h
 
+theorem RowIn.set32 {a : ByteArray} {base len : USize} (j : USize) (v : UInt32) (hj : InPx a j)
+    (h : RowIn a base len) : RowIn (Editor.set32 a j v hj) base len := by
+  unfold RowIn at *; rw [usize_set32]; exact h
+
+/-- The pixel at byte `i` of the row, for `i < len - 3` (`3 ≤ len`): a loop over the row's pixels
+needs one comparison per pixel. -/
+theorem RowIn.px {a : ByteArray} {base len i : USize} (h : RowIn a base len) (h3 : 3 ≤ len) (hi : i < len - 3) :
+    InPx a (base + i) := by
+  obtain ⟨h1, h2⟩ := h
+  have h1' := USize.le_iff_toNat_le.mp h1
+  have h2' := USize.le_iff_toNat_le.mp h2
+  have h3' := USize.le_iff_toNat_le.mp h3
+  have hi' := USize.lt_iff_toNat_lt.mp hi
+  have hb := base.toNat_lt_size
+  have hl := len.toNat_lt_size
+  have hx := i.toNat_lt_size
+  have e3 : (3 : USize).toNat = 3 := by rcases USize.size_eq with hs | hs <;> simp [USize.toNat, hs]
+  rw [e3] at h3'
+  refine ⟨USize.lt_iff_toNat_lt.mpr ?_, USize.le_iff_toNat_le.mpr ?_⟩ <;>
+  simp only [USize.toNat_add, USize.toNat_sub, ByteArray.usize, USize.toNat_ofNat', Nat.toUSize, e3] at * <;>
+  (rcases USize.size_eq with hs | hs <;> simp only [USize.size, hs] at * <;> omega)
+
+theorem RowIn.range {a : ByteArray} {n : USize} (h : RowIn a 0 n) : InRange a n := by
+  obtain ⟨_, h2⟩ := h
+  have h2' := USize.le_iff_toNat_le.mp h2
+  have hn := n.toNat_lt_size
+  have hm := Nat.mod_le a.size USize.size
+  unfold InRange
+  simp only [USize.zero_add, ByteArray.usize, USize.toNat_ofNat', Nat.toUSize] at h2'
+  rcases USize.size_eq with hs | hs <;> simp only [USize.size, hs] at * <;> omega
+
 /-- Byte `i` of the row at `base`. -/
 @[inline] def rowGet (a : ByteArray) (base len : USize) (h : RowIn a base len) (i : USize) (hi : i < len) : UInt8 :=
   a.uget (base + i) (h.lt hi)
@@ -229,12 +321,19 @@ theorem WRange.lt {a : Array UInt32} {n i : USize} (hn : WRange a n) (hi : i < n
 @[inline] def div255 (x : UInt32) : UInt32 := let t := x + 128; (t + (t >>> 8)) >>> 8
 
 /-- `0.5`. A decimal literal inside a loop compiles to a call of `Float.ofScientific` (with `Nat`
-arguments) on every iteration; a top-level constant is a global read. Integer literals are fine. -/
+arguments) on every iteration; a top-level constant is a global read. An integer literal is
+`Float.ofNat` of a `Nat`, which the compiler usually hoists, but not always (when the same `Nat`
+also serves another literal, it can end up a loop variable, and `Float.ofNat` goes through
+`Float.ofScientific` on every iteration): the loops use constants for those too. -/
 def fHalf : Float := 0.5
+
+/-- `0` and `255` as constants (see `fHalf`). -/
+def fZero : Float := 0
+def f255 : Float := 255
 
 /-- A float clamped to 0..255 and rounded to the nearest byte. -/
 @[inline] def toByte (v : Float) : UInt8 :=
-  if v ≤ 0 then 0 else if v ≥ 255 then 255 else (v + fHalf).toUInt8
+  if v ≤ fZero then 0 else if v ≥ f255 then 255 else (v + fHalf).toUInt8
 
 /-! ## Filling and copying buffers -/
 

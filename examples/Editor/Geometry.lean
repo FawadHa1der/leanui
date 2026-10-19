@@ -20,76 +20,128 @@ namespace Editor
 
 /-! ## Crop -/
 
-private partial def cropRows (src : @& ByteArray) (dst : ByteArray) (off stride rowBytes : Nat) (n : Nat) : ByteArray :=
-  if n == 0 then dst
-  else cropRows src (src.copySlice off dst dst.size rowBytes) (off + stride) stride rowBytes (n - 1)
+private partial def cropLoop (src : @& ByteArray) (dst : ByteArray) (off stride rowBytes y y1 : Nat) : ByteArray :=
+  if y < y1 then
+    cropLoop src (src.copySlice (off + y * stride) dst (y * rowBytes) rowBytes) off stride rowBytes (y + 1) y1
+  else dst
+
+/-- Rows `y0 .. y1 - 1` of `dst` = the same rows of `src` cropped to `r` (clamped to `src`; `dst`
+has the clamped rectangle's size, else it is returned unchanged). One `memcpy` per row. -/
+def cropRows (r : Rect) (src dst : Image) (y0 y1 : Nat) : Image :=
+  let r := r.clamp src.width src.height
+  let y1 := min y1 dst.height
+  if y1 ≤ y0 || r.isEmpty || dst.width != r.w || dst.height != r.h then dst
+  else
+    let ⟨w, h, d⟩ := dst
+    ⟨w, h, cropLoop src.data d (4 * (r.y * src.width + r.x)) (4 * src.width) (4 * r.w) y0 y1⟩
 
 /-- The part of `img` inside `r` (clamped to the image; empty when they do not overlap). -/
 def crop (img : Image) (r : Rect) : Image :=
   let r := r.clamp img.width img.height
   if r.isEmpty then ⟨0, 0, .empty⟩
-  else
-    let d := cropRows img.data (ByteArray.emptyWithCapacity (4 * r.w * r.h)) (4 * (r.y * img.width + r.x))
-      (4 * img.width) (4 * r.w) r.h
-    ⟨r.w, r.h, d⟩
+  -- all rows in order: each `memcpy` appends to the empty buffer (no zero fill first)
+  else cropRows r img ⟨r.w, r.h, ByteArray.emptyWithCapacity (4 * r.w * r.h)⟩ 0 r.h
 
-/-! ## Rotations and flips -/
+/-! ## Rotations and flips
 
-/-- Fill `dst` (`w × h` pixels) in order from `src`: pixel `(x, y)` of `dst` comes from source
-byte offset `s0 + y · dr + x · ds` (wrapping arithmetic, so steps may be negative). `o` is the
-destination offset, `s` the source offset of the current pixel, `rs` of the current row's start. -/
-partial def walk (src : @& ByteArray) (dst : ByteArray) (o s rs ds dr x y w h : USize) : ByteArray :=
-  if x < w then
+Each has a row variant (`…Rows src dst y0 y1`: output rows `y0 .. y1 - 1` of a `dst` of the right
+size, allocated by the caller, so that the editor can spread the work over frames); the
+whole-image function is the row variant over all rows of a fresh image. -/
+
+/-- One row of `walk`: bytes `i .. rb - 1` of the destination row at `o` from source offsets
+`s, s + ds, …` (wrapping arithmetic, so the step may be negative). The row is checked once
+(`RowIn`); each source pixel is checked (the source does not change, so its size stays in a
+register). A pixel is copied as one word. -/
+partial def walkRow (src : @& ByteArray) (dst : ByteArray) (o rb : USize) (ho : RowIn dst o rb) (h3 : 3 ≤ rb)
+    (i s ds : USize) : ByteArray :=
+  if hi : i < rb - 3 then
     if hs : InPx src s then
-      if ho : InPx dst o then walk src (copyPx src s hs dst o ho) (o + 4) (s + ds) rs ds dr (x + 1) y w h
-      else dst
+      walkRow src (set32 dst (o + i) (get32 src s hs) (ho.px h3 hi)) o rb (ho.set32 _ _ _) h3 (i + 4) (s + ds) ds
     else dst
-  else if y + 1 < h then walk src dst o (rs + dr) (rs + dr) ds dr 0 (y + 1) w h
   else dst
 
-/-- A `w × h` image filled from `img` by `walk` (`s0`, `ds`, `dr` in bytes, as `Int`). -/
-def walkImage (img : Image) (w h : Nat) (s0 ds dr : Int) : Image :=
-  if w == 0 || h == 0 then ⟨w, h, .empty⟩
+/-- Fill rows `y .. h - 1` of `dst` (`rb` bytes each, the current one at `o`) from `src`: pixel
+`(x, y)` of `dst` comes from source byte offset `s0 + y · dr + x · ds`; `rs` is the source offset
+of the current row's first pixel. -/
+partial def walk (src : @& ByteArray) (dst : ByteArray) (o rs ds dr rb y h : USize) : ByteArray :=
+  if y < h then
+    if ho : RowIn dst o rb ∧ 3 ≤ rb then
+      walk src (walkRow src dst o rb ho.1 ho.2 0 rs ds) (o + rb) (rs + dr) ds dr rb (y + 1) h
+    else dst
+  else dst
+
+/-- Rows `y0 .. y1 - 1` of `dst` filled from `src` by `walk` (`s0`, `ds`, `dr` in bytes, as `Int`). -/
+def walkRows (src dst : Image) (s0 ds dr : Int) (y0 y1 : Nat) : Image :=
+  let y1 := min y1 dst.height
+  if y1 ≤ y0 || dst.width == 0 then dst
   else
     let u (v : Int) : USize := if v < 0 then 0 - (-v).toNat.toUSize else v.toNat.toUSize
-    let dst := (Image.blank w h).data
-    ⟨w, h, walk img.data dst 0 (u s0) (u s0) (u ds) (u dr) 0 0 w.toUSize h.toUSize⟩
+    let rs := u s0 + y0.toUSize * u dr
+    let ⟨w, h, d⟩ := dst
+    ⟨w, h, walk src.data d (4 * w * y0).toUSize rs (u ds) (u dr) (4 * w).toUSize y0.toUSize y1.toUSize⟩
+
+/-- Rows `y0 .. y1 - 1` of `src` rotated a quarter turn clockwise, into `dst` (`src.height` wide,
+`src.width` high). -/
+def rotate90cwRows (src dst : Image) (y0 y1 : Nat) : Image :=
+  if dst.width != src.height || dst.height != src.width then dst
+  else
+    let w : Int := src.width
+    let h : Int := src.height
+    -- destination (x, y) = source (y, h - 1 - x)
+    walkRows src dst (4 * (h - 1) * w) (-4 * w) 4 y0 y1
 
 /-- Rotated a quarter turn clockwise (`width` and `height` swap). -/
-def rotate90cw (img : Image) : Image :=
-  let w : Int := img.width
-  let h : Int := img.height
-  -- destination (x, y) = source (y, h - 1 - x)
-  walkImage img img.height img.width (4 * (h - 1) * w) (-4 * w) 4
+def rotate90cw (img : Image) : Image := rotate90cwRows img (Image.blank img.height img.width) 0 img.width
+
+/-- Rows `y0 .. y1 - 1` of `src` rotated a quarter turn counter-clockwise, into `dst`
+(`src.height` wide, `src.width` high). -/
+def rotate90ccwRows (src dst : Image) (y0 y1 : Nat) : Image :=
+  if dst.width != src.height || dst.height != src.width then dst
+  else
+    let w : Int := src.width
+    -- destination (x, y) = source (w - 1 - y, x)
+    walkRows src dst (4 * (w - 1)) (4 * w) (-4) y0 y1
 
 /-- Rotated a quarter turn counter-clockwise. -/
-def rotate90ccw (img : Image) : Image :=
-  let w : Int := img.width
-  -- destination (x, y) = source (w - 1 - y, x)
-  walkImage img img.height img.width (4 * (w - 1)) (4 * w) (-4)
+def rotate90ccw (img : Image) : Image := rotate90ccwRows img (Image.blank img.height img.width) 0 img.width
+
+/-- Rows `y0 .. y1 - 1` of `src` rotated half a turn, into `dst` (same size). -/
+def rotate180Rows (src dst : Image) (y0 y1 : Nat) : Image :=
+  if dst.width != src.width || dst.height != src.height then dst
+  else
+    let w : Int := src.width
+    let h : Int := src.height
+    walkRows src dst (4 * (h * w - 1)) (-4) (-4 * w) y0 y1
 
 /-- Rotated half a turn. -/
-def rotate180 (img : Image) : Image :=
-  let w : Int := img.width
-  let h : Int := img.height
-  walkImage img img.width img.height (4 * (h * w - 1)) (-4) (-4 * w)
+def rotate180 (img : Image) : Image := rotate180Rows img (Image.blank img.width img.height) 0 img.height
+
+/-- Rows `y0 .. y1 - 1` of `src` mirrored left to right, into `dst` (same size). -/
+def flipHRows (src dst : Image) (y0 y1 : Nat) : Image :=
+  if dst.width != src.width || dst.height != src.height then dst
+  else
+    let w : Int := src.width
+    walkRows src dst (4 * (w - 1)) (-4) (4 * w) y0 y1
 
 /-- Mirrored left to right. -/
-def flipH (img : Image) : Image :=
-  let w : Int := img.width
-  walkImage img img.width img.height (4 * (w - 1)) (-4) (4 * w)
+def flipH (img : Image) : Image := flipHRows img (Image.blank img.width img.height) 0 img.height
 
-private partial def flipVRows (src : @& ByteArray) (dst : ByteArray) (off stride : Nat) (n : Nat) : ByteArray :=
-  if n == 0 then dst
-  else flipVRows src (src.copySlice off dst dst.size stride) (off - stride) stride (n - 1)
+private partial def flipVLoop (src : @& ByteArray) (dst : ByteArray) (y y1 h s : Nat) : ByteArray :=
+  if y < y1 then flipVLoop src (src.copySlice ((h - 1 - y) * s) dst (y * s) s) (y + 1) y1 h s else dst
 
-/-- Mirrored top to bottom (one `memcpy` per row). -/
-def flipV (img : Image) : Image :=
-  if img.width == 0 || img.height == 0 then img.copy
+/-- Rows `y0 .. y1 - 1` of `src` mirrored top to bottom, into `dst` (same size): one `memcpy` per
+row. -/
+def flipVRows (src dst : Image) (y0 y1 : Nat) : Image :=
+  let y1 := min y1 dst.height
+  if y1 ≤ y0 || dst.width != src.width || dst.height != src.height then dst
   else
-    let s := 4 * img.width
-    ⟨img.width, img.height,
-      flipVRows img.data (ByteArray.emptyWithCapacity (s * img.height)) (s * (img.height - 1)) s img.height⟩
+    let ⟨w, h, d⟩ := dst
+    ⟨w, h, flipVLoop src.data d y0 y1 h (4 * w)⟩
+
+/-- Mirrored top to bottom. -/
+def flipV (img : Image) : Image :=
+  -- all rows in order: each `memcpy` appends to the empty buffer (no zero fill first)
+  flipVRows img ⟨img.width, img.height, ByteArray.emptyWithCapacity (4 * img.width * img.height)⟩ 0 img.height
 
 /-! ## Bilinear resize -/
 
@@ -110,27 +162,22 @@ def samplePositions (sn dn scale : Nat) : Array UInt32 := Id.run do
 /-- The four neighbours of a bilinear sample are pixels of `d`. -/
 abbrev In4 (d : ByteArray) (p00 p01 p10 p11 : USize) : Prop := InPx d p00 ∧ InPx d p01 ∧ InPx d p10 ∧ InPx d p11
 
-/-- Bilinear blend of channel `c` from four pixels with weights summing to 65536 (straight). -/
-@[inline] def bilin (src : ByteArray) (p00 p01 p10 p11 : USize) (h : In4 src p00 p01 p10 p11) (w00 w01 w10 w11 : UInt32)
-    (c : USize) (hc : c ≤ 3 := by exact usize_le3 _ (by simp)) : UInt32 :=
-  (w00 * px32 src p00 h.1 c hc + w01 * px32 src p01 h.2.1 c hc + w10 * px32 src p10 h.2.2.1 c hc +
-    w11 * px32 src p11 h.2.2.2 c hc + 32768) >>> 16
+/-- Bilinear blend of the colour channel at bit `s`, premultiplied by the alphas `a..`; `sa` is
+the weighted alpha sum (> 0). -/
+@[inline] def chanAt (v s : UInt32) : UInt64 := ((v >>> s) &&& 255).toUInt64
 
-/-- Bilinear blend of colour channel `c`, premultiplied by the alphas `a..`; `sa` is the weighted
-alpha sum (> 0). -/
-@[inline] def bilinPremul (src : ByteArray) (p00 p01 p10 p11 : USize) (h : In4 src p00 p01 p10 p11)
-    (w00 w01 w10 w11 : UInt64) (a00 a01 a10 a11 sa : UInt64) (c : USize)
-    (hc : c ≤ 3 := by exact usize_le3 _ (by simp)) : UInt32 :=
-  let s := w00 * a00 * (px32 src p00 h.1 c hc).toUInt64 + w01 * a01 * (px32 src p01 h.2.1 c hc).toUInt64 +
-    w10 * a10 * (px32 src p10 h.2.2.1 c hc).toUInt64 + w11 * a11 * (px32 src p11 h.2.2.2 c hc).toUInt64
-  let v := (s + sa / 2) / sa
+@[inline] def bilinPremul (v00 v01 v10 v11 : UInt32) (w00 w01 w10 w11 a00 a01 a10 a11 sa : UInt64) (s : UInt32) :
+    UInt32 :=
+  let t := w00 * a00 * chanAt v00 s + w01 * a01 * chanAt v01 s + w10 * a10 * chanAt v10 s + w11 * a11 * chanAt v11 s
+  let v := (t + sa / 2) / sa
   if v > 255 then 255 else v.toUInt32
 
-/-- Output pixels `x .. w - 1` of one row: source rows at byte offsets `r0`, `r1`, vertical
-fraction `fy`; `cols` from `samplePositions`. -/
-partial def resizeRow (src : @& ByteArray) (cols : @& Array UInt32) (dst : ByteArray) (o r0 r1 : USize) (fy : UInt32)
-    (x w : USize) : ByteArray :=
-  if x < w then
+/-- Output pixels `x ..` of the row at `o` (`len` bytes, byte `i = 4 x` of it next): source rows at
+byte offsets `r0`, `r1`, vertical fraction `fy`; `cols` from `samplePositions`. Each neighbour is
+read as one word; red and blue, green and alpha are blended two at a time. -/
+partial def resizeRow (src : @& ByteArray) (cols : @& Array UInt32) (dst : ByteArray) (o len : USize)
+    (ho : RowIn dst o len) (h3 : 3 ≤ len) (r0 r1 : USize) (fy : UInt32) (x i : USize) : ByteArray :=
+  if hi : i < len - 3 then
     let x0 := (rdW cols (3 * x)).toUSize
     let x1 := (rdW cols (3 * x + 1)).toUSize
     let fx := rdW cols (3 * x + 2)
@@ -138,41 +185,34 @@ partial def resizeRow (src : @& ByteArray) (cols : @& Array UInt32) (dst : ByteA
     let p01 := r0 + x1
     let p10 := r1 + x0
     let p11 := r1 + x1
-    let w00 := (256 - fx) * (256 - fy)
-    let w01 := fx * (256 - fy)
-    let w10 := (256 - fx) * fy
-    let w11 := fx * fy
     if h : In4 src p00 p01 p10 p11 then
-      if ho : InPx dst o then
-        let a00 := px32 src p00 h.1 3
-        let a01 := px32 src p01 h.2.1 3
-        let a10 := px32 src p10 h.2.2.1 3
-        let a11 := px32 src p11 h.2.2.2 3
-        let dst :=
-          if a00 &&& a01 &&& a10 &&& a11 == 255 then
-            put4w dst o ho (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 0) (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 1)
-              (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 2) 255
+      let v00 := get32 src p00 h.1
+      let v01 := get32 src p01 h.2.1
+      let v10 := get32 src p10 h.2.2.1
+      let v11 := get32 src p11 h.2.2.2
+      let w00 := ((256 - fx) * (256 - fy)).toUInt64
+      let w01 := (fx * (256 - fy)).toUInt64
+      let w10 := ((256 - fx) * fy).toUInt64
+      let w11 := (fx * fy).toUInt64
+      let rb := w00 * spread (rbOf v00) + w01 * spread (rbOf v01) + w10 * spread (rbOf v10) +
+        w11 * spread (rbOf v11)
+      let ga := w00 * spread (gaOf v00) + w01 * spread (gaOf v01) + w10 * spread (gaOf v10) +
+        w11 * spread (gaOf v11)
+      let straight := roundWord rb ga
+      let out :=
+        if (v00 &&& v01 &&& v10 &&& v11) >>> 24 == 255 then straight
+        else
+          let a00 := (v00 >>> 24).toUInt64
+          let a01 := (v01 >>> 24).toUInt64
+          let a10 := (v10 >>> 24).toUInt64
+          let a11 := (v11 >>> 24).toUInt64
+          let sa := w00 * a00 + w01 * a01 + w10 * a10 + w11 * a11
+          if sa == 0 then straight
           else
-            let sa := w00.toUInt64 * a00.toUInt64 + w01.toUInt64 * a01.toUInt64 + w10.toUInt64 * a10.toUInt64 +
-              w11.toUInt64 * a11.toUInt64
-            let alpha := bilin src p00 p01 p10 p11 h w00 w01 w10 w11 3
-            if sa == 0 then
-              put4w dst o ho (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 0) (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 1)
-                (bilin src p00 p01 p10 p11 h w00 w01 w10 w11 2) alpha
-            else
-              let W00 := w00.toUInt64
-              let W01 := w01.toUInt64
-              let W10 := w10.toUInt64
-              let W11 := w11.toUInt64
-              let A00 := a00.toUInt64
-              let A01 := a01.toUInt64
-              let A10 := a10.toUInt64
-              let A11 := a11.toUInt64
-              put4w dst o ho (bilinPremul src p00 p01 p10 p11 h W00 W01 W10 W11 A00 A01 A10 A11 sa 0)
-                (bilinPremul src p00 p01 p10 p11 h W00 W01 W10 W11 A00 A01 A10 A11 sa 1)
-                (bilinPremul src p00 p01 p10 p11 h W00 W01 W10 W11 A00 A01 A10 A11 sa 2) alpha
-        resizeRow src cols dst (o + 4) r0 r1 fy (x + 1) w
-      else dst
+            bilinPremul v00 v01 v10 v11 w00 w01 w10 w11 a00 a01 a10 a11 sa 0 |||
+              (bilinPremul v00 v01 v10 v11 w00 w01 w10 w11 a00 a01 a10 a11 sa 8 <<< 8) |||
+              (bilinPremul v00 v01 v10 v11 w00 w01 w10 w11 a00 a01 a10 a11 sa 16 <<< 16) ||| (straight &&& 0xff000000)
+      resizeRow src cols (set32 dst (o + i) out (ho.px h3 hi)) o len (ho.set32 _ _ _) h3 r0 r1 fy (x + 1) (i + 4)
     else dst
   else dst
 
@@ -182,7 +222,10 @@ partial def resizeRowsLoop (src : @& ByteArray) (cols rows : @& Array UInt32) (d
     let r0 := (rdW rows (3 * y)).toUSize
     let r1 := (rdW rows (3 * y + 1)).toUSize
     let fy := rdW rows (3 * y + 2)
-    resizeRowsLoop src cols rows (resizeRow src cols dst (4 * w * y) r0 r1 fy 0 w) (y + 1) y1 w
+    let o := 4 * w * y
+    if ho : RowIn dst o (4 * w) ∧ 3 ≤ 4 * w then
+      resizeRowsLoop src cols rows (resizeRow src cols dst o (4 * w) ho.1 ho.2 r0 r1 fy 0 0) (y + 1) y1 w
+    else dst
   else dst
 
 /-- Rows `y0 .. y1 - 1` of `dst` = `src` resized (bilinear) to `dst`'s size. -/
@@ -214,10 +257,11 @@ partial def boxBlock (src : @& ByteArray) (dst : ByteArray) (o stride rs cx ce s
     (sa sr sg sb tr tg tb : UInt64) : ByteArray :=
   if s < rs + ce then
     if hs : InPx src s then
-      let a := (px src s hs 3).toUInt64
-      let r := (px src s hs 0).toUInt64
-      let g := (px src s hs 1).toUInt64
-      let b := (px src s hs 2).toUInt64
+      let v := get32 src s hs
+      let a := (v >>> 24).toUInt64
+      let r := (v &&& 255).toUInt64
+      let g := ((v >>> 8) &&& 255).toUInt64
+      let b := ((v >>> 16) &&& 255).toUInt64
       boxBlock src dst o stride rs cx ce (s + 4) rEnd n (sa + a) (sr + a * r) (sg + a * g) (sb + a * b)
         (tr + r) (tg + g) (tb + b)
     else dst
@@ -225,12 +269,14 @@ partial def boxBlock (src : @& ByteArray) (dst : ByteArray) (o stride rs cx ce s
     boxBlock src dst o stride (rs + stride) cx ce (rs + stride + cx) rEnd n sa sr sg sb tr tg tb
   else if ho : InPx dst o then
     let half := n / 2
-    let alpha := ((sa + half) / n).toUInt8
+    let alpha := ((sa + half) / n).toUInt32 <<< 24
     if sa == 0 then
-      put4 dst o ho ((tr + half) / n).toUInt8 ((tg + half) / n).toUInt8 ((tb + half) / n).toUInt8 alpha
+      set32 dst o (((tr + half) / n).toUInt32 ||| (((tg + half) / n).toUInt32 <<< 8) |||
+        (((tb + half) / n).toUInt32 <<< 16) ||| alpha) ho
     else
       let ha := sa / 2
-      put4 dst o ho ((sr + ha) / sa).toUInt8 ((sg + ha) / sa).toUInt8 ((sb + ha) / sa).toUInt8 alpha
+      set32 dst o (((sr + ha) / sa).toUInt32 ||| (((sg + ha) / sa).toUInt32 <<< 8) |||
+        (((sb + ha) / sa).toUInt32 <<< 16) ||| alpha) ho
   else dst
 
 partial def boxRow (src : @& ByteArray) (cols : @& Array UInt32) (dst : ByteArray) (o stride r0 r1 x w : USize) :

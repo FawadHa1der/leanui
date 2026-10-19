@@ -14,6 +14,10 @@ chunk holding a zlib stream:
   matching). Below level 6, the positions inside a match longer than `4 · level` bytes are not
   hashed, as zlib's fast levels do, so long runs cost one step instead of one per byte.
 
+`Encoder` does the same in steps of a few rows (`Encoder.start`, `step`, `finish`), each step
+ending a deflate block of its own, so that a large image can be encoded across animation frames;
+`encode` is one step over all rows.
+
 **Decoding** (`decode bytes`) reads colour types 0 (gray), 2 (RGB), 3 (palette), 4 (gray + alpha)
 and 6 (RGBA) at bit depth 8, non-interlaced, with `tRNS` transparency, into RGBA8. Chunk CRCs and
 the zlib Adler-32 are checked. The inflater handles stored, fixed and dynamic Huffman blocks; its
@@ -24,7 +28,11 @@ Other bit depths and interlaced images are reported as errors.
 public section
 namespace Editor.Png
 
-/-! ## Checksums -/
+/-! ## Checksums
+
+Both take four bytes per step (one 32-bit load) while they last: the CRC-32 through four tables
+("slicing by 4"), the Adler-32 through the four bytes' weighted sum. Both can be resumed from the
+value they return (`crcFrom`, `adlerFrom`), for encoding a stream in pieces. -/
 
 /-- The CRC-32 table (polynomial `0xEDB88320`). -/
 def crcTable : Array UInt32 := (Array.range 256).map fun (n : Nat) => Id.run do
@@ -32,37 +40,92 @@ def crcTable : Array UInt32 := (Array.range 256).map fun (n : Nat) => Id.run do
   for _ in [0:8] do c := if c &&& 1 != 0 then (0xEDB88320 : UInt32) ^^^ (c >>> 1) else c >>> 1
   return c
 
+/-- Four tables, entry `256 k + n`: the CRC register after byte `n` followed by `k` zero bytes
+(from register 0). Table 0 is `crcTable`. -/
+def crcTables : Array UInt32 := Id.run do
+  let mut all := crcTable
+  let mut prev := crcTable
+  for _ in [0:3] do
+    prev := prev.map fun (c : UInt32) => (c >>> 8) ^^^ crcTable[(c &&& 255).toNat]!
+    all := all ++ prev
+  return all
+
 partial def crcLoop (t : @& Array UInt32) (d : @& ByteArray) (n : USize) (hn : InRange d n) (i : USize) (c : UInt32) :
     UInt32 :=
   if hi : i < n then crcLoop t d n hn (i + 1) (rdW t ((c ^^^ (d.uget i (hn.lt hi)).toUInt32) &&& 0xff).toUSize ^^^ (c >>> 8))
   else c
 
+/-- The CRC register over bytes `i .. n - 1`, four at a time (the first byte in the low bits of
+the word), then the last few one by one. -/
+partial def crcWords (t : @& Array UInt32) (d : @& ByteArray) (n : USize) (hn : RowIn d 0 n) (h3 : 3 ≤ n) (i : USize)
+    (c : UInt32) : UInt32 :=
+  if hi : i < n - 3 then
+    let x : UInt32 := c ^^^ get32 d ((0 : USize) + i) (hn.px h3 hi)
+    let k0 : USize := (x &&& 255).toUSize
+    let k1 : USize := ((x >>> (8 : UInt32)) &&& 255).toUSize
+    let k2 : USize := ((x >>> (16 : UInt32)) &&& 255).toUSize
+    let k3 : USize := (x >>> (24 : UInt32)).toUSize
+    crcWords t d n hn h3 (i + 4) (rdW t (768 + k0) ^^^ rdW t (512 + k1) ^^^ rdW t (256 + k2) ^^^ rdW t k3)
+  else crcLoop t d n hn.range i c
+
+/-- The CRC register `c` (initially `0xFFFFFFFF`) continued over bytes `start .. stop - 1` of `d`. -/
+def crcFrom (d : @& ByteArray) (start stop : Nat) (c : UInt32) : UInt32 :=
+  let n := (min stop d.size).toUSize
+  if h : RowIn d 0 n ∧ 3 ≤ n then crcWords crcTables d n h.1 h.2 start.toUSize c
+  else
+    let ⟨n, hn⟩ := rangeOf d n
+    crcLoop crcTables d n hn start.toUSize c
+
 /-- CRC-32 of bytes `start .. stop - 1` of `d`. -/
 def crc32 (d : ByteArray) (start stop : Nat) : UInt32 :=
-  let ⟨n, hn⟩ := rangeOf d (min stop d.size).toUSize
-  crcLoop crcTable d n hn start.toUSize 0xFFFFFFFF ^^^ 0xFFFFFFFF
+  crcFrom d start stop 0xFFFFFFFF ^^^ 0xFFFFFFFF
 
-/-- The Adler-32 sums over bytes `i .. e - 1`, reduced modulo 65521 at the end only (`e - i` is at
-most 5552, the longest run whose sums cannot overflow 32 bits), packed as `b <<< 32 ||| a`. -/
-partial def adlerBlock (d : @& ByteArray) (e : USize) (he : InRange d e) (i : USize) (a b : UInt64) : UInt64 :=
+/-- The Adler-32 sums over bytes `i .. e - 1`, byte by byte. -/
+partial def adlerBytes (d : @& ByteArray) (e : USize) (he : InRange d e) (i : USize) (a b : UInt64) : UInt64 × UInt64 :=
   if hi : i < e then
     let a := a + (d.uget i (he.lt hi)).toUInt64
-    adlerBlock d e he (i + 1) a (b + a)
-  else ((b % 65521) <<< 32) ||| (a % 65521)
+    adlerBytes d e he (i + 1) a (b + a)
+  else (a, b)
 
-partial def adlerLoop (d : @& ByteArray) (n : USize) (hn : InRange d n) (i : USize) (a b : UInt64) : UInt32 :=
+/-- The Adler-32 sums over bytes `i .. e - 1` (`e ≤ n`), four per step, reduced modulo 65521 at
+the end only (`e - i` is at most 5552, the longest run whose sums would fit even 32 bits), packed
+as `b <<< 32 ||| a`. Four bytes `x₀ .. x₃` add `x₀ + x₁ + x₂ + x₃` to `a` and
+`4 a + 4 x₀ + 3 x₁ + 2 x₂ + x₃` to `b`. -/
+partial def adlerBlock (d : @& ByteArray) (n : USize) (hn : RowIn d 0 n) (h3 : 3 ≤ n) (e : USize) (he : e ≤ n)
+    (i : USize) (a b : UInt64) : UInt64 :=
+  if hi : i + 3 < e ∧ i < n - 3 then
+    let v := get32 d ((0 : USize) + i) (hn.px h3 hi.2)
+    let x0 := (v &&& 255).toUInt64
+    let x1 := ((v >>> 8) &&& 255).toUInt64
+    let x2 := ((v >>> 16) &&& 255).toUInt64
+    let x3 := (v >>> 24).toUInt64
+    adlerBlock d n hn h3 e he (i + 4) (a + x0 + x1 + x2 + x3) (b + 4 * a + 4 * x0 + 3 * x1 + 2 * x2 + x3)
+  else
+    let (a, b) := adlerBytes d e (Nat.le_trans (USize.le_iff_toNat_le.mp he) hn.range) i a b
+    ((b % 65521) <<< 32) ||| (a % 65521)
+
+partial def adlerLoop (d : @& ByteArray) (n : USize) (hn : RowIn d 0 n) (h3 : 3 ≤ n) (i : USize) (a b : UInt64) : UInt32 :=
   if i < n then
     let e := if n - i > 5552 then i + 5552 else n
     if he : e ≤ n then
-      let ab := adlerBlock d e (Nat.le_trans (USize.le_iff_toNat_le.mp he) hn) i a b
-      adlerLoop d n hn e (ab &&& 0xffffffff) (ab >>> 32)
+      let ab := adlerBlock d n hn h3 e he i a b
+      adlerLoop d n hn h3 e (ab &&& 0xffffffff) (ab >>> 32)
     else 0
   else ((b <<< 16) ||| a).toUInt32
 
+/-- The Adler-32 value `v` (initially 1) continued over bytes `start .. stop - 1` of `d`. -/
+def adlerFrom (d : @& ByteArray) (start stop : Nat) (v : UInt32) : UInt32 :=
+  let n := (min stop d.size).toUSize
+  let a := (v &&& 0xffff).toUInt64
+  let b := (v >>> 16).toUInt64
+  if h : RowIn d 0 n ∧ 3 ≤ n then adlerLoop d n h.1 h.2 start.toUSize a b
+  else
+    let ⟨n, hn⟩ := rangeOf d n
+    let (a, b) := adlerBytes d n hn start.toUSize a b
+    (((b % 65521) <<< 16) ||| (a % 65521)).toUInt32
+
 /-- Adler-32 of bytes `start .. stop - 1` of `d`. -/
-def adler32 (d : ByteArray) (start stop : Nat) : UInt32 :=
-  let ⟨n, hn⟩ := rangeOf d (min stop d.size).toUSize
-  adlerLoop d n hn start.toUSize 1 0
+def adler32 (d : ByteArray) (start stop : Nat) : UInt32 := adlerFrom d start stop 1
 
 /-! ## Byte helpers -/
 
@@ -85,7 +148,12 @@ def pushChunk (out : ByteArray) (type : String) (data : ByteArray) : ByteArray :
   let out := out ++ type.toUTF8 ++ data
   pushU32BE out (crc32 out start out.size)
 
-/-! ## Row filters -/
+/-! ## Row filters
+
+A row is filtered a pixel (one 32-bit word) at a time: its left neighbour and the pixel above-left
+are the previous step's words, so a step loads two words (the pixel and the one above). Sub and Up
+subtract bytewise in one word (`subBytes`), and the sums of |byte as signed| take a few word
+operations (`sabs4`); only the Paeth predictor goes byte by byte. -/
 
 /-- The Paeth predictor. -/
 @[inline] def paeth (a b c : UInt32) : UInt32 :=
@@ -96,59 +164,72 @@ def pushChunk (out : ByteArray) (type : String) (data : ByteArray) : ByteArray :
   let pc := if s ≥ t then s - t else t - s
   if pa ≤ pb && pa ≤ pc then a else if pb ≤ pc then b else c
 
-/-- |v| for a byte read as signed. -/
-@[inline] def sabs (v : UInt32) : UInt32 := let v := v &&& 0xff; if v < 128 then v else 256 - v
+/-- The Paeth predictor of each byte of the pixel words `a` (left), `b` (above), `c` (above-left). -/
+@[inline] def paeth4 (a b c : UInt32) : UInt32 :=
+  paeth (a &&& 255) (b &&& 255) (c &&& 255) |||
+    (paeth ((a >>> 8) &&& 255) ((b >>> 8) &&& 255) ((c >>> 8) &&& 255) <<< 8) |||
+    (paeth ((a >>> 16) &&& 255) ((b >>> 16) &&& 255) ((c >>> 16) &&& 255) <<< 16) |||
+    (paeth (a >>> 24) (b >>> 24) (c >>> 24) <<< 24)
+
+/-- Each byte of `x` minus the byte of `y`, modulo 256 (no borrow between bytes). -/
+@[inline] def subBytes (x y : UInt32) : UInt32 :=
+  ((x ||| 0x80808080) - (y &&& 0x7f7f7f7f)) ^^^ ((x ^^^ y ^^^ 0x80808080) &&& 0x80808080)
+
+/-- The sum of |byte as signed| over the four bytes of `d`: the negative bytes negated (flipped,
+plus one: each byte then at most 128, so nothing carries), then the bytes added in two 16-bit
+lanes. -/
+@[inline] def sabs4 (d : UInt32) : UInt32 :=
+  let m : UInt32 := (d >>> (7 : UInt32)) &&& 0x01010101
+  let t : UInt32 := (d ^^^ (m * 255)) + m
+  let u : UInt32 := (t &&& 0x00ff00ff) + ((t >>> (8 : UInt32)) &&& 0x00ff00ff)
+  (u &&& 0xffff) + (u >>> (16 : UInt32))
 
 /-- The filter type, Sub (1), Up (2) or Paeth (4), whose output for the row at `cur` (previous
-row at `prior` when `hasPrior`; 4 bytes per pixel) has the smallest sum of |byte as signed| over
-bytes `i .. rb - 1`, given the sums so far (all three in one pass over the row). Ties go to the
-earlier of Sub, Up, Paeth. -/
+row at `prior` when `hasPrior`; `rb` bytes, 4 per pixel) has the smallest sum of |byte as signed|
+over bytes `i .. rb - 1`, given the sums so far and the pixels left of `i` (`a`) and above-left
+(`c`); all three in one pass over the row. Ties go to the earlier of Sub, Up, Paeth. -/
 partial def bestFilter (src : @& ByteArray) (cur prior rb : USize) (hc : RowIn src cur rb) (hasPrior : Bool)
-    (hp : hasPrior = true → RowIn src prior rb) (i : USize) (s1 s2 s4 : UInt32) : UInt32 :=
-  if hi : i < rb then
-    let x := (rowGet src cur rb hc i hi).toUInt32
-    let a := if hk : 4 ≤ i then (rowBack src cur rb hc i 4 hi hk).toUInt32 else 0
-    let b := if h : hasPrior = true then (rowGet src prior rb (hp h) i hi).toUInt32 else 0
-    let c := if h : hasPrior = true then
-      (if hk : 4 ≤ i then (rowBack src prior rb (hp h) i 4 hi hk).toUInt32 else 0) else 0
-    bestFilter src cur prior rb hc hasPrior hp (i + 1) (s1 + sabs (x - a)) (s2 + sabs (x - b)) (s4 + sabs (x - paeth a b c))
+    (hp : hasPrior = true → RowIn src prior rb) (h3 : 3 ≤ rb) (i : USize) (a c s1 s2 s4 : UInt32) : UInt32 :=
+  if hi : i < rb - 3 then
+    let x := get32 src (cur + i) (hc.px h3 hi)
+    let b := if h : hasPrior = true then get32 src (prior + i) ((hp h).px h3 hi) else 0
+    bestFilter src cur prior rb hc hasPrior hp h3 (i + 4) x b (s1 + sabs4 (subBytes x a)) (s2 + sabs4 (subBytes x b))
+      (s4 + sabs4 (subBytes x (paeth4 a b c)))
   else if s2 < s1 then (if s4 < s2 then 4 else 2) else if s4 < s1 then 4 else 1
 
-/-- Write the row at `cur` filtered by `ft` (1, 2 or 4) to `raw` at `o`. -/
+/-- Write the row at `cur` filtered by `ft` (1, 2 or 4) to `raw` at `o`, from byte `i` (the
+pixels left of it and above-left: `a`, `c`). -/
 partial def filterRow (src : @& ByteArray) (raw : ByteArray) (ft : UInt32) (cur prior rb : USize)
-    (hc : RowIn src cur rb) (hasPrior : Bool) (hp : hasPrior = true → RowIn src prior rb) (o : USize)
-    (ho : RowIn raw o rb) (i : USize) : ByteArray :=
-  if hi : i < rb then
-    let x := rowGet src cur rb hc i hi
-    let v :=
-      if ft == 1 then x - (if hk : 4 ≤ i then rowBack src cur rb hc i 4 hi hk else 0)
-      else if ft == 2 then x - (if h : hasPrior = true then rowGet src prior rb (hp h) i hi else 0)
-      else
-        let a := if hk : 4 ≤ i then (rowBack src cur rb hc i 4 hi hk).toUInt32 else 0
-        let b := if h : hasPrior = true then (rowGet src prior rb (hp h) i hi).toUInt32 else 0
-        let c := if h : hasPrior = true then
-          (if hk : 4 ≤ i then (rowBack src prior rb (hp h) i 4 hi hk).toUInt32 else 0) else 0
-        x - (paeth a b c).toUInt8
-    filterRow src (raw.uset (o + i) v (ho.lt hi)) ft cur prior rb hc hasPrior hp o (ho.uset _ _ _) (i + 1)
+    (hc : RowIn src cur rb) (hasPrior : Bool) (hp : hasPrior = true → RowIn src prior rb) (h3 : 3 ≤ rb) (o : USize)
+    (ho : RowIn raw o rb) (i : USize) (a c : UInt32) : ByteArray :=
+  if hi : i < rb - 3 then
+    let x := get32 src (cur + i) (hc.px h3 hi)
+    let b := if h : hasPrior = true then get32 src (prior + i) ((hp h).px h3 hi) else 0
+    let pred := if ft == 1 then a else if ft == 2 then b else paeth4 a b c
+    filterRow src (set32 raw (o + i) (subBytes x pred) (ho.px h3 hi)) ft cur prior rb hc hasPrior hp h3 o
+      (ho.set32 _ _ _) (i + 4) x b
   else raw
 
 /-- Whether there is a previous row at `prior` (`y > 0`), with the proof that it is in range. -/
 @[inline] def priorRow (a : ByteArray) (y prior rb : USize) : { b : Bool // b = true → RowIn a prior rb } :=
   if h : y > 0 ∧ RowIn a prior rb then ⟨true, fun _ => h.2⟩ else ⟨false, fun h => nomatch h⟩
 
-/-- Filter rows `y .. h - 1` into `raw` (each row: a filter byte, then `rb` bytes). -/
+/-- Filter rows `y .. h - 1` into `raw` (each row: a filter byte, then `rb` bytes). An empty row
+(`rb = 0`) gets filter byte 1. -/
 partial def filterRows (src : @& ByteArray) (raw : ByteArray) (y h rb : USize) : ByteArray :=
   if y < h then
     let cur := y * rb
     let prior := cur - rb
     let o := y * (rb + 1)
     if hc : RowIn src cur rb then
-      let ⟨hasPrior, hp⟩ := priorRow src y prior rb
-      let ft := bestFilter src cur prior rb hc hasPrior hp 0 0 0 0
-      let raw := wr32 raw o ft
-      if ho : RowIn raw (o + 1) rb then
-        filterRows src (filterRow src raw ft cur prior rb hc hasPrior hp (o + 1) ho 0) (y + 1) h rb
-      else raw
+      if h3 : 3 ≤ rb then
+        let ⟨hasPrior, hp⟩ := priorRow src y prior rb
+        let ft := bestFilter src cur prior rb hc hasPrior hp h3 0 0 0 0 0 0
+        let raw := wr32 raw o ft
+        if ho : RowIn raw (o + 1) rb then
+          filterRows src (filterRow src raw ft cur prior rb hc hasPrior hp h3 (o + 1) ho 0 0 0) (y + 1) h rb
+        else raw
+      else filterRows src (wr32 raw o 1) (y + 1) h rb
     else raw
   else raw
 
@@ -218,36 +299,37 @@ def distSyms : Array UInt32 :=
   let bits : UInt32 := (e &&& (0xffff : UInt32)) ||| ((d - rdW distBase k) <<< (5 : UInt32))
   bits ||| (((5 : UInt32) + (e >>> (16 : UInt32))) <<< (24 : UInt32))
 
-/-- Hash of the 3 bytes at `p` (15 bits). The guard covers 4 bytes, so the last 3 positions of
-the stream are never hashed (they are sent as literals). -/
+/-- Hash of the 3 bytes at `p` (15 bits), read as one word with the byte after them. -/
 @[inline] def hash3 (src : ByteArray) (p : USize) (h : InPx src p) : USize :=
-  let v := (px32 src p h 0 <<< 16) ||| (px32 src p h 1 <<< 8) ||| px32 src p h 2
+  let w := get32 src p h
+  let v : UInt32 := ((w &&& 0xff) <<< (16 : UInt32)) ||| (w &&& 0xff00) ||| ((w >>> (16 : UInt32)) &&& 0xff)
   ((v * 2654435761) >>> 17).toUSize
 
 /-- The hash table: chain heads (`0 .. 32767`, by hash) then links (`32768 + (p &&& 32767)`), each
-holding a position + 1 (0: none). -/
-@[inline] def insertHash (src : ByteArray) (tab : Array UInt32) (p : USize) : Array UInt32 :=
-  if hp : InPx src p then
-    let h := hash3 src p hp
+holding a position + 1 (0: none). Positions whose 4 bytes do not lie below `n` (the end of the
+data so far) are not hashed: the last 3 positions of each block are sent as literals or inside
+matches. -/
+@[inline] def insertHash (src : ByteArray) (n : USize) (tab : Array UInt32) (p : USize) : Array UInt32 :=
+  if hp : p + 3 < n ∧ InPx src p then
+    let h := hash3 src p hp.2
     let tab := wrW tab (32768 + (p &&& 32767)) (rdW tab h)
     wrW tab h (p.toUInt32 + 1)
   else tab
 
 /-- Hash positions `p .. e - 1`. -/
-partial def insertRange (src : @& ByteArray) (tab : Array UInt32) (p e : USize) : Array UInt32 :=
-  if p < e then insertRange src (insertHash src tab p) (p + 1) e else tab
+partial def insertRange (src : @& ByteArray) (n : USize) (tab : Array UInt32) (p e : USize) : Array UInt32 :=
+  if p < e then insertRange src n (insertHash src n tab p) (p + 1) e else tab
 
 /-- Length of the common prefix of positions `a` and `b`, from `l` up to `maxLen`: 4 bytes per
-step while a whole group fits, then byte by byte. -/
+step (two words compared) while a whole group fits, then byte by byte. -/
 partial def matchLen (src : @& ByteArray) (a b l maxLen : USize) : USize :=
   if l + 4 ≤ maxLen then
     if ha : InPx src (a + l) then
       if hb : InPx src (b + l) then
-        if px src (a + l) ha 0 != px src (b + l) hb 0 then l
-        else if px src (a + l) ha 1 != px src (b + l) hb 1 then l + 1
-        else if px src (a + l) ha 2 != px src (b + l) hb 2 then l + 2
-        else if px src (a + l) ha 3 != px src (b + l) hb 3 then l + 3
-        else matchLen src a b (l + 4) maxLen
+        let x := get32 src (a + l) ha ^^^ get32 src (b + l) hb
+        if x == 0 then matchLen src a b (l + 4) maxLen
+        else if x &&& 0xff != 0 then l else if x &&& 0xff00 != 0 then l + 1
+        else if x &&& 0xff0000 != 0 then l + 2 else l + 3
       else l
     else l
   else if l < maxLen && rd src (a + l) == rd src (b + l) then matchLen src a b (l + 1) maxLen else l
@@ -270,22 +352,29 @@ partial def longestMatch (src : @& ByteArray) (tab : @& Array UInt32) (p c1 maxL
         if next > c then (best.toUInt64 <<< 32) ||| bestD.toUInt64
         else longestMatch src tab p next maxLen (chain - 1) best bestD
 
-/-- The LZ77 + fixed-Huffman loop from position `p` of `src` (length `n`), appending to `out` with
-`nb` bits pending in `bb`. Ends with the end-of-block code and the last partial byte. -/
+/-- The deflate stream's state after a block: the bytes so far, the hash table, and the bits not
+yet in a byte (`nb` of them, in the low bits of `bb`). -/
+structure Deflated where
+  out : ByteArray
+  tab : Array UInt32
+  bb : UInt64
+  nb : UInt64
+  deriving Inhabited
+
+/-- The LZ77 + fixed-Huffman loop from position `p` of `src` up to `n`, appending to `out` with
+`nb` bits pending in `bb`. Ends with the end-of-block code, its bits pending. Matches end by `n`
+and reach back up to 32768 bytes, into earlier blocks too. -/
 partial def lzLoop (src : @& ByteArray) (n : USize) (tab : Array UInt32) (lits lens dcs dsyms : @& Array UInt32)
-    (chain maxIns p : USize) (out : ByteArray) (bb nb : UInt64) : ByteArray :=
+    (chain maxIns p : USize) (out : ByteArray) (bb nb : UInt64) : Deflated :=
   if nb ≥ 32 then
     let out := out.push bb.toUInt8 |>.push (bb >>> 8).toUInt8 |>.push (bb >>> 16).toUInt8 |>.push (bb >>> 24).toUInt8
     lzLoop src n tab lits lens dcs dsyms chain maxIns p out (bb >>> 32) (nb - 32)
   else if p ≥ n then
-    -- end of block, then flush whole bytes
     let e := rdW lits 256
-    let bb := bb ||| ((e &&& 0xffff).toUInt64 <<< nb)
-    let nb := nb + (e >>> 16).toUInt64
-    flush out bb nb
+    ⟨out, tab, bb ||| ((e &&& 0xffff).toUInt64 <<< nb), nb + (e >>> 16).toUInt64⟩
   else
-    let maxLen := if n - p < 258 then n - p else 258
-    if hp : maxLen ≥ 3 ∧ InPx src p then
+    if hp : p + 3 < n ∧ InPx src p then
+      let maxLen := if n - p < 258 then n - p else 258
       let h := hash3 src p hp.2
       let c1 := (rdW tab h).toUSize
       let tab := wrW (wrW tab (32768 + (p &&& 32767)) c1.toUInt32) h (p.toUInt32 + 1)
@@ -302,7 +391,7 @@ partial def lzLoop (src : @& ByteArray) (n : USize) (tab : Array UInt32) (lits l
         let e := p + len
         -- hash the positions inside the match, unless it is long and the level is low (as zlib's
         -- fast levels do: long runs then cost one step instead of one per byte)
-        let tab := if len ≤ maxIns then insertRange src tab (p + 1) e else tab
+        let tab := if len ≤ maxIns then insertRange src n tab (p + 1) e else tab
         lzLoop src n tab lits lens dcs dsyms chain maxIns e out bb nb
       else
         let e := rdW lits (rd src p).toUSize
@@ -310,52 +399,127 @@ partial def lzLoop (src : @& ByteArray) (n : USize) (tab : Array UInt32) (lits l
     else
       let e := rdW lits (rd src p).toUSize
       lzLoop src n tab lits lens dcs dsyms chain maxIns (p + 1) out (bb ||| ((e &&& 0xffff).toUInt64 <<< nb)) (nb + (e >>> 16).toUInt64)
-where
-  flush (out : ByteArray) (bb nb : UInt64) : ByteArray :=
-    if nb == 0 then out else flush (out.push bb.toUInt8) (bb >>> 8) (if nb ≥ 8 then nb - 8 else 0)
 
-/-- One fixed-Huffman deflate block of `src`, appended to `out`; hash chains of at most `chain`
-links, positions inside matches longer than `maxIns` not hashed. -/
-def deflateFixed (src : ByteArray) (chain maxIns : Nat) (out : ByteArray) : ByteArray :=
-  -- block header: BFINAL = 1, BTYPE = 01 (3 bits: 1, 1, 0)
-  lzLoop src src.usize (Array.replicate 65536 0) litCodes lenCodes distCodes distSyms chain.toUSize maxIns.toUSize 0
-    out 3 3
+/-- Move the whole bytes of the pending bits to `out`; with `pad`, also the last partial byte
+(zero-padded). -/
+partial def flushBits (out : ByteArray) (tab : Array UInt32) (bb nb : UInt64) (pad : Bool) : Deflated :=
+  if nb ≥ 8 || (pad && nb > 0) then flushBits (out.push bb.toUInt8) tab (bb >>> 8) (if nb ≥ 8 then nb - 8 else 0) pad
+  else ⟨out, tab, bb, nb⟩
 
-/-- Deflate stored blocks (at most 65535 bytes each) of `src`, appended to `out`. -/
-partial def deflateStored (src : @& ByteArray) (off : Nat) (out : ByteArray) : ByteArray :=
-  let len := min 65535 (src.size - off)
-  let final := off + len ≥ src.size
-  let out := out.push (if final then 1 else 0) |>.push len.toUInt8 |>.push (len >>> 8).toUInt8
+/-- One fixed-Huffman deflate block of bytes `p0 .. p1 - 1` of `src` (final: the stream's last),
+with the stream's state before it; hash chains of at most `chain` links, positions inside matches
+longer than `maxIns` not hashed. A final block ends on a byte boundary, another keeps its last
+bits pending. -/
+def deflateBlock (src : @& ByteArray) (p0 p1 : Nat) (final : Bool) (chain maxIns : Nat) (s : Deflated) : Deflated :=
+  match s with
+  | ⟨out, tab, bb, nb⟩ =>
+    -- block header: BFINAL, then BTYPE = 01 (fixed Huffman), least significant bit first
+    let bb := bb ||| ((if final then 3 else 2) <<< nb)
+    match lzLoop src p1.toUSize tab litCodes lenCodes distCodes distSyms chain.toUSize maxIns.toUSize p0.toUSize out bb
+      (nb + 3) with
+    | ⟨out, tab, bb, nb⟩ => flushBits out tab bb nb final
+
+/-- Deflate stored blocks (at most 65535 bytes each) of bytes `off .. stop - 1` of `src`, appended
+to `out`, the last one marked final if `final` (at least one block, possibly empty). -/
+partial def storedBlocks (src : @& ByteArray) (off stop : Nat) (final : Bool) (out : ByteArray) : ByteArray :=
+  let len := min 65535 (stop - off)
+  let last := off + len ≥ stop
+  let out := out.push (if last && final then 1 else 0) |>.push len.toUInt8 |>.push (len >>> 8).toUInt8
     |>.push ((0xff : UInt8) - len.toUInt8) |>.push ((0xff : UInt8) - (len >>> 8).toUInt8)
   let out := src.copySlice off out out.size len
-  if final then out else deflateStored src (off + len) out
+  if last then out else storedBlocks src (off + len) stop final out
 
-/-! ## Encoding -/
+/-! ## Encoding
 
-/-- The PNG file of `img` (8-bit RGBA). `level` 0 stores the pixels uncompressed (fastest); 1..9
+`Encoder` encodes in steps of a few rows, so that the editor can spread the export of a large
+image over animation frames: `Encoder.start img level`, then `step` over the next rows as often as
+needed, then `finish`. Each step filters its rows and compresses them as deflate blocks of their
+own (one fixed-Huffman block, or stored blocks at level 0), not final unless the step reaches the
+last row; the matches of a block may reach back into earlier rows. The file decodes to the same
+pixels however the rows are split, while the bytes depend on the split (the last 3 bytes of each
+block are not hashed, and each block costs a header and an end code). `encode img level` is one
+step over all rows. -/
+
+/-- A PNG encoding in progress: rows `0 .. row - 1` are filtered (in `raw`) and compressed (in
+`out`, plus the bits `bb`/`nb` not yet in a byte), with the running Adler-32 of `raw` and CRC-32
+register of `out` from the `IDAT` type on. The encoder holds the image's pixels, which it reads
+at each step. -/
+structure Encoder where
+  src : ByteArray
+  width : Nat
+  height : Nat
+  level : Nat
+  row : Nat
+  raw : ByteArray
+  tab : Array UInt32
+  out : ByteArray
+  bb : UInt64
+  nb : UInt64
+  adler : UInt32
+  crc : UInt32
+  /-- Where the CRC register stopped (`out.size` between steps). -/
+  crcAt : Nat
+  /-- Where the `IDAT` length goes. -/
+  lenAt : Nat
+  /-- The final block is written. -/
+  done : Bool
+  deriving Inhabited
+
+/-- Start encoding `img` (8-bit RGBA). `level` 0 stores the pixels uncompressed (fastest); 1..9
 filter rows and compress with LZ77 and the fixed Huffman code, searching longer hash chains at
 higher levels. -/
-def encode (img : Image) (level : Nat := 1) : ByteArray :=
+def Encoder.start (img : Image) (level : Nat := 1) : Encoder :=
   let w := img.width
   let h := img.height
-  let rb := 4 * w
-  let rawSize := h * (rb + 1)
-  let raw := zeros rawSize
-  let raw := if level == 0 then plainRows img.data raw 0 h rb
-    else filterRows img.data raw 0 h.toUSize rb.toUSize
+  let rawSize := h * (4 * w + 1)
   let ihdr := pushU32BE (pushU32BE .empty w.toUInt32) h.toUInt32 |>.push 8 |>.push 6 |>.push 0 |>.push 0 |>.push 0
   let out := pushChunk (signature.copySlice 0 (ByteArray.emptyWithCapacity (rawSize + rawSize / 65535 * 5 + 128)) 0 8) "IHDR" ihdr
-  -- IDAT: length placeholder, type, zlib stream, CRC
+  -- IDAT: length (written by `finish`), type, zlib stream, CRC
   let lenAt := out.size
   let out := pushU32BE out 0 ++ "IDAT".toUTF8
-  let dataAt := out.size
   let out := if level == 0 then out.push 0x78 |>.push 0x01 else out.push 0x78 |>.push 0x5E
-  let out := if level == 0 then deflateStored raw 0 out
-    else deflateFixed raw (4 * 2 ^ (min level 9 - 1)) (if level ≥ 6 then 258 else 4 * level) out
-  let out := pushU32BE out (adler32 raw 0 raw.size)
-  let out := setU32BE out lenAt (out.size - dataAt).toUInt32
-  let out := pushU32BE out (crc32 out (dataAt - 4) out.size)
-  pushChunk out "IEND" .empty
+  { src := img.data, width := w, height := h, level, row := 0, raw := zeros rawSize,
+    tab := if level == 0 then #[] else Array.replicate 65536 0, out, bb := 0, nb := 0, adler := 1,
+    crc := 0xFFFFFFFF, crcAt := lenAt + 4, lenAt, done := false }
+
+/-- Filter and compress the next `rows` rows (at least one while any remain; the last ones end the
+stream's final block). Does nothing after the last row. -/
+def Encoder.step (e : Encoder) (rows : Nat) : Encoder :=
+  match e with
+  | { src, width, height, level, row, raw, tab, out, bb, nb, adler, crc, crcAt, lenAt, done } =>
+    let y1 := min height (row + max 1 rows)
+    if done then { src, width, height, level, row, raw, tab, out, bb, nb, adler, crc, crcAt, lenAt, done }
+    else
+      let final := y1 == height
+      let rb := 4 * width
+      let p0 := row * (rb + 1)
+      let p1 := y1 * (rb + 1)
+      let raw := if level == 0 then plainRows src raw row y1 rb else filterRows src raw row.toUSize y1.toUSize rb.toUSize
+      let adler := adlerFrom raw p0 p1 adler
+      let s : Deflated :=
+        if level == 0 then ⟨storedBlocks raw p0 p1 final out, tab, bb, nb⟩
+        else deflateBlock raw p0 p1 final (4 * 2 ^ (min level 9 - 1)) (if level ≥ 6 then 258 else 4 * level)
+          ⟨out, tab, bb, nb⟩
+      match s with
+      | ⟨out, tab, bb, nb⟩ =>
+        let crc := crcFrom out crcAt out.size crc
+        { src, width, height, level, row := y1, raw, tab, out, bb, nb, adler, crc, crcAt := out.size, lenAt,
+          done := final }
+
+/-- The PNG file: the remaining rows in one step, then the Adler-32, the `IDAT` length and CRC, and
+`IEND`. -/
+def Encoder.finish (e : Encoder) : ByteArray :=
+  match e.step e.height with
+  | { out, adler, crc, crcAt, lenAt, .. } =>
+    let out := pushU32BE out adler
+    let crc := crcFrom out crcAt out.size crc ^^^ 0xFFFFFFFF
+    let out := setU32BE out lenAt (out.size - (lenAt + 8)).toUInt32
+    let out := pushU32BE out crc
+    pushChunk out "IEND" .empty
+
+/-- The PNG file of `img` (8-bit RGBA) in one step (see `Encoder.start` for `level`). -/
+def encode (img : Image) (level : Nat := 1) : ByteArray :=
+  (Encoder.start img level).finish
 
 /-! ## Inflate -/
 
@@ -697,21 +861,23 @@ partial def expandLoop (raw : @& ByteArray) (pal : @& ByteArray) (out : ByteArra
     if ho : InPx out o then
       -- `raw` ends with 4 spare bytes (`inflate`), so 4 bytes from any pixel start are in range
       if hs : InPx raw s then
+        let v := get32 raw s hs
         let out :=
           if ct == 2 then
-            let r := px32 raw s hs 0
-            let g := px32 raw s hs 1
-            let b := px32 raw s hs 2
-            put4w out o ho r g b (if (r <<< 16 ||| g <<< 8 ||| b) == key then 0 else 255)
+            let r := v &&& 255
+            let g := (v >>> 8) &&& 255
+            let b := (v >>> 16) &&& 255
+            set32 out o (r ||| (g <<< 8) ||| (b <<< 16) |||
+              (if (r <<< 16 ||| g <<< 8 ||| b) == key then 0 else 0xff000000)) ho
           else if ct == 0 then
-            let v := px raw s hs 0
-            put4 out o ho v v v (if v.toUInt32 == key then 0 else 255)
+            let g := v &&& 255
+            set32 out o (g ||| (g <<< 8) ||| (g <<< 16) ||| (if g == key then 0 else 0xff000000)) ho
           else if ct == 4 then
-            let v := px raw s hs 0
-            put4 out o ho v v v (px raw s hs 1)
+            let g := v &&& 255
+            set32 out o (g ||| (g <<< 8) ||| (g <<< 16) ||| (((v >>> 8) &&& 255) <<< 24)) ho
           else
-            let p := 4 * (px raw s hs 0).toUSize
-            if hp : InPx pal p then put4 out o ho (px pal p hp 0) (px pal p hp 1) (px pal p hp 2) (px pal p hp 3)
+            let p := 4 * (v &&& 255).toUSize
+            if hp : InPx pal p then set32 out o (get32 pal p hp) ho
             else out
         let bpp : USize := if ct == 2 then 3 else if ct == 4 then 2 else 1
         expandLoop raw pal out ct key (s + bpp) (o + 4) (x + 1) w

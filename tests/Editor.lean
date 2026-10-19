@@ -6,8 +6,9 @@ public import LeanUI.Testing.Harness
 # Tests for the photo editor core (`examples/Editor/*.lean`)
 
 `lake build leanui-editor-tests && .lake/build/bin/leanui-editor-tests` (`--print-goldens` prints
-the golden checksums instead of checking them; `--write-pngs DIR` writes the compressed PNG files
-the goldens pin, with their raw pixels, for checking them with another decoder).
+the golden checksums instead of checking them; `--write-pngs DIR` writes the PNG files the
+goldens pin, and the same images encoded a few rows per step, with their raw pixels, for checking
+them with another decoder).
 
 * **Goldens**: the FNV-1a checksum of every operation's output on fixed generated images (a
   deterministic pseudo-random RGBA image with transparent, translucent and opaque pixels). All but
@@ -359,6 +360,31 @@ def testGeometry : T Unit := do
   let dst := Image.blank 9 6
   let chunked := downscaleBoxRows base (downscaleBoxRows base dst 0 4) 4 6
   expectEq "box downscale in row chunks" chunked (downscaleBox base 9 6)
+  -- rotations, flips and crop in row chunks (as the editor's jobs run them) equal the whole operation
+  let r : Rect := ⟨3, 2, 30, 15⟩
+  for img in [base, noise 1 6 5, noise 5 1 4, gradient 13 8] do
+    let s := s!"{img.width}×{img.height}"
+    let rc := r.clamp img.width img.height
+    for k in [1, 3] do
+      let inChunks (f : Image → Image → Nat → Nat → Image) (dst : Image) : Image := Id.run do
+        let mut d := dst
+        let mut y := 0
+        while y < dst.height do
+          d := f img d y (y + k)
+          y := y + k
+        return d
+      let swapped := Image.blank img.height img.width
+      let same := Image.blank img.width img.height
+      expectEq s!"rotate90cw in chunks of {k} rows ({s})" (inChunks rotate90cwRows swapped) (rotate90cw img)
+      expectEq s!"rotate90ccw in chunks of {k} rows ({s})" (inChunks rotate90ccwRows swapped) (rotate90ccw img)
+      expectEq s!"rotate180 in chunks of {k} rows ({s})" (inChunks rotate180Rows same) (rotate180 img)
+      expectEq s!"flipH in chunks of {k} rows ({s})" (inChunks flipHRows same) (flipH img)
+      expectEq s!"flipV in chunks of {k} rows ({s})" (inChunks flipVRows same) (flipV img)
+      expectEq s!"crop in chunks of {k} rows ({s})" (inChunks (cropRows r) (Image.blank rc.w rc.h)) (crop img r)
+  let wrong := Image.blank 5 5
+  expectEq "rows variants leave a wrongly sized destination alone"
+    [rotate90cwRows base wrong 0 5, rotate180Rows base wrong 0 5, flipVRows base wrong 0 5, cropRows r base wrong 0 5]
+    [wrong, wrong, wrong, wrong]
 
 def testFilters : T Unit := do
   for col in [(⟨12, 200, 99, 255⟩ : Color), ⟨0, 0, 0, 255⟩, ⟨255, 255, 255, 255⟩] do
@@ -434,6 +460,11 @@ def testAdjust : T Unit := do
   expectEq "histogram of a constant image" (hk[10]!, hk[256 + 20]!, hk[512 + 30]!, hk[768 + 19]!) (20, 20, 20, 20)
   let chunked := (histogramRows base 9 23 (histogramRows base 0 9)).map (·.toNat)
   expectEq "histogram in row chunks" chunked hs
+  expectEq "histogram table in row chunks" ((HistTable.empty.addRows base 0 5 |>.addRows base 5 23).counts) hs
+  expectEq "histogram of every row" (histogramEvery base 1) hs
+  -- every 4th row: the histogram of the image made of rows 0, 4, 8, …
+  let sampled := Image.generate base.width ((base.height + 3) / 4) fun x y => base.get x (4 * y)
+  expectEq "histogram of every 4th row" (histogramEvery base 4) (histogram sampled)
 
 def testComposite : T Unit := do
   for m in Blend.all do
@@ -629,6 +660,12 @@ def pix6 : Image := Image.generate 64 40 fun x y =>
   ⟨((x * x + y) % 256).toUInt8, ((y * 3 + x / 4) % 256).toUInt8, ((x ^^^ y) % 256).toUInt8,
     if (x / 8 + y / 8) % 2 == 1 then 255 else 90⟩
 
+/-- `img` encoded by `Png.Encoder`, `k` rows per step. -/
+def encodeInSteps (img : Image) (level k : Nat) : ByteArray := Id.run do
+  let mut e := Png.Encoder.start img level
+  for _ in [0:(img.height + k - 1) / max 1 k] do e := e.step k
+  return e.finish
+
 def testPng : T Unit := do
   let imgs := [Image.new 1 1 1 2 3 4, Image.blank 1 1, noise 1 9 3, noise 7 1 4, noise 3 5 5, base, noise 61 13 6,
     gradient 100 37, checker 64 64 8, noise 301 7 9 (alpha := false), Image.new 2 2 0 0 0 0]
@@ -655,6 +692,25 @@ def testPng : T Unit := do
   -- stored blocks over the 65535-byte limit
   let big := noise 200 100 12
   expectEq "png round trip with several stored blocks" (Png.decode (Png.encode big 0) |>.toOption) (some big)
+  -- the incremental encoder: any split into steps decodes to the same pixels, one step is `encode`
+  for img in [noise 7 9 21, gradient 61 37, checker 64 48 8, big] do
+    let s := s!"{img.width}×{img.height}"
+    for level in [0, 1, 9] do
+      for k in [1, 2, 5] do
+        expectEq s!"png in steps of {k} rows ({s}, level {level})" (Png.decode (encodeInSteps img level k) |>.toOption)
+          (some img)
+      expect s!"png in one step = encode ({s}, level {level})"
+        ((encodeInSteps img level img.height).data == (Png.encode img level).data)
+  -- `finish` encodes the rows not yet stepped
+  let g37 := gradient 61 37
+  expectEq "png finish after some steps" (Png.decode ((Png.Encoder.start g37 1).step 10 |>.step 4).finish |>.toOption)
+    (some g37)
+  -- matches reach back into earlier blocks: rows repeating every 20 rows, encoded 5 rows per step
+  let tile := noise 100 20 77
+  let rep := Image.generate 100 170 fun x y => tile.get x (y % 20)
+  let stepped := encodeInSteps rep 1 5
+  expectEq "png in steps with matches across blocks" (Png.decode stepped |>.toOption) (some rep)
+  expect "png in steps compresses repeats across blocks" (stepped.size * 4 < (Png.encode rep 0).size)
   -- files written by zlib
   for (name, w, h, file, want) in pngFixtures do
     match Png.decode (hexBytes file) with
@@ -940,9 +996,11 @@ where
 
 /-! ## Main -/
 
-/-- The images of the compressed-PNG goldens, for `--write-pngs`. -/
+/-- The images of the PNG goldens, for `--write-pngs` (which also writes them encoded 1 and 5 rows
+per step by `Png.Encoder`). -/
 def goldenPngs : List (String × Image × Nat) :=
-  [("base", base, 1), ("gradient", gradient 61 37, 1), ("gradient", gradient 61 37, 9), ("checker", checker 64 48 8, 4)]
+  [("base", base, 0), ("base", base, 1), ("gradient", gradient 61 37, 1), ("gradient", gradient 61 37, 9),
+    ("checker", checker 64 48 8, 4)]
 
 public def main (args : List String) : IO UInt32 := do
   if args.contains "--print-goldens" then
@@ -953,6 +1011,8 @@ public def main (args : List String) : IO UInt32 := do
     IO.FS.createDirAll dir
     for (name, img, level) in goldenPngs do
       IO.FS.writeBinFile s!"{dir}/{name}-{img.width}x{img.height}-level{level}.png" (Png.encode img level)
+      for k in [1, 5] do
+        IO.FS.writeBinFile s!"{dir}/{name}-{img.width}x{img.height}-level{level}-rows{k}.png" (encodeInSteps img level k)
       IO.FS.writeBinFile s!"{dir}/{name}-{img.width}x{img.height}.rgba" img.data
     return 0
   IO.println "leanui editor tests"
