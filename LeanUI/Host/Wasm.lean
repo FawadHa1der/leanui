@@ -14,7 +14,11 @@ namespace LeanUI.Wasm
 /-- Hand a finished update (command words, string area) to the page. -/
 @[extern "leanui_host_flush"] opaque hostFlush (ops : @& ByteArray) (strs : @& ByteArray) : IO Unit
 
-def host : Host := { flush := hostFlush }
+/-- Tell the page where this update's byte arrays are (`Buf.blobs`), so commands can read them in
+place. -/
+@[extern "leanui_host_blobs"] opaque hostBlobs (blobs : @& Array ByteArray) : IO Unit
+
+def host : Host := { flush := hostFlush, blobs := hostBlobs }
 
 @[export leanui_instance_event]
 def instanceEvent (i : Instance) (slot : UInt32) (payload : String) : IO Unit := i.event slot payload
@@ -22,6 +26,10 @@ def instanceEvent (i : Instance) (slot : UInt32) (payload : String) : IO Unit :=
 @[export leanui_instance_callback]
 def instanceCallback (i : Instance) (cb : UInt32) (ok : UInt8) (payload : String) : IO Unit :=
   i.callback cb (ok != 0) payload
+
+@[export leanui_instance_callback_bytes]
+def instanceCallbackBytes (i : Instance) (cb : UInt32) (ok : UInt8) (payload : String) (bytes : ByteArray) : IO Unit :=
+  i.callbackBytes cb (ok != 0) payload bytes
 
 end LeanUI.Wasm
 

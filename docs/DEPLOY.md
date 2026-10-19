@@ -20,7 +20,7 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
 4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
-   apply-semantics, server, effects, bench-smoke, depth.
+   apply-semantics, server, effects, bench-smoke, pixels, depth.
 5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files. The image is
    built for `linux/amd64` and started, and `/`, the wasm and the stylesheet must answer. On
    `main` the staged files are uploaded for the deploy job.

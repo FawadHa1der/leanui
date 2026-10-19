@@ -39,6 +39,7 @@ def checkEq [BEq α] [Repr α] (name : String) (got want : α) : T Unit :=
 
 def payloadName : Payload → String
   | .none => "none" | .value => "value" | .checked => "checked" | .key => "key" | .formData => "formData"
+  | .files => "files" | .pointer => "pointer"
 
 def propStr : PropValue → String
   | .str s => s!"str {s.quote}" | .bool b => s!"bool {b}" | .num x => s!"num {x}"

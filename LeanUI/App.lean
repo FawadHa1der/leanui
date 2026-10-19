@@ -13,6 +13,11 @@ The runtime's state lives in an `IO.Ref` created by `start`, never in a global (
 ref: globals are persistent, persistent refs mark what they hold as multi-threaded, and
 multi-threaded objects are never updated in place, which would turn every array push into a copy.
 The step itself (`stepMsgs`) is a pure `StateM` function, so it is tested natively.
+
+`update` receives the model uniquely owned: the step takes the state apart before calling
+`update` (`updateModel`) and builds it again from the result. So a model that holds a large array (an editor's pixels) can be
+updated in place, without a copy per message, as long as the app itself keeps one reference to
+it (`tests/Kit.lean`, `testUniqueModel`).
 -/
 public section
 namespace LeanUI
@@ -27,6 +32,10 @@ structure Program (Model Msg : Type) where
 structure Host where
   /-- Called once per update with the command words and the string area. -/
   flush : ByteArray → ByteArray → IO Unit
+  /-- Called before `flush` when the update's commands refer to byte arrays (`Buf.blobs`: the
+  pixels of `Cmd.putImage`, the bytes of `Cmd.download`). The wasm host hands the browser their
+  addresses; hosts that cannot carry bytes (a server driving the page) ignore them. -/
+  blobs : Array ByteArray → IO Unit := fun _ => pure ()
 
 /-- A running app as its host drives it. -/
 structure Instance where
@@ -34,11 +43,17 @@ structure Instance where
   event : UInt32 → String → IO Unit
   /-- An effect finished (`ok`, payload), or a subscription fired. -/
   callback : UInt32 → Bool → String → IO Unit
+  /-- An effect finished with bytes (`Cmd.readFile`, `Cmd.decodeImage`): `ok`, a payload, the
+  bytes. -/
+  callbackBytes : UInt32 → Bool → String → ByteArray → IO Unit
 
 structure Callback (Msg : Type) where
   /-- The messages the result produces: one for a command's continuation, one per subscriber for
   a subscription that several parts of the app share. -/
   decode : Bool → String → Array Msg
+  /-- For effects that answer with bytes (`callbackBytes`); without it, the bytes are dropped
+  and `decode` gets the rest. -/
+  decodeBytes? : Option (Bool → String → ByteArray → Array Msg) := none
   /-- Subscription callbacks persist; command continuations are freed after one call. -/
   persistent : Bool
 
@@ -100,6 +115,23 @@ partial def execCmd (c : Cmd Msg) (acc : Array Msg) : RunM Model Msg (Array Msg)
   | .nextFrame k =>
     let cb ← allocCb { decode := fun _ t => #[k (Float.ofNat (t.toNat?.getD 0))], persistent := false }
     emitR (·.frameCmd cb); return acc
+  | .putImage c img r => emitR (·.putImageCmd c img r); return acc
+  | .download n t d => emitR (·.downloadCmd n t d); return acc
+  | .readFile file k =>
+    let cb ← allocCb { decode := fun _ p => #[k (.error p)], persistent := false,
+                       decodeBytes? := some fun ok p b => #[k (if ok then .ok b else .error p)] }
+    emitR (·.fileReadCmd cb file); return acc
+  | .decodeImage file k =>
+    let size (p : String) : Option (Nat × Nat) := match p.splitOn " " with
+      | [w, h] => do pure (← w.toNat?, ← h.toNat?)
+      | _ => none
+    let cb ← allocCb { decode := fun _ p => #[k (.error p)], persistent := false,
+                       decodeBytes? := some fun ok p b => #[k (match ok, size p with
+                         | true, some (w, h) =>
+                           if b.size == 4 * w * h then .ok { width := w, height := h, data := b }
+                           else .error s!"decoded {b.size} bytes for {w}×{h} pixels"
+                         | _, _ => .error p)] }
+    emitR (·.imageDecodeCmd cb file); return acc
 
 /-- The wanted subscriptions grouped by identity, in first-seen order: one browser subscription
 per identity, whose callback delivers a message to every part of the app that wants it (two
@@ -127,9 +159,20 @@ def syncSubs (sub : Sub Msg) : RunM Model Msg Unit := do
     | some (_, cb) => modify fun s => { s with cbs := s.cbs.set! cb.toNat (some c) }
     | none =>
       let cb ← allocCb c
-      if ident == "url" then emitR (·.urlListen cb) else emitR (·.intervalSet cb ms)
+      if ident == "url" then emitR (·.urlListen cb)
+      else if ident == "keys" then emitR (·.keysListen cb)
+      else emitR (·.intervalSet cb ms)
       keep := keep.push (ident, cb)
   modify fun s => { s with subs := keep }
+
+/-- Run `update` on the state's model, which is taken out of the state first (the state is taken
+apart field by field, so when it is unique the model it held is too): an `update` that changes
+an array of the model in place does so without copying it. -/
+@[inline] def updateModel (p : Program Model Msg) (m : Msg) (s : State Model Msg) : Cmd Msg × State Model Msg :=
+  match s with
+  | { model, tree, diff, cbs, freeCbs, subs } =>
+    let (model, cmd) := p.update m model
+    (cmd, { model, tree, diff, cbs, freeCbs, subs })
 
 /-- Process messages (and the messages their commands send), then render once and reconcile
 subscriptions. Bounded, so an app that sends messages forever cannot hang the page. -/
@@ -139,8 +182,7 @@ def stepMsgs (p : Program Model Msg) (msgs : Array Msg) : RunM Model Msg Unit :=
   while !queue.isEmpty && fuel > 0 do
     let mut next := #[]
     for m in queue do
-      let (model, cmd) := p.update m (← get).model
-      modify fun s => { s with model }
+      let cmd ← modifyGet (updateModel p m)
       next ← execCmd cmd next
       fuel := fuel - 1
     queue := next
@@ -179,6 +221,7 @@ taken out (uniquely owned) for every step and put back after the flush. -/
 def start (p : Program Model Msg) (host : Host) (flags selector : String) (hydrate : Bool) : IO Instance := do
   let ref ← IO.mkRef (none : Option (State Model Msg))
   let finish (st : State Model Msg) : IO Unit := do
+    if !st.diff.buf.blobs.isEmpty then host.blobs st.diff.buf.blobs
     if !st.diff.buf.isEmpty then host.flush st.diff.buf.ops st.diff.buf.strs
     ref.set (some { st with diff := { st.diff with buf := st.diff.buf.reset } })
   finish (initState p flags selector hydrate)
@@ -198,6 +241,15 @@ def start (p : Program Model Msg) (host : Host) (flags selector : String) (hydra
       | some c =>
         let st := if c.persistent then st else ((freeCb cb).run st).2
         let msgs := c.decode ok payload
+        if msgs.isEmpty then st else ((stepMsgs p msgs).run st).2
+    callbackBytes := fun cb ok payload bytes => run fun st =>
+      match st.cbs[cb.toNat]?.join with
+      | none => st
+      | some c =>
+        let st := if c.persistent then st else ((freeCb cb).run st).2
+        let msgs := match c.decodeBytes? with
+          | some f => f ok payload bytes
+          | none => c.decode ok payload
         if msgs.isEmpty then st else ((stepMsgs p msgs).run st).2 }
 
 end LeanUI

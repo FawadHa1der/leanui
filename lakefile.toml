@@ -41,7 +41,7 @@ roots = ["LeanUI.Testing.Dom", "LeanUI.Testing.Harness", "LeanUI.Testing.Gen"]
 [[lean_lib]]
 name = "Examples"
 srcDir = "examples"
-roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp"]
+roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp", "Pixels", "PixelsApp"]
 
 [[lean_exe]]
 name = "leanui-tests"

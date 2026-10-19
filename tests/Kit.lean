@@ -4,6 +4,7 @@ public import LeanUI.Json
 public import LeanUI.Router
 public import LeanUI.Testing.Harness
 public import Effects
+public import Pixels
 meta import LeanUI.Json.Derive
 /-!
 # Tests for the kit: `LeanUI.Json`, `LeanUI.Router`, and the effects lab
@@ -19,6 +20,8 @@ effects tests read `examples/effects-assets/*.json`).
   own examples), route parse/print round trips (random pages, base paths, hash routing).
 * The effects lab running in the DOM model (`LeanUI.Testing`): every command it emits and every
   callback it handles, as the browser would drive it.
+* Input payloads (`LeanUI.Input`), the pixel and file commands (the pixels lab in the DOM model),
+  and that `update` gets the model uniquely owned (an array in it is updated in place).
 -/
 public section
 open LeanUI
@@ -846,13 +849,112 @@ def testEffectsApp : T Unit := section_ "effects lab (DOM model)" do
   expect "protocol" d.errors.isEmpty s!"{d.errors}"
   expectEq "handles" (d.reachable (← r.root)).size d.nodes.size
 
+/-! ## Pixels, files, keys -/
+
+/-- The address of an object (to see that an array was updated in place, not copied). -/
+unsafe def addrImpl (b : @& ByteArray) : USize := ptrAddrUnsafe b
+@[implemented_by addrImpl] def addrOf (b : @& ByteArray) : USize := 0
+
+/-- A model holding a large array and the array's address after each update. -/
+def uniqueProgram : Program (ByteArray × Array USize) Unit where
+  init _ := ((ByteArray.mk (Array.replicate 100000 0), #[]), .none)
+  update _ m := match m with
+    | (data, addrs) =>
+      let data := data.set! 0 (data[0]! + 1)
+      ((data, addrs.push (addrOf data)), .none)
+  view m := text (toString m.2.size)
+
+def testInput : T Unit := section_ "input payloads" do
+  expectEq "decimal" ([parseDecimal "12.5", parseDecimal "-3", parseDecimal "0.25", parseDecimal "-0.05", parseDecimal "7.", parseDecimal "x", parseDecimal ""].map (·.toString))
+    ["12.500000", "-3.000000", "0.250000", "-0.050000", "7.000000", "0.000000", "0.000000"]
+  match Pointer.parse "10.5 -2 200 100 1 3 7 0.5 0 -120" with
+  | some p =>
+    expectEq "pointer" (p.x, p.y, p.width, p.height, p.buttons, p.shift, p.ctrl, p.alt, p.metaKey, p.id, p.pressure, p.deltaY)
+      (10.5, -2, 200, 100, 1, true, true, false, false, 7, 0.5, -120)
+    expectEq "pointer scaled" (p.scaledTo 400 50) (21, -1)
+  | none => expect "pointer parses" false
+  expect "pointer: wrong field count" (Pointer.parse "1 2 3").isNone
+  expectEq "files" (FileInfo.parse "3\t1024\timage/png\ta b.png\n4\t0\t\tnotes\twith tab")
+    #[{ id := 3, size := 1024, type := "image/png", name := "a b.png" }, { id := 4, size := 0, type := "", name := "notes\twith tab" }]
+  expectEq "files: empty" (FileInfo.parse "") #[]
+  expectEq "keys" (Keys.parse "Ctrl+Shift+Z") { key := "Z", ctrl := true, shift := true }
+  expectEq "keys: plus" (Keys.parse "Ctrl++") { key := "+", ctrl := true }
+  expectEq "keys: plain" (Keys.parse "Shift") { key := "Shift" }
+  expect "keys: cmd" ((Keys.parse "Meta+z").cmd && (Keys.parse "Ctrl+z").cmd && !(Keys.parse "z").cmd)
+
+def testUniqueModel : T Unit := section_ "update owns the model" do
+  let mut st := initState uniqueProgram "" "#app" false
+  for _ in [0:5] do
+    st := ((stepMsgs uniqueProgram #[()]).run st).2
+  let (data, addrs) := st.model
+  expectEq "updates" (data[0]!, addrs.size) (5, 5)
+  expect "one array, updated in place" (addrs.all (· == addrs[0]!) && addrs[0]! != 0) s!"{addrs}"
+  -- the control: with every earlier state kept alive, each update must copy the array
+  st := initState uniqueProgram "" "#app" false
+  let mut kept := #[]
+  for _ in [0:3] do
+    kept := kept.push st
+    st := ((stepMsgs uniqueProgram #[()]).run st).2
+  let addrs := st.model.2
+  expect "a shared model is copied (the check can fail)" (addrs.size == 3 && addrs[0]! != addrs[1]! && addrs[1]! != addrs[2]!) s!"{addrs}"
+  expectEq "kept states unchanged" (kept.map (·.model.1[0]!)) #[0, 1, 2]
+
+def testPixelsApp : T Unit := section_ "pixels lab (DOM model)" do
+  let r ← Testing.run Pixels.program
+  let eff0 := (← r.dom.get).effects
+  expect "init: whole canvas" (eff0.contains "putImage #px-canvas blob=0 256x128 dirty=0,0,256,128") s!"{eff0}"
+  expect "init: keys" (eff0.any (·.startsWith s!"op{Op.keysListen} "))
+  let canvas ← r.find "id" "px-canvas"
+  -- a move without a button paints nothing; with it, a 5×5 square at the scaled position
+  let mark := (← r.dom.get).effects.size
+  r.fire canvas "pointermove" "100 50 512 256 0 0 1 0 0 0"
+  expectEq "hover" (← textOf r "px-pointer") "50,25 buttons 0"
+  r.fire canvas "pointerdown" "100 50 512 256 1 1 1 0.5 0 0"
+  r.fire canvas "pointermove" "1 1 512 256 1 0 1 0.5 0 0"
+  expectEq "painted" (← effectsSince r mark) #["putImage #px-canvas blob=0 256x128 dirty=48,23,5,5", "putImage #px-canvas blob=0 256x128 dirty=0,0,3,3"]
+  expectEq "dabs" (← textOf r "px-dabs") "2"
+  expectEq "captured" (← textOf r "px-capturing") "true"
+  r.fire canvas "pointerup" "1 1 512 256 0 0 1 0 0 0"
+  expectEq "released" (← textOf r "px-capturing") "false"
+  r.fire canvas "wheel" "1 1 512 256 0 0 0 0 0 -240"
+  expectEq "wheel" (← textOf r "px-wheel") "-240"
+  -- files: bytes and pixels come back through byte callbacks
+  let mark := (← r.dom.get).effects.size
+  r.fire (← r.find "id" "px-file") "change" "7\t6\timage/png\tdot.png"
+  let effs ← effectsSince r mark
+  expect "file commands" (effs.size == 2 && effs[0]!.startsWith "readFile cb=" && effs[1]!.startsWith "decodeImage cb=") s!"{effs}"
+  expectEq "files" (← textOf r "px-files") "dot.png (6 bytes, image/png)"
+  r.inst.callbackBytes (← lastCb r "readFile cb=") true "" (ByteArray.mk #[0x89, 0x50, 0x4e, 0x47, 13, 10])
+  expectEq "bytes" (← textOf r "px-bytes") "dot.png: 6 bytes: 89 50 4e 47 0d 0a"
+  r.inst.callbackBytes (← lastCb r "decodeImage cb=") true "1 2" (ByteArray.mk #[1, 2, 3, 4, 5, 6, 7, 8])
+  expectEq "decoded" (← textOf r "px-decoded") "1×2"
+  expect "decoded drawn" ((← r.dom.get).effects.back? == some "putImage #px-image blob=0 1x2 dirty=0,0,1,2") s!"{(← r.dom.get).effects.back?}"
+  -- a decode that fails, and one whose size does not match its bytes
+  r.fire (← r.find "id" "px-drop") "drop" "8\t3\t\tjunk"
+  r.inst.callbackBytes (← lastCb r "decodeImage cb=") false "The source image cannot be decoded." .empty
+  expectEq "decode error" (← textOf r "px-decoded") "The source image cannot be decoded."
+  r.fire (← r.find "id" "px-drop") "drop" "9\t3\t\tjunk"
+  r.inst.callbackBytes (← lastCb r "decodeImage cb=") true "2 2" (ByteArray.mk #[1, 2, 3])
+  expectEq "decode size mismatch" (← textOf r "px-decoded") "decoded 3 bytes for 2×2 pixels"
+  -- a byte result through the string path (a server-driven page) is a failure
+  r.fire (← r.find "id" "px-drop") "drop" "10\t3\t\tjunk"
+  r.inst.callback (← lastCb r "readFile cb=") false "bytes need the in-page (wasm) host"
+  expectEq "bytes without wasm" (← textOf r "px-bytes") "junk: bytes need the in-page (wasm) host"
+  r.click "id" "px-download"
+  expectEq "download" (← r.dom.get).effects.back? (some "download pixels.rgba application/octet-stream blob=0")
+  for k in ["a", "Ctrl+z", "b", "c", "d", "Shift+E"] do
+    r.inst.callback (← lastCb r s!"op{Op.keysListen} ") true k
+  expectEq "keys" (← textOf r "px-keys") "Ctrl+z b c d Shift+E"
+  let d ← r.dom.get
+  expect "protocol" d.errors.isEmpty s!"{d.errors}"
+
 /-! ## Main -/
 
 public def main : IO UInt32 := do
   IO.println "leanui kit tests"
   let ((), s) ← (do
     testDocuments; testPrinting; testNumbers; testClasses; testAccessors; testLarge
-    testUrls; testResolve; testRoutes; testEffectsApp : T Unit).run {}
+    testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testPixelsApp : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0

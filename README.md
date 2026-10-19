@@ -32,7 +32,7 @@ def program : Program Int Msg where
 
 | | |
 |---|---|
-| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, repeated subtrees created by cloning DOM templates, delegated events with browser-extracted payloads, commands (fetch, timers, storage, history, focus, title, animation frames) and subscriptions, all as commands in one buffer per update |
+| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`, `Input`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, repeated subtrees created by cloning DOM templates, delegated events with browser-extracted payloads (values, keys, forms, files, pointers with capture, the wheel), commands (fetch, timers, storage, history, focus, title, animation frames, pixels to a canvas straight from wasm memory, file bytes and decoded images into Lean, downloads) and subscriptions (intervals, URL, keys), all as commands in one buffer per update |
 | **Templates** (`LeanUI.Syntax`, [docs/SYNTAX.md](docs/SYNTAX.md)) | JSX-style syntax with components, fragments, conditional children, class/style parts, SVG and MathML namespaces, precise compile errors; the generated C equals the hand-written view's |
 | **Kit** (`LeanUI.Json`, `LeanUI.Router`) | JSON on `Init` alone with exact numbers and `deriving ToJson, FromJson`; typed bidirectional routes (path or fragment) whose links cannot drift from the parser |
 | **Server** (`LeanUI.Server`) | a native `Std.Http` server: static files, server-side rendering with hydration, server-driven sessions, the `leanui` command (`serve`, `build`, `new`) |
@@ -146,8 +146,9 @@ and encoding). The benchmark app is ready about 25 ms after navigation in Chromi
 A few idioms cover most of what an app needs; `examples/` has each of them in a real program.
 
 - **Effects** are values: `update` returns a `Cmd` (`.fetch`, `.after`, `.storageSet`,
-  `.storageGet`, `.pushUrl`, `.focus`, `.title`, …) whose results come back as messages, and
-  `subscriptions` returns the event sources wanted right now (`.every ms`, `.urlChanges`). In a
+  `.storageGet`, `.pushUrl`, `.focus`, `.title`, `.putImage`, `.readFile`, `.decodeImage`,
+  `.download`, …) whose results come back as messages, and
+  `subscriptions` returns the event sources wanted right now (`.every ms`, `.urlChanges`, `.keys`). In a
   module that does `open LeanUI`, write the subscription type as `LeanUI.Sub` (Lean's own `Sub`
   is the subtraction class).
 - **Big lists**: give rows keys and make them lazy, so unchanged rows are neither rendered nor
@@ -207,7 +208,7 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-notes-tests      # the guide's app
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
-                                          # apply-semantics, server, effects, bench-smoke, depth
+                                          # apply-semantics, server, effects, bench-smoke, pixels, depth
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
 ```

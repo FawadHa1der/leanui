@@ -232,6 +232,7 @@ def TProp.toLean : TProp → String
 
 def payloadLean : Payload → String
   | .none => ".none" | .value => ".value" | .checked => ".checked" | .key => ".key" | .formData => ".formData"
+  | .files => ".files" | .pointer => ".pointer"
 
 def TListener.toLean (l : TListener) : String :=
   let body := s!"some (\"{l.id}|{l.event}|\" ++ p)"
