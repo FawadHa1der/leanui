@@ -73,6 +73,23 @@ def Geo.label : Geo → String
   | .flipH => "Flip horizontal" | .flipV => "Flip vertical"
   | .resize w h => s!"Resize to {w}×{h}" | .crop r => s!"Crop to {r.w}×{r.h}"
 
+/-- The size of the result on a `w × h` image. -/
+def Geo.outSize (g : Geo) (w h : Nat) : Nat × Nat :=
+  match g with
+  | .rotCW | .rotCCW => (h, w)
+  | .resize w' h' => (w', h')
+  | .crop r => let c := r.clamp w h; (c.w, c.h)
+  | _ => (w, h)
+
+/-- Rows `[y0, y1)` of the result into `dst` (of `outSize`). -/
+def Geo.rows (g : Geo) (src dst : Image) (y0 y1 : Nat) : Image :=
+  match g with
+  | .rotCW => rotate90cwRows src dst y0 y1 | .rotCCW => rotate90ccwRows src dst y0 y1
+  | .rot180 => rotate180Rows src dst y0 y1
+  | .flipH => flipHRows src dst y0 y1 | .flipV => flipVRows src dst y0 y1
+  | .resize _ _ => resizeRows src dst y0 y1
+  | .crop r => cropRows r src dst y0 y1
+
 def Geo.run (g : Geo) (img : Image) : Image :=
   match g with
   | .rotCW => Editor.rotate90cw img | .rotCCW => Editor.rotate90ccw img | .rot180 => Editor.rotate180 img

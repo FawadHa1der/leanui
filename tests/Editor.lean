@@ -878,6 +878,16 @@ def testJobs : T Unit := do
     | (some (.layer 1 out (some prev)), _) =>
       expectEq s!"{op.label}: preview pass" prev.checksum (downscaleBox out 1280 597).checksum
     | _ => expect s!"{op.label}: a preview" false
+  -- geometry jobs: every layer, in row slices, with previews for a large result
+  let gd := (Doc.ofImage (testImage 1500 700) "B").addLayer 1 |>.1
+  let gd := (gd.paint 2 (100, 100) (900, 600) { radius := 30, color := ⟨0, 0, 255, 255⟩ }).1
+  for g in [Geo.rotCW, .rotCCW, .rot180, .flipH, .flipV, .resize 1400 800, .resize 300 200, .crop ⟨100, 50, 1350, 600⟩] do
+    match finish (Job.geo g gd) 40000 with
+    | (some (.doc out), _) =>
+      let want := gd.transform g
+      expectEq s!"{g.label} job" (out.width, out.height, out.pw, out.ph, out.layers.map (·.img.checksum), out.layers.map (·.prev.map (·.checksum)))
+        (want.width, want.height, want.pw, want.ph, want.layers.map (·.img.checksum), want.layers.map (·.prev.map (·.checksum)))
+    | _ => expect s!"{g.label} job finishes" false
   match finish (Job.layer (.blur 3) 1 img (some (301, 203))) 100000 with
   | (some (.layer 1 _ none), _) => expect "no preview pass for a small image" true
   | _ => expect "no preview pass for a small image" false
@@ -960,6 +970,7 @@ def testProgram : T Unit := do
   expectEq "one layer again" (((← r.dom.get).get (← r.find "class" "layers")).kids.size) 1
   -- geometry, then crop with the tool
   r.click "id" "rot-cw"
+  let _ ← frames r
   expectEq "rotate" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "864", some "1152")
   r.click "id" "undo"
   r.click "id" "tool-crop"
@@ -967,6 +978,7 @@ def testProgram : T Unit := do
   r.fire canvas "pointermove" "400 300 1152 864 1 0 1 0.5 0 0 400 300"
   r.fire canvas "pointerup" "400 300 1152 864 0 0 1 0 0 0 400 300"
   r.click "id" "crop-apply"
+  let _ ← frames r
   expectEq "crop" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "300", some "200")
   -- open a PNG: its bytes come back to Lean, which decodes them
   let png := Png.encode (testImage 40 30) 1

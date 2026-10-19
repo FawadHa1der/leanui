@@ -136,9 +136,8 @@ for (const [w, h] of SIZES) {
   R["edge detect"] = await job(page, "#edges");
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 600000 }), (async () => { R["export PNG"] = await job(page, "#export"); })()]);
   R.pngKB = Math.round(fs.statSync(await download.path()).size / 1024);
-  // geometry is synchronous
-  const rot = await click(page, "#rot-cw");
-  R["rotate 90"] = { script: r1(rot[0]), frame: r1(rot[1]) };
+  // geometry runs as a job too
+  R["rotate 90"] = await job(page, "#rot-cw");
   R.heapEndMB = await page.evaluate(() => window.__heapMB());
   results.sizes[key] = R;
   await page.close();

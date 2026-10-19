@@ -224,15 +224,8 @@ def Pending.op (m : Model) : Pending → Op
   | .blur => .blur m.blurRadius
   | .sharpen => .sharpen m.sharpAmount m.sharpRadius
 
-/-- The histogram of the canvas from every fourth row: the panel shows its shape (each group
-scaled to its peak), and the canvas changes on every slider input. -/
-def previewHistogram (img : Image) : Array Nat := Id.run do
-  let mut t : Array UInt32 := Array.replicate 1024 0
-  let mut y := 0
-  while y < img.height do
-    t := histogramRows img y (y + 1) t
-    y := y + 4
-  return t.map (·.toNat)
+-- The canvas's histogram is taken from every fourth row (`histogramEvery`): the panel shows its
+-- shape, each group scaled to its peak, and the canvas changes on every slider input.
 
 def bitmap (i : Image) : Bitmap := { width := i.width, height := i.height, data := i.data }
 
@@ -251,7 +244,7 @@ def recomposite (m : Model) : Model :=
       | some p => (d.layerIndex? m.active).map fun i => (i, (p.op m).preview d.scale d.layers[i]!.preview)
       | none => none
     let comp := d.composite swap
-    { m with comp, compVersion := m.compVersion + 1, hist := previewHistogram comp }
+    { m with comp, compVersion := m.compVersion + 1, hist := histogramEvery comp 4 }
 
 def refresh (m : Model) : Model × Cmd Msg :=
   let m := recomposite m
@@ -398,7 +391,7 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       | some d =>
         let label := if m.tool == .eraser then "Eraser" else "Brush"
         let m := push m label (d.width * d.height * 4)
-        ({ m with hist := previewHistogram m.comp, compVersion := m.compVersion + 1 }, .none)
+        ({ m with hist := histogramEvery m.comp 4, compVersion := m.compVersion + 1 }, .none)
       | none => (m, .none)
     else ({ m with drag := none, cropFrom := none }, .none)
   | .wheel p =>
@@ -441,6 +434,9 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
         | .layer lid img prev, some d =>
           let (m, c) := commit m (d.setLayerImage lid img prev) job.label (img.width * img.height * 4)
           ({ m with status := s!"{job.label} done" }, c)
+        | .doc d', _ =>
+          let (m, c) := commit { m with crop := none } d' job.label (d'.layers.size * d'.width * d'.height * 4)
+          ({ m with zoom := none, panX := 0, panY := 0, status := s!"{job.label} done" }, c)
         | .png bytes, _ =>
           ({ m with status := s!"Exported {m.fileName}.png ({bytes.size / 1024} KB)" },
            .download s!"{m.fileName}.png" "image/png" bytes)
@@ -449,10 +445,8 @@ partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | none => (m, .none)
     | some d =>
-      if busy m then (m, .none) else
-      let d := d.transform g
-      let (m, c) := commit { m with crop := none } d g.label (d.layers.size * d.width * d.height * 4)
-      ({ m with zoom := none, panX := 0, panY := 0 }, c)
+      if busy m then (m, .none)
+      else ({ m with job := some (Job.geo g d), pending := none, status := s!"{g.label}…", lastFrame := 0 }, .nextFrame .frame)
   | .setResize w h =>
     match m.doc with
     | none => (m, .none)
