@@ -158,6 +158,7 @@ built against. It was first written on 2026-10-18 from the research in
 | `examples/TodoMVC.lean`, `examples/TodoMVCProofs.lean` | TodoMVC and its proved invariants | `leanui-todomvc-tests`, `tests/browser/todomvc.mjs` |
 | `examples/Site.lean`, `examples/SiteServer.lean` | the LeanUI site (`leanui-site`) | `tests/browser/site.mjs` |
 | `examples/Pixels.lean` | the pixels lab: canvas, pointer, files, downloads, keys | `leanui-kit-tests`, `tests/browser/pixels.mjs` |
+| `examples/Editor.lean`, `examples/Editor/*.lean` | LeanUI Photo: image operations, PNG, layers, jobs, the editor | `leanui-editor-tests`, `tests/browser/editor.mjs` |
 | `examples/Bench.lean`, `bench/*` | the benchmark app, the vanilla reference, the runner | `leanui-perf`, `tests/browser/{bench,selfbench,bench-smoke}.mjs` |
 | `toolchain/*`, `tools/*` | wasm64 archives, app builds, site data | |
 

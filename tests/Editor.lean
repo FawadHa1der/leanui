@@ -1,5 +1,7 @@
 module
 public import Editor.Core
+public import Editor
+public import LeanUI.Testing.Harness
 /-!
 # Tests for the photo editor core (`examples/Editor/*.lean`)
 
@@ -22,6 +24,11 @@ the goldens pin, with their raw pixels, for checking them with another decoder).
   multiple of anything, with transparency; decoding of files written by Python's `zlib` (dynamic
   and fixed Huffman blocks, all five row filters, colour types 0, 2, 3, 4, 6, `tRNS`, split
   `IDAT` chunks); errors for corrupt and unsupported files.
+* **The editor** (`Editor.Doc`, `Editor.Ops`, `Editor`): previews and preview compositing,
+  painting in place (one copy per stroke while history holds the old pixels, none after), every
+  job's row-sliced result equals the whole-image operation, export round-trips through PNG, and
+  the program itself in the DOM model (`LeanUI.Testing`): open, adjust with live preview, apply,
+  filters, paint, undo and redo, layers, geometry, crop, export.
 -/
 public section
 open Editor
@@ -698,6 +705,197 @@ def testPng : T Unit := do
     let truncated := (List.range good.size).all fun n => (Png.decode (good.extract 0 n)).toOption.isNone
     expect s!"decoder rejects every truncation of a level {level} file" truncated
 
+/-! ## The editor: document, jobs, program -/
+
+unsafe def addrIOImpl (b : @& ByteArray) : BaseIO USize := pure (ptrAddrUnsafe b)
+/-- The address of a layer's pixels (to see in-place updates), read without taking a reference. -/
+@[implemented_by addrIOImpl] opaque addrOfBytes (b : @& ByteArray) : BaseIO USize
+
+def layerAddr (d : @& Doc) (i : Nat) : BaseIO USize := addrOfBytes d.layers[i]!.img.data
+
+def testDoc : T Unit := do
+  expectEq "preview size: large" (previewSize 4000 3000) (1280, 960)
+  expectEq "preview size: tall" (previewSize 1000 2000) (640, 1280)
+  expectEq "preview size: small" (previewSize 800 600) (800, 600)
+  let big := Doc.ofImage (testImage 2000 1000) "Background"
+  expectEq "doc preview" (big.pw, big.ph, big.layers[0]!.prev.map (·.width)) (1280, 640, some 1280)
+  let small := Doc.ofImage (testImage 300 200) "Background"
+  expect "small image is its own preview" (small.layers[0]!.prev.isNone)
+  -- the composite of one opaque layer is its preview
+  expectEq "composite of one layer" small.composite.checksum (small.layers[0]!.img.checksum)
+  -- painting: the history keeps the first document, so the first dab copies the layer; the
+  -- following dabs paint the copy in place
+  let d0 := Doc.ofImage (testImage 640 480) "Background"
+  let a0 ← layerAddr d0 0
+  let brush : Brush := { radius := 10, hardness := 1, color := ⟨255, 0, 0, 255⟩ }
+  let (d1, r1) := d0.paint 1 (100, 100) (200, 100) brush
+  let a1 ← layerAddr d1 0
+  let (d2, _) := d1.paint 1 (200, 100) (300, 150) brush
+  let a2 ← layerAddr d2 0
+  let (d3, _) := d2.paint 1 (300, 150) (310, 300) brush
+  let a3 ← layerAddr d3 0
+  expect "first dab copies (history holds the old pixels)" (a1 != a0)
+  expect "later dabs paint in place" (a2 == a1 && a3 == a1) s!"{a1} {a2} {a3}"
+  expect "the old document is unchanged" (d0.layers[0]!.img.get 150 100 != ⟨255, 0, 0, 255⟩)
+  expectEq "painted" (d3.layers[0]!.img.get 150 100) ⟨255, 0, 0, 255⟩
+  expect "dirty rect covers the segment" (r1.x ≤ 100 && r1.x + r1.w ≥ 200 && r1.y ≤ 95 && r1.y + r1.h ≥ 105) s!"{repr r1}"
+  -- painting on a large image updates the preview under the stroke, so the band composite equals
+  -- a full composite
+  let e0 := Doc.ofImage (testImage 2560 1280) "Background"
+  let comp0 := e0.composite
+  let (e1, r) := e0.paint 1 (500, 500) (900, 640) { brush with radius := 40 }
+  let band := e1.compositeRect comp0 r
+  expectEq "preview band = full composite" band.checksum e1.composite.checksum
+  expectEq "preview = downscale of the painted layer" e1.layers[0]!.prev.get!.checksum (downscaleBox e1.layers[0]!.img 1280 640).checksum
+  let p := e1.toPreviewRect r
+  expect "preview rect covers the stroke" (p.x ≤ 250 && p.x + p.w ≥ 450 && p.y ≤ 250 && p.y + p.h ≥ 320) s!"{repr p}"
+  -- layers
+  let (l2, id2) := small.addLayer 1
+  let l2 := l2.modifyLayer id2 fun l => { l with name := "Top" }
+  expectEq "add layer" (l2.layers.map (·.name)) #["Background", "Top"]
+  expectEq "a transparent layer changes nothing" l2.composite.checksum small.composite.checksum
+  expectEq "move down" ((l2.moveLayer id2 false).layers.map (·.name)) #["Top", "Background"]
+  expectEq "move up at the top" ((l2.moveLayer id2 true).layers.map (·.name)) #["Background", "Top"]
+  expectEq "delete" ((l2.deleteLayer id2).layers.map (·.name)) #["Background"]
+  expectEq "never delete the last layer" ((small.deleteLayer 1).layers.size) 1
+  let (l3, id3) := small.duplicateLayer 1
+  expectEq "duplicate" (l3.layers.map (·.name), id3) (#["Background", "Background copy"], 2)
+  -- geometry on every layer
+  let g := l2.transform .rotCW
+  expectEq "rotate: size" (g.width, g.height, g.pw, g.ph) (200, 300, 200, 300)
+  expectEq "rotate: every layer" (g.layers.map (·.img.width)) #[200, 200]
+  let c := big.transform (.crop ⟨100, 100, 1500, 700⟩)
+  expectEq "crop" (c.width, c.height, c.pw, c.ph) (1500, 700, 1280, 597)
+
+/-- Run a job to the end in slices of `budget` pixels. -/
+partial def finish (j : Job) (budget : Nat) (n : Nat := 0) : Option JobResult × Nat :=
+  match j.finished? with
+  | some r => (some r, n)
+  | none => if n > 100000 then (none, n) else finish (j.run budget) budget (n + 1)
+
+def testJobs : T Unit := do
+  let img := testImage 301 203
+  let cases : List (Op × Image) := [
+    (.adjust { Adjust.identity with brightness := 30, saturation := 40, hue := 25 }, Adjust.apply { Adjust.identity with brightness := 30, saturation := 40, hue := 25 } img),
+    (.blur 4, Editor.blur img 4), (.sharpen 120 2, Editor.sharpen img 1.2 2), (.edges, edgeDetect img), (.emboss, Editor.emboss img)]
+  for (op, want) in cases do
+    for budget in [1, 5000, 1000000] do
+      match finish (Job.layer op 7 img) budget with
+      | (some (.layer 7 out), steps) =>
+        expectEq s!"{op.label} in slices of {budget}" out.checksum want.checksum
+        if budget == 1 then expect s!"{op.label}: one row per slice" (steps ≥ 203) s!"{steps}"
+      | _ => expect s!"{op.label} finishes" false
+  -- export: the layers composited at full resolution, encoded as PNG
+  let d := Doc.ofImage img "Background"
+  let (d, id) := d.addLayer 1
+  let (d, _) := d.paint id (10, 10) (200, 150) { radius := 12, color := ⟨0, 0, 255, 200⟩ }
+  let d := d.modifyLayer id fun l => { l with opacity := 70, blend := .multiply }
+  match finish (Job.export d) 20000 with
+  | (some (.png bytes), _) =>
+    match Png.decode bytes with
+    | .ok back => expectEq "export decodes to the flattened document" back.checksum d.flatten.checksum
+    | .error e => expect "export decodes" false e
+  | _ => expect "export finishes" false
+  expect "progress" ((Job.layer (.blur 2) 1 img).progress == 0)
+
+/-! ### The program in the DOM model -/
+
+partial def textUnder (d : LeanUI.Testing.Dom) (h : UInt32) : String :=
+  let n := d.get h
+  if n.isText then n.text else String.join (n.kids.toList.map (textUnder d))
+
+def textOf (r : LeanUI.Testing.Running) (ident : String) : IO String := do
+  return textUnder (← r.dom.get) (← r.find "id" ident)
+
+def attrOf (r : LeanUI.Testing.Running) (ident a : String) : IO (Option String) := do
+  return ((← r.dom.get).get (← r.find "id" ident)).attrs.find? (·.1 == a) |>.map (·.2)
+
+/-- The history panel's labels. -/
+def steps (r : LeanUI.Testing.Running) : IO (Array String) := do
+  let d ← r.dom.get
+  let ol ← r.find "class" "history"
+  return (d.get ol).kids.map fun li => ((d.get li).kids.toList.drop 1 |>.map (textUnder d) |> String.join)
+
+/-- Deliver animation frames (16 ms apart) until the program stops asking for them. -/
+partial def frames (r : LeanUI.Testing.Running) (t : Nat := 1000) (n : Nat := 0) : IO Nat := do
+  let effs := (← r.dom.get).effects
+  match effs.back? with
+  | some e =>
+    if e.startsWith s!"op{LeanUI.Op.frame} " && n < 10000 then
+      let cb := (e.drop s!"op{LeanUI.Op.frame} ".length).toString.toNat!.toUInt32
+      r.inst.callback cb true (toString t)
+      frames r (t + 16) (n + 1)
+    else return n
+  | none => return n
+
+def canvasPuts (r : LeanUI.Testing.Running) (since : Nat) : IO (Array String) := do
+  return ((← r.dom.get).effects.extract since (← r.dom.get).effects.size).filter (·.startsWith "putImage #canvas")
+
+def testProgram : T Unit := do
+  let r ← LeanUI.Testing.run Editor.program
+  let mark := (← r.dom.get).effects.size
+  r.click "id" "new-1"
+  expectEq "new: canvas size" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "1152", some "864")
+  expectEq "new: drawn whole" (← canvasPuts r mark) #["putImage #canvas blob=0 1152x864 dirty=0,0,1152,864"]
+  expectEq "new: history" (← steps r) #["New 1152×864"]
+  -- a slider previews without a step; apply runs a job over frames
+  r.fire (← r.find "id" "adj-brightness") "input" "40"
+  expectEq "preview: no step" (← steps r).size 1
+  r.click "id" "adj-apply"
+  expect "apply: busy" ((← r.find "id" "busy") > 0)
+  let n ← frames r
+  expect "apply: took frames" (n ≥ 1) s!"{n}"
+  expectEq "apply: step" (← steps r) #["New 1152×864", "Adjustments"]
+  expectEq "apply: sliders reset" ((← r.dom.get).get (← r.find "id" "adj-brightness")).props (#[("value", "0")])
+  -- a filter, then paint a stroke: its moves send dirty rectangles only
+  r.fire (← r.find "id" "blur-radius") "input" "2"
+  r.click "id" "blur-apply"
+  let _ ← frames r
+  let canvas ← r.find "id" "canvas"
+  let mark := (← r.dom.get).effects.size
+  r.fire canvas "pointerdown" "100 100 1152 864 1 0 1 0.5 0 0 100 100"
+  r.fire canvas "pointermove" "200 100 1152 864 1 0 1 0.5 0 0 200 100"
+  r.fire canvas "pointermove" "300 150 1152 864 1 0 1 0.5 0 0 300 150"
+  r.fire canvas "pointerup" "300 150 1152 864 0 0 1 0 0 0 300 150"
+  let puts ← canvasPuts r mark
+  expect "paint: dirty rectangles" (puts.size == 3 && puts.all fun p => !p.endsWith "dirty=0,0,1152,864") s!"{puts}"
+  expectEq "paint: step" (← steps r) #["New 1152×864", "Adjustments", "Blur 2px", "Brush"]
+  -- undo and redo redraw the canvas; the panel marks the redo steps
+  r.click "id" "undo"
+  expectEq "undo: future step" (← attrOf r "step-3" "class") (some "future")
+  r.inst.callback (← lastKeysCb r) true "Ctrl+Shift+z"
+  expectEq "redo by key" (← attrOf r "step-3" "class") (some "current")
+  r.click "id" "step-0"
+  expectEq "jump" (← attrOf r "step-0" "class") (some "current")
+  r.click "id" "step-3"
+  -- layers
+  r.click "id" "layer-add"
+  let d ← r.dom.get
+  expectEq "layers" ((d.get (← r.find "class" "layers")).kids.size) 2
+  r.click "id" "layer-delete"
+  expectEq "one layer again" (((← r.dom.get).get (← r.find "class" "layers")).kids.size) 1
+  -- geometry, then crop with the tool
+  r.click "id" "rot-cw"
+  expectEq "rotate" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "864", some "1152")
+  r.click "id" "undo"
+  r.click "id" "tool-crop"
+  r.fire canvas "pointerdown" "100 100 1152 864 1 0 1 0.5 0 0 100 100"
+  r.fire canvas "pointermove" "400 300 1152 864 1 0 1 0.5 0 0 400 300"
+  r.fire canvas "pointerup" "400 300 1152 864 0 0 1 0 0 0 400 300"
+  r.click "id" "crop-apply"
+  expectEq "crop" ((← attrOf r "canvas" "width"), (← attrOf r "canvas" "height")) (some "300", some "200")
+  -- export: a download of a PNG of the document's size
+  r.click "id" "export"
+  let _ ← frames r
+  expect "export: download" (((← r.dom.get).effects.back?.getD "").startsWith "download test-1152x864.png image/png") s!"{(← r.dom.get).effects.back?}"
+  let d ← r.dom.get
+  expect "protocol" d.errors.isEmpty s!"{d.errors}"
+where
+  lastKeysCb (r : LeanUI.Testing.Running) : IO UInt32 := do
+    let pfx := s!"op{LeanUI.Op.keysListen} "
+    let some e := (← r.dom.get).effects.reverse.find? (·.startsWith pfx) | throw (IO.userError "no keys subscription")
+    return (e.drop pfx.length).toString.toNat!.toUInt32
+
 /-! ## Main -/
 
 /-- The images of the compressed-PNG goldens, for `--write-pngs`. -/
@@ -717,7 +915,8 @@ public def main (args : List String) : IO UInt32 := do
     return 0
   IO.println "leanui editor tests"
   let ((), s) ← (do
-    testByHand; testGoldens; testGeometry; testFilters; testAdjust; testComposite; testPaint; testPng : T Unit).run {}
+    testByHand; testGoldens; testGeometry; testFilters; testAdjust; testComposite; testPaint; testPng
+    testDoc; testJobs; testProgram : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0

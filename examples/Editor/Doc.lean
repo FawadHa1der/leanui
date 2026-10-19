@@ -1,5 +1,6 @@
 module
 public import Editor.Core
+public import LeanUI.Effect
 /-!
 # The editor's document: layers at two resolutions
 
@@ -57,6 +58,26 @@ def previewSize (w h : Nat) : Nat × Nat :=
 def mkPreview (img : Image) (pw ph : Nat) : Option Image :=
   if img.width == pw && img.height == ph then none else some (downscaleBox img pw ph)
 
+/-! ## Geometry -/
+
+inductive Geo where
+  | rotCW | rotCCW | rot180 | flipH | flipV
+  | resize (w h : Nat)
+  | crop (r : Rect)
+  deriving Inhabited
+
+def Geo.label : Geo → String
+  | .rotCW => "Rotate 90° clockwise" | .rotCCW => "Rotate 90° counter-clockwise" | .rot180 => "Rotate 180°"
+  | .flipH => "Flip horizontal" | .flipV => "Flip vertical"
+  | .resize w h => s!"Resize to {w}×{h}" | .crop r => s!"Crop to {r.w}×{r.h}"
+
+def Geo.run (g : Geo) (img : Image) : Image :=
+  match g with
+  | .rotCW => Editor.rotate90cw img | .rotCCW => Editor.rotate90ccw img | .rot180 => Editor.rotate180 img
+  | .flipH => Editor.flipH img | .flipV => Editor.flipV img
+  | .resize w h => Editor.resize img w h
+  | .crop r => Editor.crop img r
+
 namespace Doc
 
 def ofImage (img : Image) (name : String) : Doc :=
@@ -87,9 +108,9 @@ def addLayer (d : Doc) (above : Nat) : Doc × Nat :=
   let id := d.nextId
   let blank := Image.blank d.width d.height
   let l : Layer := { id, name := s!"Layer {id}", img := blank, prev := mkPreview blank d.pw d.ph }
-  let at := ((d.layerIndex? above).map (· + 1)).getD d.layers.size
+  let pos := ((d.layerIndex? above).map (· + 1)).getD d.layers.size
   let (ls, d) := d.takeLayers
-  ({ d with layers := ls.insertIdxIfInBounds at l, nextId := id + 1 }, id)
+  ({ d with layers := ls.insertIdxIfInBounds pos l, nextId := id + 1 }, id)
 
 /-- A copy of layer `id` above it (sharing its pixels until one of them changes). -/
 def duplicateLayer (d : Doc) (id : Nat) : Doc × Nat :=
@@ -176,26 +197,6 @@ def paint (d : Doc) (id : Nat) (a b : Float × Float) (brush : Brush) : Doc × R
           let y1 := min ph (((dirty.y + dirty.h) * ph + h - 1) / h)
           some (downscaleBoxRows img p y0 y1)
     ({ d with layers := ls.set! i { l with img, prev } }, dirty)
-
-/-! ## Geometry -/
-
-inductive Geo where
-  | rotCW | rotCCW | rot180 | flipH | flipV
-  | resize (w h : Nat)
-  | crop (r : Rect)
-  deriving Inhabited
-
-def Geo.label : Geo → String
-  | .rotCW => "Rotate 90° clockwise" | .rotCCW => "Rotate 90° counter-clockwise" | .rot180 => "Rotate 180°"
-  | .flipH => "Flip horizontal" | .flipV => "Flip vertical"
-  | .resize w h => s!"Resize to {w}×{h}" | .crop r => s!"Crop to {r.w}×{r.h}"
-
-def Geo.run (g : Geo) (img : Image) : Image :=
-  match g with
-  | .rotCW => rotate90cw img | .rotCCW => rotate90ccw img | .rot180 => rotate180 img
-  | .flipH => flipH img | .flipV => flipV img
-  | .resize w h => resize img w h
-  | .crop r => crop img r
 
 /-- Apply a geometric operation to every layer. -/
 def transform (d : Doc) (g : Geo) : Doc :=

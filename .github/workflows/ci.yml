@@ -65,7 +65,7 @@ jobs:
         run: |
           failed=""
           for t in leanui-tests leanui-props leanui-syntax-tests leanui-kit-tests leanui-server-tests \
-                   leanui-todomvc-tests leanui-notes-tests; do
+                   leanui-todomvc-tests leanui-notes-tests leanui-editor-tests; do
             echo "::group::$t"
             .lake/build/bin/$t || failed="$failed $t"
             echo "::endgroup::"

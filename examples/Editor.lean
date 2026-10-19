@@ -140,7 +140,7 @@ structure Model where
   drag : Option (Float × Float × Float × Float) := none
   crop : Option Rect := none
   cropFrom : Option (Float × Float) := none
-  renaming : Option Nat := none
+  renamingId : Option Nat := none
   resizeW : Nat := 0
   resizeH : Nat := 0
   keepRatio : Bool := true
@@ -222,7 +222,7 @@ def Pending.op (m : Model) : Pending → Op
 
 def bitmap (i : Image) : Bitmap := { width := i.width, height := i.height, data := i.data }
 
-def show (m : Model) : Cmd Msg := .drawBitmap "#canvas" (bitmap m.comp)
+def showCanvas (m : Model) : Cmd Msg := .drawBitmap "#canvas" (bitmap m.comp)
 
 def parseNat (s : String) : Nat := s.toNat?.getD 0
 def parseInt (s : String) : Int := s.toInt?.getD 0
@@ -234,14 +234,14 @@ def recomposite (m : Model) : Model :=
   | none => m
   | some d =>
     let swap := match m.pending with
-      | some p => (d.layerIndex? m.active).map fun i => (i, (p.op m).preview d.scale d.layers[i]!.prev)
+      | some p => (d.layerIndex? m.active).map fun i => (i, (p.op m).preview d.scale d.layers[i]!.preview)
       | none => none
     let comp := d.composite swap
     { m with comp, compVersion := m.compVersion + 1, hist := histogram comp }
 
 def refresh (m : Model) : Model × Cmd Msg :=
   let m := recomposite m
-  (m, show m)
+  (m, showCanvas m)
 
 /-- Record a step (dropping any redo steps, then the oldest steps over the budget). -/
 def push (m : Model) (label : String) (cost : Nat) : Model :=
@@ -321,7 +321,7 @@ def currentZoom (m : Model) : Float :=
 
 /-! ## Update -/
 
-def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
+partial def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
   match msg with
   | .files fs =>
     match fs[0]? with
@@ -410,10 +410,10 @@ def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
       match job.finished? with
       | none => ({ m with job := some job, budget, lastFrame := t }, .nextFrame .frame)
       | some result =>
-        let m := { m with job := none, budget, lastFrame := 0, adjust := if m.pending == some .adjust then {} else m.adjust }
+        let m := { m with job := none, budget, lastFrame := 0, adjust := if m.pending == some Pending.adjust then {} else m.adjust }
         match result, m.doc with
-        | .layer id img, some d =>
-          let (m, c) := commit m (d.setLayerImage id img) job.label (img.width * img.height * 4)
+        | .layer lid img, some d =>
+          let (m, c) := commit m (d.setLayerImage lid img) job.label (img.width * img.height * 4)
           ({ m with status := s!"{job.label} done" }, c)
         | .png bytes, _ =>
           ({ m with status := s!"Exported {m.fileName}.png ({bytes.size / 1024} KB)" },
@@ -443,16 +443,16 @@ def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
   | .addLayer =>
     match m.doc with
     | some d =>
-      let (d, id) := d.addLayer m.active
+      let (d, lid) := d.addLayer m.active
       let (m, c) := commit m d "New layer" (d.width * d.height * 4)
-      ({ m with active := id }, c)
+      ({ m with active := lid }, c)
     | none => (m, .none)
   | .duplicateLayer =>
     match m.doc with
     | some d =>
-      let (d, id) := d.duplicateLayer m.active
+      let (d, lid) := d.duplicateLayer m.active
       let (m, c) := commit m d "Duplicate layer" 0
-      ({ m with active := id }, c)
+      ({ m with active := lid }, c)
     | none => (m, .none)
   | .deleteLayer =>
     match m.doc with
@@ -462,10 +462,10 @@ def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | some d => commit m (d.moveLayer m.active up) (if up then "Layer up" else "Layer down") 0
     | none => (m, .none)
-  | .selectLayer id => (if m.active == id then m else { m with active := id, pending := none }, .none)
-  | .toggleLayer id =>
+  | .selectLayer lid => (if m.active == lid then m else { m with active := lid, pending := none }, .none)
+  | .toggleLayer lid =>
     match m.doc with
-    | some d => commit m (d.modifyLayer id fun l => { l with visible := !l.visible }) "Visibility" 0
+    | some d => commit m (d.modifyLayer lid fun l => { l with visible := !l.visible }) "Visibility" 0
     | none => (m, .none)
   | .layerOpacity n =>
     match m.doc with
@@ -475,17 +475,17 @@ def update (msg : Msg) (m : Model) : Model × Cmd Msg :=
     match m.doc with
     | some d => commit m (d.modifyLayer m.active fun l => { l with blend := Blend.ofName b }) "Blend mode" 0
     | none => (m, .none)
-  | .startRename id => ({ m with renaming := some id }, .focus "#rename")
-  | .rename id name =>
+  | .startRename lid => ({ m with renamingId := some lid }, .focus "#rename")
+  | .rename lid name =>
     match m.doc with
     | some d =>
       let name := name.trimAscii.toString
-      if name.isEmpty then ({ m with renaming := none }, .none)
+      if name.isEmpty then ({ m with renamingId := none }, .none)
       else
-        let (m, c) := commit { m with renaming := none } (d.modifyLayer id fun l => { l with name }) "Rename layer" 0
+        let (m, c) := commit { m with renamingId := none } (d.modifyLayer lid fun l => { l with name }) "Rename layer" 0
         (m, c)
     | none => (m, .none)
-  | .stopRename => ({ m with renaming := none }, .none)
+  | .stopRename => ({ m with renamingId := none }, .none)
   | .jump i =>
     match m.history[i]? with
     | some s =>
@@ -531,18 +531,18 @@ def fmt1 (x : Float) : String :=
 def slider (label ident : String) (lo hi step v : Int) (shown : String) (f : Int → Msg) : Html Msg :=
   el "label" #[cls "row"] #[
     el "span" #[] #[text label],
-    el "input" #[id ident, .attr "type" "range", .attr "min" (toString lo), .attr "max" (toString hi),
+    el "input" #[Attr.id ident, .attr "type" "range", .attr "min" (toString lo), .attr "max" (toString hi),
       .attr "step" (toString step), .prop "value" (.str (toString v)), onInput fun s => f (parseInt s)] #[],
     el "output" #[] #[text shown]]
 
 def check (label ident : String) (v : Bool) (f : Bool → Msg) : Html Msg :=
-  el "label" #[] #[el "input" #[id ident, .attr "type" "checkbox", .prop "checked" (.bool v), onCheck f] #[], text (" " ++ label)]
+  el "label" #[] #[el "input" #[Attr.id ident, .attr "type" "checkbox", .prop "checked" (.bool v), onCheck f] #[], text (" " ++ label)]
 
 def button (label ident : String) (m : Msg) (disabled := false) (extra : Array (Attr Msg) := #[]) : Html Msg :=
-  el "button" (#[id ident, onClick m, .prop "disabled" (.bool disabled)] ++ extra) #[text label]
+  el "button" (#[Attr.id ident, onClick m, .prop "disabled" (.bool disabled)] ++ extra) #[text label]
 
 def toolButton (cur t : Tool) (icon title : String) : Html Msg :=
-  el "button" #[id s!"tool-{t.name}", .attr "title" title, cls (if cur == t then "on" else ""), onClick (.setTool t)] #[text icon]
+  el "button" #[Attr.id s!"tool-{t.name}", .attr "title" title, cls (if cur == t then "on" else ""), onClick (.setTool t)] #[text icon]
 
 def topbar (m : Model) : Html Msg :=
   let hasDoc := m.doc.isSome
@@ -550,8 +550,8 @@ def topbar (m : Model) : Html Msg :=
     el "div" #[cls "brand"] #[el "a" #[.attr "href" "/"] #[text "LeanUI "], text "Photo ", el "small" #[] #[text "· pixels in Lean"]],
     el "label" #[cls "file-label"] #[
       el "button" #[.attr "tabindex" "-1"] #[text "Open…"],
-      el "input" #[id "open", .attr "type" "file", .attr "accept" "image/*", .prop "value" (.str ""), onFiles .files] #[]],
-    el "select" #[id "new", .prop "value" (.str ""), onChange fun s => .newImage (parseNat s)] #[
+      el "input" #[Attr.id "open", .attr "type" "file", .attr "accept" "image/*", .prop "value" (.str ""), onFiles .files] #[]],
+    el "select" #[Attr.id "new", .prop "value" (.str ""), onChange fun s => .newImage (parseNat s)] #[
       el "option" #[.attr "value" ""] #[text "New test image…"],
       el "option" #[.attr "value" "1"] #[text "1 MP (1152×864)"],
       el "option" #[.attr "value" "4"] #[text "4 MP (2304×1728)"],
@@ -561,23 +561,23 @@ def topbar (m : Model) : Html Msg :=
     button "↷ Redo" "redo" .redo (m.cursor + 1 ≥ m.history.size || busy m),
     el "span" #[cls "spacer"] #[],
     button "−" "zoom-out" (.zoomBy 0.8) (!hasDoc),
-    el "span" #[id "zoom"] #[text (if hasDoc then s!"{(currentZoom m * 100).round.toUInt64}%" else "")],
+    el "span" #[Attr.id "zoom"] #[text (if hasDoc then s!"{(currentZoom m * 100).round.toUInt64}%" else "")],
     button "+" "zoom-in" (.zoomBy 1.25) (!hasDoc),
     button "Fit" "zoom-fit" .zoomFit (!hasDoc),
-    el "span" #[id "status", cls "status"] #[text m.status]]
+    el "span" #[Attr.id "status", cls "status"] #[text m.status]]
 
 def options (m : Model) : Html Msg :=
   let b := m.brush
   el "div" #[cls "options"] (match m.tool with
     | .brush | .eraser => #[
-        el "label" #[] #[text "Size", el "input" #[id "brush-size", .attr "type" "range", .attr "min" "1", .attr "max" "400",
+        el "label" #[] #[text "Size", el "input" #[Attr.id "brush-size", .attr "type" "range", .attr "min" "1", .attr "max" "400",
           .prop "value" (.str (toString b.size)), onInput fun s => .brushSize (parseNat s)] #[], el "output" #[] #[text s!"{b.size}px"]],
-        el "label" #[] #[text "Hardness", el "input" #[id "brush-hardness", .attr "type" "range", .attr "min" "0", .attr "max" "100",
+        el "label" #[] #[text "Hardness", el "input" #[Attr.id "brush-hardness", .attr "type" "range", .attr "min" "0", .attr "max" "100",
           .prop "value" (.str (toString b.hardness)), onInput fun s => .brushHardness (parseNat s)] #[], el "output" #[] #[text s!"{b.hardness}%"]],
-        el "label" #[] #[text "Opacity", el "input" #[id "brush-opacity", .attr "type" "range", .attr "min" "1", .attr "max" "100",
+        el "label" #[] #[text "Opacity", el "input" #[Attr.id "brush-opacity", .attr "type" "range", .attr "min" "1", .attr "max" "100",
           .prop "value" (.str (toString b.opacity)), onInput fun s => .brushOpacity (parseNat s)] #[], el "output" #[] #[text s!"{b.opacity}%"]],
         if m.tool == .brush then
-          el "label" #[] #[text "Colour", el "input" #[id "brush-color", .attr "type" "color", .prop "value" (.str (hexOf b.color)),
+          el "label" #[] #[text "Colour", el "input" #[Attr.id "brush-color", .attr "type" "color", .prop "value" (.str (hexOf b.color)),
             onInput .brushColor] #[]]
         else el "span" #[cls "note"] #[text "The eraser makes the active layer transparent."]]
     | .hand => #[el "span" #[cls "note"] #[text "Drag to pan; the wheel zooms. Keys: + − 0 (fit) 1 (100%)."]]
@@ -602,18 +602,18 @@ def stage (m : Model) (d : Doc) : Html Msg :=
     | some z =>
       ("stage zoomed", s!"width:{fmt1 (Float.ofNat d.pw * z)}px;height:{fmt1 (Float.ofNat d.ph * z)}px;transform:translate({fmt1 m.panX}px,{fmt1 m.panY}px)")
   el "div" #[cls s!"{cls'} t-{m.tool.name}", .attr "style" style] #[
-    el "canvas" #[id "canvas", .attr "width" (toString d.pw), .attr "height" (toString d.ph),
+    el "canvas" #[Attr.id "canvas", .attr "width" (toString d.pw), .attr "height" (toString d.ph),
       onPointer "pointerdown" (some ∘ .down) (capture := true) (preventDefault := true),
       onPointer "pointermove" (some ∘ .move),
       onPointer "pointerup" (some ∘ .up),
       onPointer "pointercancel" (some ∘ .up)] #[],
     match m.crop with
-    | some r => el "div" #[id "crop-box", cls "crop", .attr "style"
+    | some r => el "div" #[Attr.id "crop-box", cls "crop", .attr "style"
         s!"left:{pct r.x d.width};top:{pct r.y d.height};width:{pct r.w d.width};height:{pct r.h d.height}"] #[]
     | none => el "div" #[.attr "hidden" ""] #[]]
 
 def viewport (m : Model) : Html Msg :=
-  el "section" #[id "viewport", cls (if m.dropping then "viewport drag" else "viewport"),
+  el "panel" #[Attr.id "viewport", cls (if m.dropping then "viewport drag" else "viewport"),
       onDragOver (some .dragOver), .on "dragleave" { decode := fun _ => some .dragLeave }, onDrop .files, onWheel (some ∘ .wheel)] #[
     match m.doc with
     | some d => stage m d
@@ -622,7 +622,7 @@ def viewport (m : Model) : Html Msg :=
         el "p" #[] #[text "Drop an image here, use Open…, or make a test image."],
         el "p" #[] #[button "Make a 1 MP test image" "new-1" (.newImage 1)]],
     match m.job with
-    | some j => el "div" #[id "busy", cls "busy"] #[
+    | some j => el "div" #[Attr.id "busy", cls "busy"] #[
         text s!"{j.label}… {(j.progress * 100).round.toUInt64}%",
         el "div" #[cls "bar"] #[el "i" #[.attr "style" s!"width:{fmt1 (j.progress * 100)}%"] #[]]]
     | none => el "div" #[.attr "hidden" ""] #[]]
@@ -640,18 +640,18 @@ def histogramView (h : Array Nat) : Html Msg :=
       let v := h[ch * 256 + i]!
       s := s ++ s!" L{i} {100 - (100 * v / peak)}"
     return s ++ " L255 100 Z"
-  svg "svg" #[id "histogram", cls "hist", .attr "viewBox" "0 0 256 100", .attr "preserveAspectRatio" "none"] #[
+  svg "svg" #[Attr.id "histogram", cls "hist", .attr "viewBox" "0 0 256 100", .attr "preserveAspectRatio" "none"] #[
     svg "path" #[.attr "d" (path 3), .attr "fill" "rgba(220,220,220,.35)"] #[],
     svg "path" #[.attr "d" (path 0), .attr "fill" "none", .attr "stroke" "#e5646e", .attr "stroke-width" "1"] #[],
     svg "path" #[.attr "d" (path 1), .attr "fill" "none", .attr "stroke" "#5fd08a", .attr "stroke-width" "1"] #[],
     svg "path" #[.attr "d" (path 2), .attr "fill" "none", .attr "stroke" "#5f9bff", .attr "stroke-width" "1"] #[]]
 
-def section (title ident : String) (open_ : Bool) (kids : Array (Html Msg)) : Html Msg :=
-  el "details" (#[id ident] ++ (if open_ then #[.attr "open" ""] else #[])) #[
+def panel (title ident : String) (open_ : Bool) (kids : Array (Html Msg)) : Html Msg :=
+  el "details" (#[Attr.id ident] ++ (if open_ then #[.attr "open" ""] else #[])) #[
     el "summary" #[] #[text title], el "div" #[cls "sec"] kids]
 
 def adjustPanel (a : AdjustUI) (pending : Bool) (dis : Bool) : Html Msg :=
-  section "Adjustments" "adjust" true #[
+  panel "Adjustments" "adjust" true #[
     slider "Brightness" "adj-brightness" (-100) 100 1 a.brightness (toString a.brightness) fun v => .setAdjust { a with brightness := v },
     slider "Contrast" "adj-contrast" (-100) 100 1 a.contrast (toString a.contrast) fun v => .setAdjust { a with contrast := v },
     slider "Exposure" "adj-exposure" (-300) 300 5 a.exposure (fmt1 (Float.ofInt a.exposure / 100)) fun v => .setAdjust { a with exposure := v },
@@ -669,54 +669,54 @@ def adjustPanel (a : AdjustUI) (pending : Bool) (dis : Bool) : Html Msg :=
       button "Reset" "adj-reset" .cancelPending (!pending)]]
 
 def filterPanel (m : Model) (dis : Bool) : Html Msg :=
-  section "Filters" "filters" true #[
+  panel "Filters" "filters" true #[
     slider "Blur radius" "blur-radius" 1 60 1 m.blurRadius (toString m.blurRadius) fun v => .setBlur v.toNat,
     el "div" #[cls "btns"] #[button "Apply blur" "blur-apply" (.apply .blur) dis #[cls "primary"]],
     slider "Sharpen" "sharpen-amount" 10 300 5 m.sharpAmount s!"{m.sharpAmount}%" fun v => .setSharpen v.toNat m.sharpRadius,
     slider "Radius" "sharpen-radius" 1 10 1 m.sharpRadius (toString m.sharpRadius) fun v => .setSharpen m.sharpAmount v.toNat,
     el "div" #[cls "btns"] #[button "Apply sharpen" "sharpen-apply" (.apply .sharpen) dis #[cls "primary"]],
     el "div" #[cls "btns"] #[button "Edge detect" "edges" (.filter .edges) dis, button "Emboss" "emboss" (.filter .emboss) dis,
-      button "Cancel preview" "filter-cancel" .cancelPending (m.pending.isNone || m.pending == some .adjust)]]
+      button "Cancel preview" "filter-cancel" .cancelPending (m.pending.isNone || m.pending == some Pending.adjust)]]
 
 def transformPanel (m : Model) (dis : Bool) : Html Msg :=
-  section "Transform" "transform" false #[
+  panel "Transform" "transform" false #[
     el "div" #[cls "btns"] #[button "⟲ 90°" "rot-ccw" (.geometry .rotCCW) dis, button "⟳ 90°" "rot-cw" (.geometry .rotCW) dis,
       button "180°" "rot-180" (.geometry .rot180) dis, button "Flip ⇆" "flip-h" (.geometry .flipH) dis,
       button "Flip ⇅" "flip-v" (.geometry .flipV) dis],
     el "div" #[cls "btns"] #[
-      el "input" #[id "resize-w", .attr "type" "number", .attr "min" "1", .prop "value" (.str (toString m.resizeW)),
+      el "input" #[Attr.id "resize-w", .attr "type" "number", .attr "min" "1", .prop "value" (.str (toString m.resizeW)),
         onChange fun s => .setResize (parseNat s) m.resizeH] #[],
       text "×",
-      el "input" #[id "resize-h", .attr "type" "number", .attr "min" "1", .prop "value" (.str (toString m.resizeH)),
+      el "input" #[Attr.id "resize-h", .attr "type" "number", .attr "min" "1", .prop "value" (.str (toString m.resizeH)),
         onChange fun s => .setResize m.resizeW (parseNat s)] #[],
       check "keep ratio" "resize-ratio" m.keepRatio .setKeepRatio,
       button "Resize" "resize" (.geometry (.resize m.resizeW m.resizeH)) (dis || m.resizeW == 0 || m.resizeH == 0)]]
 
-def layerRow (active renaming : Bool) (l : Layer) : Html Msg :=
-  el "li" #[.key (toString l.id), id s!"layer-{l.id}", cls (if active then "active" else ""), onClick (.selectLayer l.id)] #[
+def layerRow (active renamingId : Bool) (l : Layer) : Html Msg :=
+  el "li" #[.key (toString l.id), Attr.id s!"layer-{l.id}", cls (if active then "active" else ""), onClick (.selectLayer l.id)] #[
     el "input" #[.attr "type" "checkbox", .attr "title" "Visible", .prop "checked" (.bool l.visible),
       .on "click" { decode := fun _ => none, stopPropagation := true },
       .on "change" { payload := .checked, decode := fun _ => some (.toggleLayer l.id) }] #[],
     el "span" #[cls "name", .on "dblclick" { decode := fun _ => some (.startRename l.id) }] #[
-      if renaming then
-        el "input" #[id "rename", .attr "type" "text", .prop "value" (.str l.name),
+      if renamingId then
+        el "input" #[Attr.id "rename", .attr "type" "text", .prop "value" (.str l.name),
           .on "keydown" { payload := .value, decode := fun _ => none },
           .on "change" { payload := .value, decode := fun s => some (.rename l.id s) },
           .on "focusout" { decode := fun _ => some .stopRename }] #[]
       else text l.name],
     el "span" #[cls "meta"] #[text s!"{l.opacity}% {l.blend.name}"]]
 
-def layersPanel (d : Doc) (active : Nat) (renaming : Option Nat) (dis : Bool) : Html Msg :=
+def layersPanel (d : Doc) (active : Nat) (renamingId : Option Nat) (dis : Bool) : Html Msg :=
   let cur := d.layers.find? (·.id == active)
-  section "Layers" "layers" true #[
+  panel "Layers" "layers" true #[
     el "ul" #[cls "layers"] (d.layers.reverse.map fun l =>
-      keyedMemo (toString l.id) (l.id == active, renaming == some l.id, l.name, l.visible, l.opacity, l.blend.name)
-        fun _ => layerRow (l.id == active) (renaming == some l.id) l),
+      keyedMemo (toString l.id) (l.id == active, renamingId == some l.id, l.name, l.visible, l.opacity, l.blend.name)
+        fun _ => layerRow (l.id == active) (renamingId == some l.id) l),
     match cur with
     | some l => el "div" #[cls "sec", .attr "style" "padding:0"] #[
         slider "Opacity" "layer-opacity" 0 100 1 l.opacity s!"{l.opacity}%" fun v => .layerOpacity v.toNat,
         el "label" #[cls "row"] #[el "span" #[] #[text "Blend"],
-          el "select" #[id "layer-blend", .prop "value" (.str l.blend.name), onChange .layerBlend]
+          el "select" #[Attr.id "layer-blend", .prop "value" (.str l.blend.name), onChange .layerBlend]
             (Blend.all.map fun b => el "option" #[.attr "value" b.name] #[text b.name]), el "span" #[] #[]]]
     | none => el "div" #[] #[],
     el "div" #[cls "btns"] #[button "+ Layer" "layer-add" .addLayer dis, button "Duplicate" "layer-dup" .duplicateLayer dis,
@@ -724,10 +724,10 @@ def layersPanel (d : Doc) (active : Nat) (renaming : Option Nat) (dis : Bool) : 
       button "↑" "layer-up" (.moveLayer true) dis, button "↓" "layer-down" (.moveLayer false) dis]]
 
 def historyPanel (labels : Array String) (cursor : Nat) : Html Msg :=
-  section "History" "history" true #[
+  panel "History" "history" true #[
     el "ol" #[cls "history"] (labels.mapIdx fun i l =>
       keyedMemo (toString i) (l, if i < cursor then 0 else if i == cursor then 1 else 2) fun _ =>
-        el "li" #[id s!"step-{i}", cls (if i == cursor then "current" else if i > cursor then "future" else ""), onClick (.jump i)] #[
+        el "li" #[Attr.id s!"step-{i}", cls (if i == cursor then "current" else if i > cursor then "future" else ""), onClick (.jump i)] #[
           el "span" #[cls "n"] #[text (toString (i + 1))], text l])]
 
 def view (m : Model) : Html Msg :=
@@ -738,12 +738,12 @@ def view (m : Model) : Html Msg :=
     tools m,
     viewport m,
     el "aside" #[cls "side"] #[
-      section "Histogram" "histo" true #[memo m.compVersion fun _ => histogramView m.hist],
-      memo (m.adjust, m.pending == some .adjust, dis) fun (a, p, dis) => adjustPanel a p dis,
+      panel "Histogram" "histo" true #[memo m.compVersion fun _ => histogramView m.hist],
+      memo (m.adjust, m.pending == some Pending.adjust, dis) fun (a, p, dis) => adjustPanel a p dis,
       filterPanel m dis,
       transformPanel m dis,
       match m.doc with
-      | some d => layersPanel d m.active m.renaming dis
+      | some d => layersPanel d m.active m.renamingId dis
       | none => el "div" #[] #[],
       memo (m.history.map (·.label), m.cursor) fun (ls, c) => historyPanel ls c]]
 

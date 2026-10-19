@@ -60,7 +60,7 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 32 | FETCH | cb, s method, s url, s body, s headers | `fetch`; headers are `name: value` lines; reply `cb` with ok = 2xx and payload `"<status>\n<body>"` (status 0 on network error) |
 | 33 | TIMEOUT | cb, ms | reply `cb` (ok, `""`) after `ms` |
 | 34 | INTERVAL_SET | sub, ms | reply `sub` (ok, `""`) every `ms` until cleared |
-| 35 | SUB_CLEAR | sub | stop subscription `sub` (interval or URL) |
+| 35 | SUB_CLEAR | sub | stop subscription `sub` (interval, URL or keys) |
 | 36 | STORAGE_SET | s key, s value | `localStorage.setItem` |
 | 37 | STORAGE_GET | cb, s key | reply `cb` with ok = present, payload = value |
 | 38 | STORAGE_REMOVE | s key | `localStorage.removeItem` |
@@ -77,7 +77,7 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 49 | FILE_READ | cb, file | reply `cb` with the bytes of file `file` (section 8) |
 | 50 | IMAGE_DECODE | cb, file | reply `cb` with file `file` decoded to RGBA pixels, payload `"<width> <height>"` (section 8) |
 | 51 | DOWNLOAD | s name, s type, blob | offer blob's bytes as a download named `name` of media type `type` |
-| 52 | KEYS_LISTEN | sub | reply `sub` for every `keydown` on the document outside text fields, payload `Ctrl+`, `Alt+`, `Shift+`, `Meta+` prefixes (in that order) then `KeyboardEvent.key`; presses of a modifier key alone are not reported |
+| 52 | KEYS_LISTEN | sub | reply `sub` for every `keydown` on the document except in text fields (`textarea`, `select`, editable content, and `input`s other than checkboxes, radio buttons, ranges, buttons, file and colour pickers), payload `Ctrl+`, `Alt+`, `Shift+`, `Meta+` prefixes (in that order) then `KeyboardEvent.key`; presses of a modifier key alone are not reported, and no default is prevented |
 
 Unknown opcodes are fatal (the receiver stops and reports). New commands get new numbers; numbers
 are never reused. Opcode 22 is unused: an `INSERT_MANY` (insert a run of children with one
@@ -98,8 +98,9 @@ listener of its target, as it would without delegation.
   4 the fields of the node's form (the node itself if it is a `form`, else the form a control
   belongs to) as `name=value` lines, a file field as its file name; empty without a form;
   5 the event's files (`dataTransfer.files` if it has any, else the node's `files`), one line
-  per file, `id\tsize\ttype\tname`: the runtime keeps each file under a new id (≥ 1; the 64
-  most recent are kept) for `FILE_READ` and `IMAGE_DECODE`;
+  per file, `id\tsize\ttype\tname` (tabs and line breaks in the name become spaces): the
+  runtime keeps each file under a new id (≥ 1; the 64 most recent are kept) for `FILE_READ`
+  and `IMAGE_DECODE`;
   6 a pointer: `x y width height buttons modifiers pointerId pressure deltaX deltaY clientX
   clientY`, space separated, where `x`, `y` are the pointer's position relative to the node's
   bounding box and `width`, `height` that box's size (CSS pixels, after transforms),
@@ -204,7 +205,8 @@ needs them later copies them (`DOWNLOAD`: the `Blob` constructor copies), and `P
 the end of the buffer, after its DOM commands (so it may draw on a canvas the same buffer
 created), but before control returns to Lean. `PUT_IMAGE` wraps the view in an `ImageData`
 (no copy) and `putImageData` copies the dirty rectangle into the canvas; the blob must hold
-exactly `4 × w × h` bytes (RGBA, straight alpha, rows top to bottom). The canvas keeps its own
+exactly `4 × w × h` bytes (RGBA, straight alpha, rows top to bottom). A `PUT_IMAGE` that cannot
+be done (another size, no such canvas or no 2D context) is logged and skipped. The canvas keeps its own
 size (`width` and `height` attributes, from the view).
 
 Results with bytes (`FILE_READ`, `IMAGE_DECODE`) come back through a second callback,
@@ -212,7 +214,8 @@ Results with bytes (`FILE_READ`, `IMAGE_DECODE`) come back through a second call
 `ByteArray` of the right size (`leanui_bytes_alloc`, `leanui_bytes_data`), writes the bytes into
 it and passes it to `leanui_callback_bytes`, which hands it to Lean: one copy, from the browser's
 buffer into wasm memory, and none in Lean. A failure has `ok` = 0, the reason as the payload and
-no bytes. `IMAGE_DECODE` decodes with `createImageBitmap` (no premultiplication, no colour space
+no bytes; that includes a result too large for the module's memory (`leanui_bytes_alloc`
+returns null rather than stopping the program). `IMAGE_DECODE` decodes with `createImageBitmap` (no premultiplication, no colour space
 conversion) and reads the pixels back from a 2D canvas, so it decodes whatever the browser
 decodes (PNG, JPEG, WebP, GIF's first frame, …); semi-transparent pixels may lose precision in
 the canvas's premultiplied storage.

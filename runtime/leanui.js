@@ -11,6 +11,10 @@
   // events whose default a listener may prevent only if it is not passive (browsers make some
   // wheel and touch listeners passive by default)
   const ACTIVE = new Set(["wheel", "touchstart", "touchmove"]);
+  // KEYS_LISTEN: keys that are only modifiers, and the inputs that take no text (keys pressed
+  // while one of them has focus are reported)
+  const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "Fn", "FnLock", "Hyper", "Super", "Symbol", "SymbolLock", "NumLock", "ScrollLock", "OS"]);
+  const NOT_TEXT = new Set(["checkbox", "radio", "range", "button", "submit", "reset", "file", "color", "image"]);
   const decoder = new TextDecoder();
 
   class Runtime {
@@ -284,14 +288,20 @@
     noBytes(what) {
       if (!this.warnedBytes) { this.warnedBytes = true; console.warn("LeanUI: " + what + " needs the in-page (wasm) host; ignored"); }
     }
+    // A mistake here (a bitmap whose size does not match its bytes, a bad selector, a canvas with
+    // another kind of context) is logged, not thrown: it would otherwise unwind through the wasm
+    // call and stop the app.
     putImage(sel, b, iw, ih, x, y, dw, dh) {
       if (!b) return this.noBytes("PUT_IMAGE");
-      if (b.length !== iw * ih * 4) throw new Error("LeanUI: PUT_IMAGE of " + iw + "x" + ih + " pixels with " + b.length + " bytes");
-      const c = document.querySelector(sel);
-      if (!c || !c.getContext || dw === 0 || dh === 0) return;
-      const ctx = c.__lui2d || (c.__lui2d = c.getContext("2d"));
-      // ImageData wraps the view (no copy); putImageData copies the dirty rectangle into the canvas
-      ctx.putImageData(new ImageData(b, iw, ih), 0, 0, x, y, dw, dh);
+      try {
+        if (b.length !== iw * ih * 4) throw new Error("a " + iw + "x" + ih + " bitmap with " + b.length + " bytes");
+        const c = document.querySelector(sel);
+        if (!c || !c.getContext || dw === 0 || dh === 0) return;
+        const ctx = c.__lui2d || (c.__lui2d = c.getContext("2d"));
+        if (!ctx) throw new Error(sel + " has no 2D context");
+        // ImageData wraps the view (no copy); putImageData copies the dirty rectangle into the canvas
+        ctx.putImageData(new ImageData(b, iw, ih), 0, 0, x, y, dw, dh);
+      } catch (e) { console.error("LeanUI: PUT_IMAGE " + sel + ":", e); }
     }
     download(name, type, b) {
       if (!b) return this.noBytes("DOWNLOAD");
@@ -307,7 +317,8 @@
         const id = this.fileSeq++;
         this.files.set(id, f);
         if (this.files.size > 64) this.files.delete(this.files.keys().next().value);
-        out.push(id + "\t" + f.size + "\t" + f.type + "\t" + f.name);
+        // a tab or newline in a name would break the lines: they become spaces
+        out.push(id + "\t" + f.size + "\t" + f.type + "\t" + f.name.replace(/[\t\r\n]/g, " "));
       }
       return out.join("\n");
     }
@@ -331,9 +342,9 @@
       if (this.keysListening) return;
       this.keysListening = true;
       document.addEventListener("keydown", (e) => {
-        const t = e.target, k = e.key;
-        if (!this.keysSub || e.isComposing || k === "Control" || k === "Shift" || k === "Alt" || k === "Meta") return;
-        if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+        const t = e.composedPath ? e.composedPath()[0] : e.target, k = e.key;
+        if (!this.keysSub || e.isComposing || MODIFIER_KEYS.has(k)) return;
+        if (t && (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t.tagName === "INPUT" && !NOT_TEXT.has(t.type)))) return;
         this.callback(this.keysSub, true, (e.ctrlKey ? "Ctrl+" : "") + (e.altKey ? "Alt+" : "") + (e.shiftKey ? "Shift+" : "") + (e.metaKey ? "Meta+" : "") + k);
       });
     }
@@ -401,6 +412,7 @@
     // the bytes are written straight into a Lean ByteArray, which Lean then owns
     callbackBytes(cb, ok, payload, bytes) {
       const mod = this.mod, obj = mod._leanui_bytes_alloc(ptr(bytes.length));
+      if (!obj || Number(obj) === 0) return this.callback(cb, false, "not enough memory for " + bytes.length + " bytes");
       mod.HEAPU8.set(bytes, Number(mod._leanui_bytes_data(obj)));   // HEAPU8 after the allocation: memory may have grown
       mod._leanui_callback_bytes(cb, ok ? 1 : 0, ...utf8(mod, payload), ptr(obj));
     }

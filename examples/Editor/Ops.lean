@@ -31,11 +31,11 @@ def Op.label : Op → String
 /-- The operation on a preview image whose pixels are `scale` document pixels wide. -/
 def Op.preview (op : Op) (scale : Float) (img : Image) : Image :=
   match op with
-  | .adjust a => apply a img
-  | .blur r => blur img (max 0.5 (Float.ofNat r * scale))
-  | .sharpen a r => sharpen img (Float.ofNat a / 100) (max 0.5 (Float.ofNat r * scale))
-  | .edges => edgeDetect img
-  | .emboss => emboss img
+  | .adjust a => Adjust.apply a img
+  | .blur r => Editor.blur img (max 0.5 (Float.ofNat r * scale))
+  | .sharpen a r => Editor.sharpen img (Float.ofNat a / 100) (max 0.5 (Float.ofNat r * scale))
+  | .edges => Editor.edgeDetect img
+  | .emboss => Editor.emboss img
 
 /-- What a finished job produced. -/
 inductive JobResult where
@@ -71,7 +71,7 @@ def Job.layer (op : Op) (id : Nat) (img : Image) : Job :=
   let passes := match op with | .blur _ => 2 | .sharpen .. => 3 | _ => 1
   { label := op.label, kind := .layer op id, passes, width := img.width, height := img.height,
     src := img, a := Image.blank img.width img.height,
-    b := match op with | .sharpen .. => Image.blank img.width img.height | _ => default }
+    b := if passes ≥ 2 then Image.blank img.width img.height else default }
 
 def Job.export (d : Doc) : Job :=
   let ls := d.layers.filter fun l => l.visible && l.opacity > 0
@@ -89,7 +89,7 @@ def Job.slice (j : Job) (y0 y1 : Nat) : Job :=
   match j with
   | { label, kind, passes, pass, row, width, height, src, a, b, result } =>
     let (a, b) := match kind, pass with
-      | .layer (.adjust adj) _, _ => (applyRows adj src a y0 y1, b)
+      | .layer (.adjust adj) _, _ => (Adjust.applyRows adj src a y0 y1, b)
       | .layer (.blur r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b)
       | .layer (.blur r) _, _ => (a, blurVRows (Float.ofNat r) a b y0 y1)
       | .layer (.sharpen _ r) _, 0 => (blurHRows (Float.ofNat r) src a y0 y1, b)
@@ -119,8 +119,8 @@ partial def Job.run (j : Job) (budget : Nat) : Job :=
       -- the last pass: encode
       let png := Png.encode j.a
       { j with pass := j.passes, row := 0, result := some (.png png), a := default }
-    else j.rows budget
-  | .layer _ _ => j.rows budget
+    else rows j budget
+  | .layer _ _ => rows j budget
 where
   rows (j : Job) (budget : Nat) : Job :=
     let n := max 1 (budget / max 1 j.width)

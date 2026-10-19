@@ -12,7 +12,7 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
 2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
    change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,
-   `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`.
+   `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`, `leanui-editor-tests`.
 3. **wasm64**: `toolchain/image.sh` builds the emsdk image from the fork's
    `docker-wasm64/Dockerfile` at the pinned commit. `toolchain/build-archives.sh` builds the
    single-threaded runtime archives (about half an hour on a hosted runner, then cached until
@@ -21,7 +21,7 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
 4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
-   apply-semantics, server, effects, bench-smoke, pixels, depth.
+   apply-semantics, server, effects, bench-smoke, pixels, editor, depth.
 5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files, and writes
    brotli (quality 11) and gzip siblings of `app.wasm`, `app.js` and `leanui.js`. The image is
    built for `linux/amd64` and started, and `/`, the wasm and the stylesheet must answer, the

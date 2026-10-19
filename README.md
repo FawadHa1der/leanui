@@ -206,9 +206,10 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-server-tests     # server, sessions, CLI
 ./.lake/build/bin/leanui-todomvc-tests    # TodoMVC against the DOM model
 ./.lake/build/bin/leanui-notes-tests      # the guide's app
+./.lake/build/bin/leanui-editor-tests     # the photo editor: image operations, PNG, jobs, the program
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
-                                          # apply-semantics, server, effects, bench-smoke, pixels, depth
+                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, depth
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
 ```

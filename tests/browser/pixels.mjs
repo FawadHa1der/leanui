@@ -50,6 +50,8 @@ await page.mouse.move(box.x + 10, box.y + 10);
 await page.mouse.wheel(0, 120);
 await page.waitForFunction(() => document.querySelector("#px-wheel").textContent !== "0", null, { timeout: 5000 }).catch(() => {});
 check("wheel", +(await text("px-wheel")) > 0, await text("px-wheel"));
+// the wheel listener is not passive: its preventDefault takes effect
+check("wheel default prevented", !(await page.$eval("#px-canvas", (c) => c.dispatchEvent(new WheelEvent("wheel", { deltaY: 10, bubbles: true, cancelable: true })))));
 
 // a file from the input: a 3×2 PNG made by the browser
 const png = Buffer.from(await page.evaluate(async () => {
@@ -61,7 +63,8 @@ const png = Buffer.from(await page.evaluate(async () => {
   return Array.from(new Uint8Array(await blob.arrayBuffer()));
 }));
 await page.setInputFiles("#px-file", { name: "dot.png", mimeType: "image/png", buffer: png });
-await page.waitForFunction(() => document.querySelector("#px-decoded").textContent !== "", null, { timeout: 10000 }).catch(() => {});
+// the bytes and the pixels are two effects that finish in either order: wait for both
+await page.waitForFunction(() => document.querySelector("#px-decoded").textContent !== "" && document.querySelector("#px-bytes").textContent !== "", null, { timeout: 10000 }).catch(() => {});
 check("files", (await text("px-files")) === `dot.png (${png.length} bytes, image/png)`, await text("px-files"));
 check("bytes", (await text("px-bytes")) === `dot.png: ${png.length} bytes: 89 50 4e 47 0d 0a 1a 0a`, await text("px-bytes"));
 check("decoded", (await text("px-decoded")) === "3×2", await text("px-decoded"));
@@ -99,10 +102,13 @@ await page.click("h1");
 await page.keyboard.press("Control+z");
 await page.keyboard.press("Shift+KeyE");
 await page.focus("#px-file");
+await page.keyboard.press("w");
+await page.evaluate(() => { const t = document.createElement("input"); t.id = "px-text"; document.body.appendChild(t); });
+await page.focus("#px-text");
 await page.keyboard.press("q");
 await page.click("h1");
 await page.keyboard.press("x");
-check("keys", (await text("px-keys")) === "Ctrl+z Shift+E x", await text("px-keys"));
+check("keys", (await text("px-keys")) === "Ctrl+z Shift+E w x", await text("px-keys"));
 
 const results = { engine: browser.version(), failed: checks.filter((c) => !c.ok), passed: checks.filter((c) => c.ok).length, errors };
 await browser.close();

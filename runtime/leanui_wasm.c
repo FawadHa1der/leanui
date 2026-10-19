@@ -8,6 +8,7 @@
 #include <lean/lean.h>
 #include <emscripten.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 extern lean_object *leanui_initialize_app(void); // generated per app: runtime_initialize_<pkg>_<Mod>(1)
 extern lean_object *leanui_app_start(lean_object *flags, lean_object *selector, uint8_t hydrate);
@@ -41,8 +42,18 @@ lean_obj_res leanui_host_blobs(b_lean_obj_arg blobs) {
 }
 
 // A ByteArray of len bytes for the page to fill (leanui_bytes_data) and pass to
-// leanui_callback_bytes, which hands it to Lean.
-EMSCRIPTEN_KEEPALIVE lean_object *leanui_bytes_alloc(size_t len) { return lean_alloc_sarray(1, len, len); }
+// leanui_callback_bytes, which hands it to Lean; NULL when memory is short (lean_alloc_sarray
+// would end the program instead). Built as lean_alloc_sarray builds it: the runtime is compiled
+// without mimalloc, so Lean frees it with free like any other object.
+EMSCRIPTEN_KEEPALIVE lean_object *leanui_bytes_alloc(size_t len) {
+  if (len > SIZE_MAX - sizeof(lean_sarray_object)) return NULL;
+  lean_sarray_object *o = (lean_sarray_object *)malloc(sizeof(lean_sarray_object) + len);
+  if (!o) return NULL;
+  lean_set_st_header((lean_object *)o, LeanScalarArray, 1);
+  o->m_size = len;
+  o->m_capacity = len;
+  return (lean_object *)o;
+}
 EMSCRIPTEN_KEEPALIVE uint8_t *leanui_bytes_data(lean_object *o) { return lean_sarray_cptr(o); }
 
 static int ok_or_report(lean_object *r) {
