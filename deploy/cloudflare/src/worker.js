@@ -9,6 +9,14 @@ export class SiteServer extends Container {
   sleepAfter = "15m";
   // The site needs no outbound network.
   enableInternet = false;
+
+  // The container sends precompressed bodies (brotli quality 11, gzip -9). The library pipes each
+  // response through an IdentityTransformStream (to count requests in flight), which makes the
+  // runtime decode the body and compress it again at brotli quality 5: about 20% larger, and
+  // chunked. "manual" keeps the container's bytes as they are.
+  async fetch(request) {
+    return this.containerFetch(new Request(request, { encodeResponseBody: "manual" }), this.defaultPort);
+  }
 }
 
 export default {

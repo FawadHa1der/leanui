@@ -219,7 +219,33 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+        shell: bash   # -o pipefail: a failed deploy must not pass through tee
+        run: npx wrangler deploy | tee "$RUNNER_TEMP/deploy.log"
+      # Visitors must get the precompressed wasm the server sends, not a re-encoded body
+      # (docs/DEPLOY.md, "Compression"): the body's size is the sibling's size, which the server
+      # writes into the ETag, and it decodes. Retried while the new version starts.
+      - name: Check that the deployed wasm is the precompressed file
+        if: steps.creds.outputs.ok == 'true'
+        shell: bash
+        run: |
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
+          [ -n "$url" ] || { echo "::error::no workers.dev URL in wrangler's output"; exit 1; }
+          cd "$RUNNER_TEMP"
+          for path in assets/site/app.wasm editor/app.wasm; do
+            for attempt in $(seq 1 20); do
+              got= want=
+              if curl -sS --max-time 120 -D h -o b -H 'accept-encoding: br' "$url/$path"; then
+                want=$(grep -i '^etag:' h | sed -E 's/.*"([0-9]+)-.*-br".*/\1/' || true)
+                got=$(wc -c < b)
+                if grep -qi '^content-encoding: br' h && [ "$got" = "$want" ] &&
+                   node -e 'require("zlib").brotliDecompressSync(require("fs").readFileSync("b"))'; then
+                  echo "$url/$path: $got bytes, the server's .br"; continue 2
+                fi
+              fi
+              sleep 15
+            done
+            echo "::error::$url/$path: $got bytes received, the server sent $want (re-encoded on the way?)"; exit 1
+          done
       - name: Wrangler's log
         if: failure()
         run: cat ~/.config/.wrangler/logs/*.log 2>/dev/null || echo "no wrangler log"
