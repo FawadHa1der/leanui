@@ -13,9 +13,10 @@ lake build 2>&1 | { grep -E "error|warning: " -A3 || true; } | head -40
 for app in "${apps[@]}"; do
   OUT="$ROOT/dist/vir/$app"
   rm -rf "$OUT" && mkdir -p "$OUT"
-  lake exe publish "$app" "$OUT"
+  lake -q exe publish "$app" "$OUT"
   cp "pages/$app.html" "$OUT/index.html"
   cp "$ROOT/runtime/leanui.js" leanui-vir.js "$OUT/"
+  echo "dist/vir/$app:"
   node -e '
 const fs=require("fs"),z=require("zlib"),path=require("path"),d=process.argv[1];
 const walk=(d)=>fs.readdirSync(d,{withFileTypes:true}).flatMap((e)=>e.isDirectory()?walk(path.join(d,e.name)):[path.join(d,e.name)]);
