@@ -45,9 +45,17 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   no server rendering: browsers without Memory64 get a message instead), and its video lab,
   `/editor/video/` (`dist/editor/video`).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
-  accept them (`Content-Encoding`, `Vary: Accept-Encoding`), and Cloudflare passes encoded bodies
-  through. Brotli at quality 11 is smaller than what the edge would produce on the fly (the site's
-  wasm: about 190 KB instead of 255 KB).
+  accept them (`Content-Encoding`, `Vary: Accept-Encoding`). Brotli at quality 11 is smaller than
+  compression on the fly: the site's wasm is 194 KB. The container's response does not reach the
+  visitor as is, though: `@cloudflare/containers` (since 0.2.1) pipes every response through an
+  `IdentityTransformStream` to count requests in flight, and the Workers runtime decodes the body
+  in that pipe and compresses it again on the way out, at brotli quality 5 (the site's wasm became
+  236 KB, chunked). `SiteServer.fetch` in `src/worker.js` therefore fetches the container with
+  `encodeResponseBody: "manual"`, which keeps its bytes as they are (still chunked, without
+  `Content-Length`). Cloudflare also adds br to the request's `Accept-Encoding` before it reaches
+  the container, so the server always picks the `.br` sibling, and a client without brotli gets
+  the edge's transcode of it. After each deploy the deploy job checks that the served wasm is the
+  file the server sent: its size, which the server puts in the ETag, and that it decodes.
 - **One instance** (`max_instances: 1`, one Durable Object name): a server-driven session lives in
   that process's memory, so every request must reach the same process. The site's traffic fits
   one `basic` instance (1/4 vCPU, 1 GiB). The more sessions are live at once, the more memory it
@@ -83,7 +91,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
 
 Until both secrets exist, the deploy job prints a notice and skips the deploy. Everything else
 still runs. To redeploy without a new commit, run the workflow on `main` by hand (Actions → CI →
-Run workflow). When `wrangler deploy` fails, the job prints wrangler's own log
+Run workflow). After the deploy it fetches the site's and the editor's wasm with brotli and fails
+if a body is not the precompressed file the server sent (see "Compression" above). When
+`wrangler deploy` fails, the job prints wrangler's own log
 (`~/.config/.wrangler/logs`). The site appears at `https://leanui-site.<your-subdomain>.workers.dev`. `wrangler.jsonc` sets `workers_dev: true` (that URL) and `preview_urls: false` (no extra
 preview URL per uploaded version). A custom domain is a `routes` entry in `deploy/cloudflare/wrangler.jsonc` (or the dashboard's Domains &
 Routes).

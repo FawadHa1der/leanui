@@ -4,8 +4,8 @@
 #   its own page at /editor/, with the video lab in dist/editor/video/), and the files it serves
 #   from the repository: examples/site/{site.css,benchmarks.json} and runtime/leanui.js.
 # The wasm build's app.wasm, app.js and leanui.js get brotli (quality 11) and gzip siblings, which the
-# server sends to clients that accept them (as `leanui build --compress` does); Cloudflare passes
-# encoded bodies through.
+# server sends to clients that accept them (as `leanui build --compress` does); the Worker keeps
+# those bytes as they are (src/worker.js, SiteServer.fetch; docs/DEPLOY.md, "Compression").
 # Needs `lake build leanui-site`, `tools/build-app.sh SiteApp site`, `tools/build-app.sh EditorApp
 # editor` and `tools/build-app.sh VideoApp editor/video` first. On a Mac this stages a macOS
 # binary, which the linux/amd64 image cannot run: CI stages from its Linux build.
