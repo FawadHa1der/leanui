@@ -18,8 +18,8 @@ def table : List (String × String) := [
   ("css", "text/css; charset=utf-8"),
   ("json", "application/json"), ("map", "application/json"), ("webmanifest", "application/manifest+json"),
   ("wasm", "application/wasm"),
-  -- lean-vir's IR packages (vir/README.md): binary, but about 8:1 under brotli
-  ("irpkg", "application/vnd.lean-vir.irpkg"),
+  -- lean-vir's IR packages (vir/README.md; the type its manifests declare): about 8:1 under brotli
+  ("irpkg", "application/vnd.lean-vir.ir-package"),
   ("txt", "text/plain; charset=utf-8"), ("md", "text/markdown; charset=utf-8"),
   ("lean", "text/plain; charset=utf-8"), ("csv", "text/csv; charset=utf-8"),
   ("xml", "application/xml"), ("svg", "image/svg+xml"),

@@ -15,9 +15,9 @@ interpreter (wasm32) instead of compiling it. Two differences follow:
 * LeanUI's two inline-C buffer helpers run as their Lean definitions: lean-vir can call only the
   native functions in its own catalog.
 
-An app's entry module (`LeanUIVir.BenchApp`, the counterpart of `examples/BenchApp.lean`) is one
-line, `leanui_vir_app Bench.program`, which exports `start`, `event`, `callback` and `take` under
-the module's name for `vir/leanui-vir.js` to call.
+An app's entry module (`LeanUIVir.BenchApp`, the counterpart of `examples/BenchApp.lean`) holds
+`leanui_vir_app Bench.program` inside `namespace LeanUIVir.BenchApp`: it exports `start`, `event`,
+`callback` and `take` in that namespace, which `vir/leanui-vir.js` calls by name.
 -/
 public section
 open Lean.Vir
@@ -43,6 +43,7 @@ def take (s : Session) : IO (Array ByteArray) := s.out.modifyGet fun a => (a, #[
 /-! JavaScript holds the session as an opaque handle (`JSL`); every call returns the updates it
 made. -/
 
+/-- lean-vir's `RuntimeM` is `IO` behind an irreducible definition, with no lift from `IO`. -/
 def io (x : IO α) : RuntimeM α := by unfold RuntimeM; exact x
 
 def startJs {Model Msg : Type} (p : LeanUI.Program Model Msg) (flags selector : String) : RuntimeM (JSL Session) := do

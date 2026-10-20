@@ -174,12 +174,11 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bench"
           node tests/browser/bench.mjs --engines chromium --runs 5 --impls leanui,vanilla,leanvir --json "$RUNNER_TEMP/bench/keyed-chromium.json"
-          .lake/build/bin/leanui serve dist --port 5333 --quiet &
+          .lake/build/bin/leanui serve dist --port 5333 --quiet --coop &   # cross-origin isolated: a precise timer for the race
           srv=$!
           trap 'kill $srv' EXIT
           for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:5333/race/index.html && break; sleep 0.2; done
           node tests/browser/race.mjs http://127.0.0.1:5333/ chromium --perf --out "$RUNNER_TEMP/bench/race-chromium.json"
-          node tests/browser/race.mjs http://127.0.0.1:5333/ firefox --perf --out "$RUNNER_TEMP/bench/race-firefox.json"
       - uses: actions/upload-artifact@v7
         if: contains(github.event.pull_request.labels.*.name, 'bench')
         with:

@@ -7,13 +7,13 @@
   const LeanUI = global.LeanUI;
 
   // Each call into Lean returns the updates it made, each [u32 opsBytes][ops][strs] (the bytes a
-  // LeanUI server sends), as fresh Uint8Arrays: lean-vir copies byte arrays out of its memory.
+  // LeanUI server sends), as fresh Uint8Arrays (lean-vir copies byte arrays out of its memory), so
+  // Runtime.apply can read the words in place.
   class VirTransport {
     constructor(program, app, session, rt) { this.program = program; this.app = app; this.session = session; this.rt = rt; }
     call(fn, ...args) { this.apply(this.program.call(this.app + "." + fn, this.session, ...args)); }
     apply(updates) {
-      for (let u of updates) {
-        if (u.byteOffset & 3) u = u.slice();   // Runtime.apply reads the words in place
+      for (const u of updates) {
         const opsLen = (u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24)) >>> 0;
         this.rt.apply(u, 4, opsLen, 4 + opsLen, u.length - 4 - opsLen);
       }

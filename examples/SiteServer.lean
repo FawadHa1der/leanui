@@ -66,7 +66,8 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Static.file "/data/benchmarks.json" "examples/site/benchmarks.json",
     Route.under "/assets/site" (Static.route { root := dist }),
     Route.under "/editor" (Static.route { root := o.dist / "editor" }),
-    Route.under "/race" (Static.route { root := o.dist / "race" }),
+    -- cross-origin isolated: the race times clicks with performance.now(), precise only then
+    Route.under "/race" (Static.route { root := o.dist / "race", isolate := true }),
     sessions.route "/leanui",
     pageRoute sessions wasm]
 

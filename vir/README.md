@@ -7,9 +7,10 @@ compiled to wasm32, so the two can be compared on the same programs: side by sid
 on the race page (`bench/race/`, served at `/race/`), and in the automated benchmarks
 (`tests/browser/bench.mjs --impls leanui,vanilla,leanvir`; results in docs/BENCHMARKS.md).
 
-Nothing in the main build depends on this directory, and it changes nothing in the apps: the
-benchmarked programs (`examples/Bench.lean`, `examples/Life.lean`) are the same files, compiled by
-both.
+The library and the apps do not depend on this directory (`lake build` and the wasm64 builds never
+read it), and it changes nothing in them: the benchmarked programs (`examples/Bench.lean`,
+`examples/Life.lean`) are the same files, compiled by both. The browser tests, CI and the site's
+`/race/` page build it.
 
 ## How it runs
 
@@ -36,9 +37,17 @@ network: Lake fetches lean-vir at the commit `vir/lakefile.toml` pins and downlo
 prebuilt interpreter. `vir/.lake` holds that build, apart from the main `.lake`.
 
 `vir/lakefile.toml` compiles LeanUI's core from `../LeanUI` and the benchmarked programs from
-`../examples`. Per app: an entry module (`LeanUIVir/<App>App.lean`), a resource module
-(`LeanUIVir/<App>Resources.lean`, which makes Lake package the app's IR), a line in `apps` in
-`Publish.lean`, and a page (`pages/<app>.html`).
+`../examples`. Adding an app `X` (its program in `examples/X.lean`):
+
+1. `LeanUIVir/XApp.lean`, the entry module: `leanui_vir_app X.program` inside
+   `namespace LeanUIVir.XApp` (copy `LeanUIVir/BenchApp.lean`);
+2. `LeanUIVir/XResources.lean`, which makes Lake package the app's IR (copy
+   `LeanUIVir/BenchResources.lean`);
+3. in `vir/lakefile.toml`: `X` in the `Examples` roots, `LeanUIVir.XApp` in the `LeanUIVir` roots,
+   and a `[[lean_lib]]` for the resources with `needs = ["+LeanUIVir.XApp:virResourcePack"]`;
+4. in `Publish.lean`: the import and a line in `apps`;
+5. `pages/x.html` (copy `pages/bench.html`, with `app: "LeanUIVir.XApp"`), and `x` in
+   `vir/build.sh`'s default list.
 
 ## Limits
 

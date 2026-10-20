@@ -7,6 +7,11 @@
 //        [--impls leanui,vanilla,leanvir] [--leanui-dir dist/bench] [--leanvir-dir dist/vir/bench] [--json out.json]
 //   e.g. node tests/browser/selfbench.mjs /Applications/Firefox.app/Contents/MacOS/firefox firefox
 //
+// --race life|table [--steps 1000] runs the race page instead (dist/race, bench/race/build.sh; --runs
+// for the table): the release-browser counterpart of tests/browser/race.mjs, served cross-origin
+// isolated as the site serves it, so its timer is precise. It prints what the page measured and
+// exits 1 unless all three implementations agree.
+//
 // Run it under the host browser lock.
 import http from "node:http";
 import fs from "node:fs";
@@ -42,7 +47,8 @@ const server = http.createServer((req, res) => {
     let file = path.join(base, url.slice(prefix.length) || "index.html");
     if (!file.startsWith(base) || !fs.existsSync(file)) break;
     if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
-    res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream", "cache-control": "no-store" });
+    const isolate = prefix === "/race/" ? { "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp" } : {};
+    res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream", "cache-control": "no-store", ...isolate });
     res.end(fs.readFileSync(file)); return;
   }
   res.writeHead(404); res.end();

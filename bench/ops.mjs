@@ -1,5 +1,6 @@
 // The js-framework-benchmark keyed CPU operations: setup/warm-up clicks, then the measured click.
-// Shared by tests/browser/bench.mjs (Playwright) and bench/runner.html (any browser, no automation).
+// Shared by tests/browser/bench.mjs (Playwright), bench/runner.html (any browser, no automation) and
+// the race page (bench/race/race.js).
 const row = (i, cell) => `#tbody tr:nth-child(${i}) td:nth-child(${cell}) a`;
 export const OPS = [
   { name: "create1k", desc: "create 1,000 rows", warm: ["#run", "#clear", "#run", "#clear", "#run", "#clear", "#run", "#clear", "#run", "#clear"], click: "#run" },

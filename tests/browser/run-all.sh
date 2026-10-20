@@ -45,8 +45,8 @@ run templates node tests/browser/templates.mjs "$CORPUS/templates.jsonl" both
 run apply-semantics node tests/browser/apply-semantics.mjs
 run server node tests/browser/server.mjs all
 run effects node tests/browser/effects.mjs --no-build
-run bench-smoke-chromium node tests/browser/bench-smoke.mjs chromium --leanvir
-run bench-smoke-firefox node tests/browser/bench-smoke.mjs firefox --leanvir
+run bench-smoke-chromium node tests/browser/bench-smoke.mjs chromium
+run bench-smoke-firefox node tests/browser/bench-smoke.mjs firefox
 run pixels-chromium node tests/browser/pixels.mjs "http://127.0.0.1:$PORT/pixels/index.html" chromium
 run pixels-firefox node tests/browser/pixels.mjs "http://127.0.0.1:$PORT/pixels/index.html" firefox
 run editor-chromium node tests/browser/editor.mjs "http://127.0.0.1:$PORT/editor/index.html" chromium

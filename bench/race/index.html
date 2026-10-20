@@ -24,13 +24,17 @@
 <footer>
   <p><b>How it is measured.</b> Script time is the time the clicks take: the app's own work (for
   LeanUI, the Lean update, view and diff) and its DOM calls. Style, layout and paint come later, once
-  per frame, for the same DOM in all three, and are not counted. In <i>Life</i>, the panels take
-  turns: each gets 8 ms of clicks per animation frame, so in the same time the faster ones get
-  further. <i>Table</i> runs the standard operations one panel at a time, each after its usual
-  warm-up clicks; the median of the runs counts. “Started in” is the time from loading the panel to
-  the app being ready, with the compressed size of what it downloaded. The first run also pays for the
-  browser compiling the WebAssembly. The automated benchmarks behind these numbers are in
-  docs/BENCHMARKS.md.</p>
+  per frame, for the same DOM in all three, and are not counted. In <i>Life</i> the panels share the
+  time: in each animation frame, the ones that have used the least time so far click until they have
+  used 8 ms more, so all three get the same time and the faster ones get further. <i>Table</i> runs
+  the standard operations one panel at a time, each after its usual warm-up clicks; the median of the
+  runs counts. After a run, this page checks what each app shows: in <i>Life</i> the generation, the
+  live cells and the board (it hashes the cells on the page the way the apps hash theirs), in
+  <i>Table</i> the rows after every operation. “Started in” is the time from loading the panel to the
+  app being ready (the panels load one after another), with the size of what it downloaded,
+  compressed where the server compresses (as the site does). Each run loads the pages afresh. These
+  times come from your browser on your machine; docs/BENCHMARKS.md in the repository has the
+  automated benchmarks and how they differ (fresh page loads, traced rendering).</p>
 </footer>
 <script type="module" src="race.js"></script>
 </body></html>

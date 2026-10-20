@@ -1,0 +1,144 @@
+{
+ "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+ "memory64": true,
+ "runs": 5,
+ "cpu": {
+  "create1k": {
+   "leanui": {
+    "script": 16.5,
+    "layout": 71.24
+   },
+   "vanilla": {
+    "script": 8.42,
+    "layout": 56.4
+   },
+   "leanvir": {
+    "script": 495.76,
+    "layout": 550.48
+   }
+  },
+  "replace1k": {
+   "leanui": {
+    "script": 45.34,
+    "layout": 122.06
+   },
+   "vanilla": {
+    "script": 28.12,
+    "layout": 76.04
+   },
+   "leanvir": {
+    "script": 560.62,
+    "layout": 643.08
+   }
+  },
+  "update10th": {
+   "leanui": {
+    "script": 3.72,
+    "layout": 16.6
+   },
+   "vanilla": {
+    "script": 0.64,
+    "layout": 10.32
+   },
+   "leanvir": {
+    "script": 48.68,
+    "layout": 59.56
+   }
+  },
+  "select": {
+   "leanui": {
+    "script": 2,
+    "layout": 2.76
+   },
+   "vanilla": {
+    "script": 0.24,
+    "layout": 0.94
+   },
+   "leanvir": {
+    "script": 16.08,
+    "layout": 16.68
+   }
+  },
+  "swap": {
+   "leanui": {
+    "script": 3.72,
+    "layout": 29.76
+   },
+   "vanilla": {
+    "script": 0.7,
+    "layout": 27.88
+   },
+   "leanvir": {
+    "script": 80.82,
+    "layout": 107.78
+   }
+  },
+  "remove": {
+   "leanui": {
+    "script": 2.76,
+    "layout": 32.02
+   },
+   "vanilla": {
+    "script": 0.52,
+    "layout": 26.04
+   },
+   "leanvir": {
+    "script": 42.54,
+    "layout": 81.44
+   }
+  },
+  "create10k": {
+   "leanui": {
+    "script": 530.14,
+    "layout": 1139.4
+   },
+   "vanilla": {
+    "script": 224.64,
+    "layout": 839.98
+   },
+   "leanvir": {
+    "script": 4068.74,
+    "layout": 4645.24
+   }
+  },
+  "append1k": {
+   "leanui": {
+    "script": 37.38,
+    "layout": 102.38
+   },
+   "vanilla": {
+    "script": 8.6,
+    "layout": 74
+   },
+   "leanvir": {
+    "script": 458.98,
+    "layout": 530.92
+   }
+  },
+  "clear1k": {
+   "leanui": {
+    "script": 19,
+    "layout": 19.44
+   },
+   "vanilla": {
+    "script": 12.02,
+    "layout": 12.48
+   },
+   "leanvir": {
+    "script": 115.2,
+    "layout": 115.64
+   }
+  }
+ },
+ "startup": {
+  "leanui": {
+   "readyMs": 157.4
+  },
+  "vanilla": {
+   "readyMs": 31.98
+  },
+  "leanvir": {
+   "readyMs": 366.06
+  }
+ }
+}
