@@ -14,6 +14,10 @@ this server runs the program and drives the page. `?mode=wasm|server|ssr|auto` p
 
 `/editor/` is the photo editor (`examples/Editor.lean`), a client-side app served as its own page
 from `dist/editor` (`tools/build-app.sh EditorApp editor`), so the site's pages do not grow.
+
+`/race/` is the race page, static files from `dist/race` (`bench/race/build.sh`): the same apps in
+vanilla JavaScript, in LeanUI compiled to wasm64 and in LeanUI interpreted by lean-vir (`vir/`),
+side by side. lean-vir runs only there; the site itself is the wasm64 build.
 -/
 public section
 open LeanUI LeanUI.Server
@@ -62,6 +66,7 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Static.file "/data/benchmarks.json" "examples/site/benchmarks.json",
     Route.under "/assets/site" (Static.route { root := dist }),
     Route.under "/editor" (Static.route { root := o.dist / "editor" }),
+    Route.under "/race" (Static.route { root := o.dist / "race" }),
     sessions.route "/leanui",
     pageRoute sessions wasm]
 

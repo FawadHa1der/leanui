@@ -4,14 +4,15 @@
 <script type="module">
 // Runs the keyed suite in whatever browser opens this page, with no automation attached: each run
 // loads the implementation fresh in the iframe, does the operation's warm-ups, times one click
-// (script) and a forced layout after it (layout), then posts every result to /result.
+// (script) and a forced layout after it (layout), then posts every result to /result. An
+// implementation is the page at /<impl>/index.html: leanui (wasm64), vanilla, leanvir (lean-vir).
 // tests/browser/selfbench.mjs serves this page and launches release browsers on it.
 import { OPS } from "./ops.mjs";
 const q = new URLSearchParams(location.search);
 const impls = (q.get("impls") || "leanui,vanilla").split(",");
 const runs = +(q.get("runs") || 7);
 const only = q.get("only");
-// Busy-wait before each measured click (both implementations alike): a renderer that idles between
+// Busy-wait before each measured click (every implementation alike): a renderer that idles between
 // clicks is often scheduled on an efficiency core, which makes single-click timings bimodal.
 const spinMs = +(q.get("spin") ?? 30);
 const frame = document.getElementById("f");
@@ -29,6 +30,7 @@ const load = (impl) => new Promise((ok, fail) => {
 });
 const settle = (w) => new Promise((r) => w.requestAnimationFrame(() => w.requestAnimationFrame(() => setTimeout(r, 30))));
 const click = (w, sel) => { const e = w.document.querySelector(sel); if (!e) throw new Error("no element " + sel); e.click(); };
+// only leanui needs Memory64; lean-vir's interpreter is wasm32
 const memory64 = (() => { try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 4, 0])); } catch (e) { return false; } })();
 const results = { userAgent: navigator.userAgent, memory64, runs, cpu: {}, startup: {} };
 try {

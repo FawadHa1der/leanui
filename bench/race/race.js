@@ -3,7 +3,7 @@
 // program interpreted by lean-vir (wasm32). This page is the referee, in plain JavaScript: it clicks
 // each app's own buttons, times the clicks, and checks that all three end in the same state.
 //
-//   index.html?scenario=life|table&steps=1000&runs=3&auto=1
+//   index.html?scenario=life|table&steps=1000&runs=3&auto=1[&post=1]
 //
 // Life: Step is clicked `steps` times in every panel. The panels take turns, a slice of SLICE_MS
 // each per animation frame, so in the same wall time the faster ones get further: what you see
@@ -11,7 +11,8 @@
 // one panel at a time: the warm-up clicks, then the timed click, `runs` times (the median counts).
 // Times are the clicks' script time: the app's update and its DOM calls, measured here around
 // the clicks. Style, layout and paint come later, in the frame, and are not counted (the three
-// build the same DOM). `auto=1` runs at once; the result is left in `window.__race`.
+// build the same DOM). `auto=1` runs at once; the result is left in `window.__race`, and with
+// `post=1` also POSTed to /result (tests/browser/selfbench.mjs --race, for release browsers).
 import { OPS } from "./ops.mjs";
 
 const SLICE_MS = 8;
@@ -151,8 +152,12 @@ async function run() {
   } catch (e) {
     console.error(e); status("Error: " + e.message); window.__race = { error: String(e) };
   } finally { $("#run").disabled = false; $("#stop").disabled = true; }
+  if (q.get("post") === "1") fetch("/result", { method: "POST", body: JSON.stringify(window.__race) });
 }
 
+// a count the menus lack (?steps=250) gets an option of its own: a select set to a value it does
+// not list is empty, and an empty count would run nothing and report all three equal
+for (const k of ["steps", "runs"]) if (+q.get(k) > 0 && ![...$("#" + k).options].some((o) => o.value === q.get(k))) $("#" + k).add(new Option(q.get(k)));
 for (const k of ["scenario", "steps", "runs"]) if (q.has(k)) $("#" + k).value = q.get(k);
 const showOptions = () => { for (const e of document.querySelectorAll("[data-for]")) e.hidden = e.dataset.for !== $("#scenario").value; };
 $("#scenario").addEventListener("change", () => { showOptions(); load($("#scenario").value); });

@@ -5,6 +5,7 @@ public import LeanUI.Router
 public import LeanUI.Testing.Harness
 public import Effects
 public import Pixels
+public import Life
 meta import LeanUI.Json.Derive
 /-!
 # Tests for the kit: `LeanUI.Json`, `LeanUI.Router`, and the effects lab
@@ -22,6 +23,9 @@ effects tests read `examples/effects-assets/*.json`).
   callback it handles, as the browser would drive it.
 * Input payloads (`LeanUI.Input`), the pixel and file commands (the pixels lab in the DOM model),
   and that `update` gets the model uniquely owned (an array in it is updated in place).
+* Life (`examples/Life.lean`): the board after 0, 100 and 1,000 generations, the values the race
+  page's three implementations must show (`tests/browser/race.mjs`), and 100 clicks on Step in
+  the DOM model.
 -/
 public section
 open LeanUI
@@ -970,13 +974,34 @@ def testPixelsApp : T Unit := section_ "pixels lab (DOM model)" do
   let d ← r.dom.get
   expect "protocol" d.errors.isEmpty s!"{d.errors}"
 
+/-! ## Life -/
+
+/-- Live cells and board hash after `n` generations from the seed. -/
+def lifeAfter (n : Nat) : Nat × String :=
+  let b := Nat.repeat Life.next n Life.seed
+  (Life.population b, Life.hex (Life.hash b))
+
+def testLife : T Unit := section_ "life" do
+  -- the reference for tests/browser/race.mjs: vanilla JavaScript, wasm64 and lean-vir must agree
+  expectEq "generation 0" (lifeAfter 0) (328, "93b948f3")
+  expectEq "generation 100" (lifeAfter 100) (53, "bdbe4aa6")
+  expectEq "generation 1000" (lifeAfter 1000) (145, "4e6b3290")
+  let r ← Testing.run Life.program
+  for _ in [0:100] do r.click "id" "step"
+  expectEq "100 clicks shown" [← textOf r "gen", ← textOf r "pop", ← textOf r "hash"] ["100", "53", "bdbe4aa6"]
+  r.click "id" "reset"
+  expectEq "reset shown" [← textOf r "gen", ← textOf r "pop", ← textOf r "hash"] ["0", "328", "93b948f3"]
+  let d ← r.dom.get
+  expect "protocol" d.errors.isEmpty s!"{d.errors}"
+
 /-! ## Main -/
 
 public def main : IO UInt32 := do
   IO.println "leanui kit tests"
   let ((), s) ← (do
     testDocuments; testPrinting; testNumbers; testClasses; testAccessors; testLarge
-    testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testUniqueMessages; testPixelsApp : T Unit).run {}
+    testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testUniqueMessages; testPixelsApp
+    testLife : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0
