@@ -141,6 +141,7 @@ def header (m : Model) : Html Msg :=
       {navLink m.page .home "Home"}
       {navLink m.page .examples "Examples"}
       {navLink m.page .benchmarks "Benchmarks"}
+      <a href="/editor/">Photo editor</a>
       <a href={sourceUrl}>GitHub</a>
     </nav>
   </header>

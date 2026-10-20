@@ -32,13 +32,13 @@ def program : Program Int Msg where
 
 | | |
 |---|---|
-| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, repeated subtrees created by cloning DOM templates, delegated events with browser-extracted payloads, commands (fetch, timers, storage, history, focus, title, animation frames) and subscriptions, all as commands in one buffer per update |
+| **Core** (`LeanUI.Html`, `Diff`, `Patch`, `App`, `Effect`, `Input`) | views, keyed and positional reconciliation, exact `lazy`/`memo` subtrees, repeated subtrees created by cloning DOM templates, delegated events with browser-extracted payloads (values, keys, forms, files, pointers with capture, the wheel), commands (fetch, timers, storage, history, focus, title, animation frames, pixels to a canvas straight from wasm memory, file bytes and decoded images into Lean, downloads) and subscriptions (intervals, URL, keys), all as commands in one buffer per update |
 | **Templates** (`LeanUI.Syntax`, [docs/SYNTAX.md](docs/SYNTAX.md)) | JSX-style syntax with components, fragments, conditional children, class/style parts, SVG and MathML namespaces, precise compile errors; the generated C equals the hand-written view's |
 | **Kit** (`LeanUI.Json`, `LeanUI.Router`) | JSON on `Init` alone with exact numbers and `deriving ToJson, FromJson`; typed bidirectional routes (path or fragment) whose links cannot drift from the parser |
 | **Server** (`LeanUI.Server`) | a native `Std.Http` server: static files, server-side rendering with hydration, server-driven sessions, the `leanui` command (`serve`, `build`, `new`) |
 | **Proofs** ([docs/PROOFS.md](docs/PROOFS.md)) | the keyed reconciliation planner is machine-checked correct and optimal (fewest moves); TodoMVC's model keeps its list keys unique under every message |
 | **Testing** (`LeanUI.Testing`) | a pure DOM model that applies command buffers exactly as the browser does, property tests and fuzzing against a reference model, a strict protocol checker, SSR parser checks, browser suites in Chromium and Firefox |
-| **Examples** | a counter, [TodoMVC](examples/TodoMVC.lean) (the full spec, proved invariants), [the LeanUI site](examples/Site.lean) (routed pages, components, fetch, SVG; server-rendered), the js-framework-benchmark app, an effects lab, [the guide's notes app](docs/GUIDE.md) |
+| **Examples** | a counter, [TodoMVC](examples/TodoMVC.lean) (the full spec, proved invariants), [the LeanUI site](examples/Site.lean) (routed pages, components, fetch, SVG; server-rendered), [a photo editor](examples/Editor.lean) (layers, filters, painting, PNG; every pixel in Lean), the js-framework-benchmark app, an effects lab, a pixels lab, [the guide's notes app](docs/GUIDE.md) |
 
 ## How it works
 
@@ -146,8 +146,9 @@ and encoding). The benchmark app is ready about 25 ms after navigation in Chromi
 A few idioms cover most of what an app needs; `examples/` has each of them in a real program.
 
 - **Effects** are values: `update` returns a `Cmd` (`.fetch`, `.after`, `.storageSet`,
-  `.storageGet`, `.pushUrl`, `.focus`, `.title`, …) whose results come back as messages, and
-  `subscriptions` returns the event sources wanted right now (`.every ms`, `.urlChanges`). In a
+  `.storageGet`, `.pushUrl`, `.focus`, `.title`, `.putImage`, `.readFile`, `.decodeImage`,
+  `.download`, …) whose results come back as messages, and
+  `subscriptions` returns the event sources wanted right now (`.every ms`, `.urlChanges`, `.keys`). In a
   module that does `open LeanUI`, write the subscription type as `LeanUI.Sub` (Lean's own `Sub`
   is the subtraction class).
 - **Big lists**: give rows keys and make them lazy, so unchanged rows are neither rendered nor
@@ -174,6 +175,29 @@ browser without Memory64, the server runs the program and drives the page.
 tools/build-app.sh SiteApp site
 ./.lake/build/bin/leanui-site               # http://127.0.0.1:5360/  (?mode=wasm|server|ssr)
 ```
+
+## LeanUI Photo: a photo editor
+
+`examples/Editor.lean` is a complex, highly interactive client-side app: a layered photo editor
+whose pixel work is all Lean (`examples/Editor/*.lean`: adjustments with curves and levels,
+Gaussian blur, unsharp mask, convolutions and edges, crop, rotation, resize, eight blend modes,
+a soft brush, histogram, undo history, PNG encoding and decoding), compiled to wasm64. The
+browser decodes JPEGs and shows pixels: the canvas is filled straight from wasm memory
+(`Cmd.putImage`). Sliders preview on a downscaled copy; full-resolution work runs a slice of
+rows per animation frame. It is served as its own page, `/editor/`, on the site. Its video lab,
+`/editor/video/` (`examples/Video.lean`), plays a video file and runs the same Lean filters on
+every frame (the frame comes from WebCodecs' `VideoFrame`), at the frame rates measured in the
+benchmarks.
+
+```bash
+tools/build-app.sh EditorApp editor && tools/build-app.sh VideoApp editor/video
+./.lake/build/bin/leanui serve dist        # http://127.0.0.1:8000/editor/ and /editor/video/
+```
+
+Keys: B brush, E eraser, H hand, C crop (Enter applies), + − 0 1 zoom, [ ] brush size,
+Ctrl+Z / Ctrl+Shift+Z undo and redo. Its benchmarks (each operation against the same algorithm in
+plain JavaScript, interaction latency, memory) are in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md#the-photo-editor).
 
 ## Browsers
 
@@ -205,9 +229,10 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-server-tests     # server, sessions, CLI
 ./.lake/build/bin/leanui-todomvc-tests    # TodoMVC against the DOM model
 ./.lake/build/bin/leanui-notes-tests      # the guide's app
+./.lake/build/bin/leanui-editor-tests     # the photo editor: image operations, PNG, jobs, the program
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
-                                          # apply-semantics, server, effects, bench-smoke, depth
+                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
 ```

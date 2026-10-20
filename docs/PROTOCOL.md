@@ -7,7 +7,8 @@ below. This document is normative for both.
 
 ## 1. Framing
 
-A buffer is two byte arrays:
+A buffer is two byte arrays (and, in the wasm host, the byte arrays its pixel and file commands
+refer to: *blobs*, section 8):
 
 - **words**: little-endian unsigned 32-bit integers, a sequence of *commands*. Each command is an
   opcode word followed by its operand words (section 3): a fixed number, except for `TEMPLATE`
@@ -32,7 +33,9 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 
 ## 3. Commands
 
-`n` = node handle, `nm` = name id, `s` = string (2 words), `cb`/`sub` = callback id.
+`n` = node handle, `nm` = name id, `s` = string (2 words), `cb`/`sub` = callback id, `blob` = blob
+index (one word, section 8), `file` = file id (payload 5, section 4); other operands are plain
+numbers (`w`, `h`: a bitmap's size; `x`, `y`, `dw`, `dh`: a rectangle in it).
 
 | Op | Name | Operands | Browser semantics |
 |---|---|---|---|
@@ -60,7 +63,7 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 32 | FETCH | cb, s method, s url, s body, s headers | `fetch`; headers are `name: value` lines; reply `cb` with ok = 2xx and payload `"<status>\n<body>"` (status 0 on network error) |
 | 33 | TIMEOUT | cb, ms | reply `cb` (ok, `""`) after `ms` |
 | 34 | INTERVAL_SET | sub, ms | reply `sub` (ok, `""`) every `ms` until cleared |
-| 35 | SUB_CLEAR | sub | stop subscription `sub` (interval or URL) |
+| 35 | SUB_CLEAR | sub | stop subscription `sub` (interval, URL or keys) |
 | 36 | STORAGE_SET | s key, s value | `localStorage.setItem` |
 | 37 | STORAGE_GET | cb, s key | reply `cb` with ok = present, payload = value |
 | 38 | STORAGE_REMOVE | s key | `localStorage.removeItem` |
@@ -73,6 +76,13 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 45 | FRAME | cb | reply `cb` on the next animation frame, payload = rounded timestamp (ms) |
 | 46 | BLUR | s selector | after this buffer, blur the first match |
 | 47 | SCROLL_INTO_VIEW | s selector | after this buffer, scroll the first match into view |
+| 48 | PUT_IMAGE | s selector, blob, w, h, x, y, dw, dh | at the end of this buffer, `putImageData` blob (`w`×`h` RGBA pixels) at (0, 0) of the first `<canvas>` matching `selector`, copying only the rectangle (`x`, `y`, `dw`, `dh`) (section 8) |
+| 49 | FILE_READ | cb, file | reply `cb` with the bytes of file `file` (section 8) |
+| 50 | IMAGE_DECODE | cb, file | reply `cb` with file `file` decoded to RGBA pixels, payload `"<width> <height>"` (section 8) |
+| 51 | DOWNLOAD | s name, s type, blob | offer blob's bytes as a download named `name` of media type `type` (section 8) |
+| 52 | KEYS_LISTEN | sub | reply `sub` for every `keydown` on the document except in text fields (`textarea`, `select`, editable content, and `input`s other than checkboxes, radio buttons, ranges, buttons, file and colour pickers), payload `Ctrl+`, `Alt+`, `Shift+`, `Meta+` prefixes (in that order) then `KeyboardEvent.key`; presses of a modifier key alone are not reported, and no default is prevented |
+| 53 | FRAME_GRAB | cb, s selector | reply `cb` with the frame the first `<video>` matching `selector` shows, as RGBA pixels (a WebCodecs `VideoFrame` copied as RGBA, or drawn on a 2D canvas where that conversion is not available or the frame is rotated or flipped), payload `"<width> <height> <timeMs>"` with the frame's media time (from `requestVideoFrameCallback` while the video plays; `currentTime` while it is paused or where that is missing); `ok` = 0 when there is no frame yet, or the video cannot be played (section 8) |
+| 54 | FILE_URL | cb, file | reply `cb` with an object URL for file `file` (`ok` = 0 and an empty payload for an unknown id) |
 
 Unknown opcodes are fatal (the receiver stops and reports). New commands get new numbers; numbers
 are never reused. Opcode 22 is unused: an `INSERT_MANY` (insert a run of children with one
@@ -91,8 +101,22 @@ listener of its target, as it would without delegation.
 - **payload** says what the browser extracts from the node that registered the listener:
   0 nothing, 1 `value`, 2 `checked` (`"true"`/`"false"`), 3 `KeyboardEvent.key`,
   4 the fields of the node's form (the node itself if it is a `form`, else the form a control
-  belongs to) as `name=value` lines, a file field as its file name; empty without a form.
-- **flags**: bit 0 `preventDefault`, bit 1 `stopPropagation`.
+  belongs to) as `name=value` lines, a file field as its file name; empty without a form;
+  5 the event's files (`dataTransfer.files` if it has any, else the node's `files`), one line
+  per file, `id\tsize\ttype\tname` (tabs and line breaks in the name become spaces): the
+  runtime keeps each file under a new id (≥ 1; the 64 most recent are kept) for `FILE_READ`
+  and `IMAGE_DECODE`;
+  6 a pointer: `x y width height buttons modifiers pointerId pressure deltaX deltaY clientX
+  clientY`, space separated, where `x`, `y` are the pointer's position relative to the node's
+  bounding box and `width`, `height` that box's size (CSS pixels, after transforms),
+  `modifiers` is 1 shift + 2 ctrl + 4 alt + 8 meta, `pointerId` 0 for events that have none,
+  the deltas are a wheel event's in CSS pixels (lines count 16, pages the box's height; 0 for
+  other events), and `clientX`, `clientY` the position in the viewport; numbers have at most two
+  decimals and no exponent.
+- **flags**: bit 0 `preventDefault`, bit 1 `stopPropagation`, bit 2 capture the pointer: on a
+  `pointerdown`, `setPointerCapture` on the node, so the pointer's later events target it
+  until it is released. Listeners for `wheel`, `touchstart` and `touchmove` are registered as
+  not passive, so `preventDefault` works for them.
 
 The runtime reports `event(slot, payload)` to Lean. Reports are serialised: an event that fires
 while a buffer is being applied (for example `focusin` caused by a `FOCUS`) is queued and
@@ -174,3 +198,42 @@ What a copy can still do differently from a mount: a custom element's callbacks 
 order (its attributes arrive while it is copied, before its children), and a property on a leaf
 is set while the leaf is already inside its (detached) parent, where a mount sets it before the
 leaf has a parent; no difference has been observed for radio groups and selects.
+
+## 8. Bytes: pixels and files
+
+Some commands carry bytes rather than strings. A buffer may have **blobs**: byte arrays its
+commands refer to by index (a *blob* operand, one word). In the wasm host the blobs stay where
+they are in wasm memory: before a flush, the module reports each blob's address and length
+(`LeanUI.__blob(index, address, length)`), and the runtime reads them as views of that memory
+while it applies the buffer. They are valid until the buffer has been applied, so a command that
+needs them later copies them (`DOWNLOAD`: the `Blob` constructor copies), and `PUT_IMAGE` runs at
+the end of the buffer, after its DOM commands (so it may draw on a canvas the same buffer
+created), but before control returns to Lean. `PUT_IMAGE` wraps the view in an `ImageData`
+(no copy) and `putImageData` copies the dirty rectangle into the canvas; the blob must hold
+exactly `4 × w × h` bytes (RGBA, straight alpha, rows top to bottom). A `PUT_IMAGE` that cannot
+be done (another size, no canvas matching the selector, or no 2D context) is logged and skipped; one
+with an empty rectangle does nothing. The canvas keeps its own
+size (`width` and `height` attributes, from the view).
+
+Results with bytes (`FILE_READ`, `IMAGE_DECODE`, `FRAME_GRAB`) come back through a second callback,
+`callbackBytes(cb, ok, payload, bytes)`. In the wasm host the runtime asks the module for a Lean
+`ByteArray` of the right size (`leanui_bytes_alloc`, `leanui_bytes_data`), writes the bytes into
+it and passes it to `leanui_callback_bytes`, which hands it to Lean: one copy, from the browser's
+buffer into wasm memory, and none in Lean. A failure has `ok` = 0, the reason as the payload and
+no bytes; that includes a result too large for the module's memory (`leanui_bytes_alloc`
+returns null rather than stopping the program). `IMAGE_DECODE` decodes with `createImageBitmap` (no premultiplication, no colour space
+conversion) and reads the pixels back from a 2D canvas, so it decodes whatever the browser
+decodes (PNG, JPEG, WebP, GIF's first frame, …); semi-transparent pixels may lose precision in
+the canvas's premultiplied storage. `FRAME_GRAB` makes a `VideoFrame` of the video and copies it
+with `copyTo(…, { format: "RGBA" })` (one copy into a browser buffer, then the copy into wasm
+memory). While the video plays, the presented frame's media time, which
+`requestVideoFrameCallback` reports, names the frame, so two grabs of the same frame have the
+same `timeMs` (`currentTime` moves between frames, and `VideoFrame.timestamp` is 0 in Firefox);
+while it is paused, `currentTime` does (the last frame shown on pausing may get no callback).
+Where the conversion is missing, or the frame is rotated or flipped (`copyTo` copies the stored
+pixels), it draws the frame on a 2D canvas instead.
+`FILE_URL` replies with a string and works in either host.
+
+The server-driven host carries no bytes: its buffers have no blobs (`PUT_IMAGE` and `DOWNLOAD`
+are skipped, with one console warning), and a result with bytes arrives as an ordinary callback
+with `ok` = 0 and the payload `bytes need the in-page (wasm) host`.

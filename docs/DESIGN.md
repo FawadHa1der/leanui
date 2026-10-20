@@ -86,16 +86,26 @@ built against. It was first written on 2026-10-18 from the research in
 ## 2. Frozen interfaces (change only with a note in this file)
 
 - `LeanUI.Html` types and smart constructors; `LeanUI.Attr.*` helpers (additions allowed).
+  `LeanUI.Input` (2026-10-19): `Pointer`, `FileInfo`, `Keys` and their parsers, `Attr.onPointer`,
+  `onWheel`, `onFiles`, `onDrop`, `onDragOver`.
   2026-10-18: `Html.lazy` gained a key and its dependencies became an exact `Dep` (was `UInt64`).
   Added: `keyedLazy`, `keyedMemo` (a keyed lazy node in one constructor) and the constant
   dependencies `Dep.boolTrue`, `Dep.boolFalse`, `Dep.optNone`.
 - `LeanUI.Patch` opcodes and operand layouts (additions allowed with new numbers; never renumber).
 - `LeanUI.Keyed.Plan` fields `src`, `removed`, `move` and their meaning (the diff relies on them).
 - `LeanUI.Program`, `Host`, `Instance`, `start`, `Cmd`, `Sub` constructors (additions allowed).
+  2026-10-19: added `Host.blobs` (byte arrays a buffer's commands refer to), `Instance.callbackBytes`,
+  `Cmd.putImage`, `Cmd.download`, `Cmd.readFile`, `Cmd.decodeImage`, `Sub.keys`, payloads
+  `files` and `pointer`, and `Handler.capturePointer` (`docs/PROTOCOL.md`, sections 4 and 8).
+  Then `Cmd.grabFrame` (a `<video>`'s current frame as RGBA, with its timestamp) and
+  `Cmd.fileUrl` (an object URL for a file), ops 53 and 54.
 - Browser globals: `LeanUI.start`, `LeanUI.connect`, `LeanUI.boot`, `LeanUI.__flush`.
 - The wasm exports (`runtime/leanui_wasm.c`): `leanui_boot(flags, flagsLen, selector,
   selectorLen, hydrate)`, `leanui_event(slot, payload, len)`, `leanui_callback(cb, ok, payload,
   len)`; strings are malloc'd UTF-8 bytes that C frees. (2026-10-18: lengths added.)
+  2026-10-19: `leanui_callback_bytes(cb, ok, payload, len, bytes)` with `bytes` a `ByteArray`
+  from `leanui_bytes_alloc(len)` (filled through `leanui_bytes_data(bytes)`), which Lean then
+  owns; and the import `LeanUI.__blob(index, address, length)` before a flush with blobs.
 - Remote protocol (server-driven): `POST <endpoint>/<session>` with a text body
   `h` (hydrate) | `e\n<slot>\n<payload>` | `c\n<cb>\n<0|1>\n<payload>`; the response body is
   `Buf.encode` (`[u32 opsBytes][ops][strs]`), possibly empty; errors carry a status and a buffer
@@ -108,7 +118,13 @@ built against. It was first written on 2026-10-18 from the research in
   whole compiler, about 104 MB). Compile-time code (templates, JSON deriving) lives in modules the
   app reaches only through `meta import`, which keeps it out of the binary.
 - No `initialize` globals on runtime paths. Hot loops keep arrays uniquely owned (`modifyGet`,
-  not `get` then `modify`). Code that runs once per created or removed node (mounting, cloning,
+  not `get` then `modify`). `update` gets the model uniquely owned (`LeanUI.App.updateModel`;
+  `tests/Kit.lean`, "update owns the model"), so an app whose model holds pixels updates them in
+  place if it takes the model apart (`match m with | { img, .. } => …`) rather than reading
+  `m.img` and then building `{ m with img := … }`, which keeps the old `m` alive meanwhile. It
+  gets each message unshared too (`LeanUI.App.stepMsgs` pops them off the queue with
+  `popLast`, a call the compiler cannot reorder; `tests/Kit.lean`, "update owns the message"), so
+  bytes in a message, such as a video frame, are written in place. Code that runs once per created or removed node (mounting, cloning,
   releasing, placing a keyed list's middle) passes `DiffState` explicitly instead of running in
   `DiffM`, one `@[noinline]` function per state update (2026-10-18; `LeanUI.Diff`, "State
   passing"; `docs/BENCHMARKS.md`, "Allocations").
@@ -138,7 +154,7 @@ built against. It was first written on 2026-10-18 from the research in
 
 | Module / file | Role | Tests |
 |---|---|---|
-| `LeanUI/{Html,Patch,Keyed,Diff,Effect,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,templates,depth,apply-semantics}.mjs` |
+| `LeanUI/{Html,Patch,Keyed,Diff,Effect,Input,App,Render}.lean`, `runtime/*` | core | `leanui-tests`, `leanui-props`, `tests/browser/{counter,keyed-dom,fuzz,templates,depth,apply-semantics}.mjs` |
 | `LeanUI/Syntax.lean` | JSX-style templates (compile time only) | `leanui-syntax-tests` |
 | `LeanUI/Proofs/Keyed.lean` | machine-checked keyed reconciliation | `lake build` |
 | `LeanUI/Testing/*` | DOM model, harness, generators, reference model, protocol checker, SSR parser | `leanui-props` |
@@ -146,6 +162,9 @@ built against. It was first written on 2026-10-18 from the research in
 | `LeanUI/Server.lean`, `LeanUI/Server/*.lean`, `cli/Main.lean` | native server, SSR pages, sessions, `leanui` CLI | `leanui-server-tests`, `tests/browser/server.mjs` |
 | `examples/TodoMVC.lean`, `examples/TodoMVCProofs.lean` | TodoMVC and its proved invariants | `leanui-todomvc-tests`, `tests/browser/todomvc.mjs` |
 | `examples/Site.lean`, `examples/SiteServer.lean` | the LeanUI site (`leanui-site`) | `tests/browser/site.mjs` |
+| `examples/Pixels.lean` | the pixels lab: canvas, pointer, files, downloads, keys | `leanui-kit-tests`, `tests/browser/pixels.mjs` |
+| `examples/Editor.lean`, `examples/Editor/*.lean` | LeanUI Photo: image operations, PNG, layers, jobs, the editor | `leanui-editor-tests`, `tests/browser/editor.mjs` |
+| `examples/Video.lean` | the video lab: the editor's filters on every frame of a video | `leanui-editor-tests`, `tests/browser/video.mjs` |
 | `examples/Bench.lean`, `bench/*` | the benchmark app, the vanilla reference, the runner | `leanui-perf`, `tests/browser/{bench,selfbench,bench-smoke}.mjs` |
 | `toolchain/*`, `tools/*` | wasm64 archives, app builds, site data | |
 

@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labelled: adding the `bench` label runs the editor benchmarks (below)
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 concurrency:
@@ -65,7 +67,7 @@ jobs:
         run: |
           failed=""
           for t in leanui-tests leanui-props leanui-syntax-tests leanui-kit-tests leanui-server-tests \
-                   leanui-todomvc-tests leanui-notes-tests; do
+                   leanui-todomvc-tests leanui-notes-tests leanui-editor-tests; do
             echo "::group::$t"
             .lake/build/bin/$t || failed="$failed $t"
             echo "::endgroup::"
@@ -119,8 +121,37 @@ jobs:
           npm install --no-audit --no-fund playwright@1.62.1
           npx playwright install --with-deps chromium firefox
           echo "LEANUI_PLAYWRIGHT_FROM=$RUNNER_TEMP/pw/package.json" >> "$GITHUB_ENV"
+      # The editor core's goldens against an independent Python implementation, and the JavaScript
+      # port the benchmarks compare with against the same goldens (well under a second, no build).
+      - name: Editor goldens (Python reference, JavaScript port)
+        run: python3 tests/editor-ref/reference.py tests/Editor.lean && node bench/editor/check-goldens.mjs
       - name: Browser tests (Chromium, Firefox)
         run: tests/browser/run-all.sh
+
+      # The editor's and the video lab's benchmarks (docs/BENCHMARKS.md, "The photo editor"): only on a pull request
+      # labelled `bench`, and they never fail the build. The JSON goes up as an artifact.
+      - name: Editor benchmarks (Chromium, Firefox)
+        if: contains(github.event.pull_request.labels.*.name, 'bench')
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          mkdir -p "$RUNNER_TEMP/bench"
+          .lake/build/bin/leanui serve dist --port 5332 --quiet &
+          srv=$!
+          trap 'kill $srv' EXIT
+          for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:5332/editor/index.html && break; sleep 0.2; done
+          node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ chromium --sizes 1,4,12 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-chromium.json"
+          node tests/browser/editor-bench.mjs http://127.0.0.1:5332/ firefox --sizes 1,4,12 --runs 3 --out "$RUNNER_TEMP/bench/editor-bench-firefox.json"
+          node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html chromium --out "$RUNNER_TEMP/bench/editor-perf-chromium.json" > /dev/null
+          node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html firefox --quick --out "$RUNNER_TEMP/bench/editor-perf-firefox.json" > /dev/null
+          node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html chromium --perf --out "$RUNNER_TEMP/bench/video-chromium.json"
+          node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html firefox --perf --out "$RUNNER_TEMP/bench/video-firefox.json"
+      - uses: actions/upload-artifact@v7
+        if: contains(github.event.pull_request.labels.*.name, 'bench')
+        with:
+          name: editor-bench
+          path: ${{ runner.temp }}/bench
+          retention-days: 14
 
       - name: Stage and smoke-test the site container
         run: |
@@ -134,6 +165,10 @@ jobs:
           curl -fsS -o /dev/null http://127.0.0.1:8080/site.css
           curl -fsS -o /dev/null -D "$RUNNER_TEMP/wasm.headers" -H 'accept-encoding: br, gzip' http://127.0.0.1:8080/assets/site/app.wasm
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/wasm.headers"
+          curl -fsS http://127.0.0.1:8080/editor/ | grep -q "LeanUI Photo"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/editor/app.wasm
+          curl -fsS http://127.0.0.1:8080/editor/video/ | grep -q "LeanUI Video"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/editor/video/app.wasm
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

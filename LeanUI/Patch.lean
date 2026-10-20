@@ -38,7 +38,7 @@ def hydrate       : UInt32 := 19  -- selector-str, firstHandle, count
 def fetch         : UInt32 := 32  -- cb, method-str, url-str, body-str, headers-str ("k: v" lines)
 def timeout       : UInt32 := 33  -- cb, ms
 def intervalSet   : UInt32 := 34  -- sub, ms
-def intervalClear : UInt32 := 35  -- sub                   (stops any subscription: interval or url)
+def intervalClear : UInt32 := 35  -- sub                   (stops any subscription: interval, url or keys)
 def storageSet    : UInt32 := 36  -- key-str, value-str
 def storageGet    : UInt32 := 37  -- cb, key-str
 def storageRemove : UInt32 := 38  -- key-str
@@ -51,6 +51,15 @@ def title         : UInt32 := 44  -- str
 def frame         : UInt32 := 45  -- cb                    (requestAnimationFrame)
 def blur          : UInt32 := 46  -- selector-str
 def scrollIntoView: UInt32 := 47  -- selector-str
+-- pixels, files, keys (2026-10-19)
+def putImage      : UInt32 := 48  -- canvas-selector-str, blob, width, height, dirtyX, dirtyY, dirtyW, dirtyH
+def fileRead      : UInt32 := 49  -- cb, file id            (bytes callback: the file's bytes)
+def imageDecode   : UInt32 := 50  -- cb, file id            (bytes callback: RGBA pixels, payload "width height")
+def download      : UInt32 := 51  -- name-str, type-str, blob
+def keysListen    : UInt32 := 52  -- sub                   (document keydown -> callback)
+-- video (2026-10-19)
+def frameGrab     : UInt32 := 53  -- cb, video-selector-str (bytes callback: RGBA pixels, payload "width height timeMs")
+def fileUrl       : UInt32 := 54  -- cb, file id            (callback: an object URL for the file)
 end LeanUI.Op
 
 namespace LeanUI
@@ -121,6 +130,10 @@ structure Buf where
   units : UInt32 := 0
   names : Std.HashMap String UInt32 := {}
   nextName : UInt32 := 1
+  /-- Byte arrays that commands of this buffer refer to by index (`PUT_IMAGE`, `DOWNLOAD`). The
+  buffer keeps them alive until it is flushed; the wasm host hands the browser their addresses,
+  so their bytes are read in place, never copied in Lean. -/
+  blobs : Array ByteArray := #[]
 
 namespace Buf
 
@@ -228,7 +241,12 @@ def prependHydrate (b : Buf) (selector : String) (first count : UInt32) : Buf :=
 
 /-- Drop the written commands and strings, keeping the interned names (they live as long as
 the session). -/
-@[inline] def reset (b : Buf) : Buf := { b with ops := ByteArray.emptyWithCapacity 4096, strs := ByteArray.emptyWithCapacity 4096, units := 0 }
+@[inline] def reset (b : Buf) : Buf :=
+  { b with ops := ByteArray.emptyWithCapacity 4096, strs := ByteArray.emptyWithCapacity 4096, units := 0, blobs := #[] }
+
+/-- Attach a byte array to this buffer and write its index (a blob operand). -/
+@[inline] def blob (b : Buf) (data : ByteArray) : Buf :=
+  { b with ops := pushU32 b.ops b.blobs.size.toUInt32, blobs := b.blobs.push data }
 
 /-- The encoded update: `[u32 opsBytes][ops][strs]`, the format of a server-driven response. -/
 def encode (b : Buf) : ByteArray := pushU32 ByteArray.empty b.ops.size.toUInt32 ++ b.ops ++ b.strs

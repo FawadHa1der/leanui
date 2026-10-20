@@ -12,7 +12,7 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
 2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
    change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,
-   `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`.
+   `leanui-server-tests`, `leanui-todomvc-tests`, `leanui-notes-tests`, `leanui-editor-tests`.
 3. **wasm64**: `toolchain/image.sh` builds the emsdk image from the fork's
    `docker-wasm64/Dockerfile` at the pinned commit. `toolchain/build-archives.sh` builds the
    single-threaded runtime archives (about half an hour on a hosted runner, then cached until
@@ -21,7 +21,7 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
 4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
-   apply-semantics, server, effects, bench-smoke, depth.
+   apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth.
 5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files, and writes
    brotli (quality 11) and gzip siblings of `app.wasm`, `app.js` and `leanui.js`. The image is
    built for `linux/amd64` and started, and `/`, the wasm and the stylesheet must answer, the
@@ -40,7 +40,10 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
 
 - The **container** runs `leanui-site` (examples/SiteServer.lean, built on the runner) from
   `ubuntu:24.04`, as `nobody`, with no outbound network. It renders every page (SSR), serves the
-  wasm build, and runs server-driven sessions for browsers without Memory64 (Safari).
+  wasm build, and runs server-driven sessions for browsers without Memory64 (Safari). It also
+  serves the photo editor as its own page, `/editor/` (`dist/editor`, a client-side wasm app with
+  no server rendering: browsers without Memory64 get a message instead), and its video lab,
+  `/editor/video/` (`dist/editor/video`).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
   accept them (`Content-Encoding`, `Vary: Accept-Encoding`), and Cloudflare passes encoded bodies
   through. Brotli at quality 11 is smaller than what the edge would produce on the fly (the site's
@@ -91,7 +94,8 @@ The image needs a Linux x86-64 `leanui-site`, so deploy from Linux (or let CI do
 wasm64 archives built once (`toolchain/build-archives.sh`, needs Docker):
 
 ```bash
-lake build leanui-site && tools/build-app.sh SiteApp site && deploy/cloudflare/stage.sh
+lake build leanui-site && tools/build-app.sh SiteApp site && tools/build-app.sh EditorApp editor &&
+  tools/build-app.sh VideoApp editor/video && deploy/cloudflare/stage.sh
 ```
 
 ```bash

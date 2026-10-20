@@ -6,8 +6,9 @@ traces), in release Chrome and Firefox, and natively. This page gives the result
 and what was learned getting there.
 
 Measured at commit `93b8470` (2026-10-18); sections that compare two builds name the build they
-compare against. All numbers: an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26,
-headless browsers, medians. Each browser measurement loads a fresh page, does the operation's
+compare against. All numbers except those of "The photo editor" (a cloud VM and GitHub's runners,
+named there): an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26, headless
+browsers, medians. Each browser measurement loads a fresh page, does the operation's
 warm-up clicks, busy-waits 30 ms (so the click does not land on an efficiency core; see below)
 and times one click.
 
@@ -23,6 +24,11 @@ and times one click.
   `3db6ac9` → `93b8470`) took creating 1,000 rows from 7.10 to 3.81 ms of script in Chromium and
   from 1.90 to 0.63 ms natively; no operation got slower in the Chromium A/B, and release Firefox's
   small clicks moved within its timer noise (see "The create path").
+- **The photo editor** ([below](#the-photo-editor); a cloud VM and GitHub's runners, CI machines to
+  be re-measured on the reference Mac): on its 19 image operations Lean (wasm) takes
+  0.61–0.73× the time of the same algorithms in plain JavaScript in Chromium (0.51–0.61× on
+  GitHub's runners), byte-identical; its slider previews reach the screen in 25–134 ms at any
+  image size, and full-resolution work runs in frame-sized slices.
 - **Natively**, selecting a row costs Lean 0.08 ms (update, view, diff, encoding), and creating
   1,000 rows 0.63 ms.
 - **Memory**: 16 MB of wasm memory at load,
@@ -498,6 +504,457 @@ wasm), and keeping the buffers' storage across updates in `reset` (no change in 
 - **Fresh loads, not warm pages.** Chrome's optimizing tier changes nothing measurable for
   LeanUI after the first second (a 12-second warm-up probe stays flat once the core scheduling
   effect is removed).
+
+## The photo editor
+
+[LeanUI Photo](../examples/Editor.lean) is a layered photo editor whose pixel work is all Lean
+([`examples/Editor/*.lean`](../examples/Editor)), compiled to wasm64: a complex, highly
+interactive client-side app. This section measures it in two ways: each image operation against a
+straightforward JavaScript implementation of the same algorithm (and against the canvas's built-in
+operations where they exist), and the editor itself (input to pixels, long work, UI scaling,
+memory).
+
+**Machine.** Unlike the rest of this page, these numbers come from a 4-core x86-64 cloud VM
+(Chromium 141 headless, software canvas: `chrome://gpu` reports "Software only") and from
+GitHub's `ubuntu-24.04` runners (Chromium 151 and Playwright's Firefox 153): the operations at
+`eb0414f` (cloud VM, 2026-10-19) and `ceb6393` (runners, 2026-10-20), the editor and the video lab
+at `5c7314c` (cloud VM) and `54181cf` (runners, CI run 39353984688), both 2026-10-20 (UTC). Every
+table names its raw data in [`bench/editor/`](../bench/editor). **Absolute times are a CI-class
+machine's, to be re-measured on the reference Mac**; the comparable figures are the ratios, taken
+in the same browser process on the same input.
+
+### Summary
+
+- **Lean against JavaScript, same algorithms:** all 19 operations give byte-identical results in
+  Lean (wasm) and in plain JavaScript. Every run compares the 16 operations that produce an image
+  by checksum, the histogram by its total and the two PNG encoders by file size; the histogram's
+  and the PNG files' bytes are pinned by the Lean core's goldens, which `ops.js` reproduces
+  (`bench/editor/check-goldens.mjs`, also run every time). In Chromium, Lean takes
+  **0.61–0.73× the time** of the JavaScript (geometric mean over the 19 operations at 1, 4 and
+  12 MP, two runs on the cloud VM; total time 0.69–0.76×), and 0.51–0.61× on GitHub's runner.
+  Lean is slower on the histogram (1.2–1.7×) and the box downscale (1.1–1.2×), about even on the
+  blurs, the unsharp mask and the bilinear resize (0.8–1.1×), and faster on compositing
+  (0.26–0.32×: an integer division by a constant against JavaScript's floating-point one), edges
+  and emboss (0.59–0.73×), row copies (flip vertically 0.2–0.4×) and PNG encoding (level 1
+  0.48–0.54×, stored 0.45–0.82×).
+  The lookup-table adjustment's ratio is anywhere from 0.4× to 1.7×, because JavaScript's time for
+  it varies fourfold from run to run while Lean's stays put. Some of Lean's wins are
+  implementation choices the plain port does not make (below), so "same algorithm" means the same
+  arithmetic, not the same code.
+- **The canvas's built-ins**, where there is one, are faster overall (Lean ÷ canvas 1.10–1.35×):
+  Skia's blur is 2–9× faster than Lean's direct Gaussian, and its resampling 3–12× faster; Lean
+  wins the lookup-table adjustment, rotations and flips, and ties or wins the colour matrix. Its
+  PNG files are 3.9–4.8× smaller (Lean's encoder at level 1 against `toBlob`), though `toBlob` is
+  2.8–3.6× faster.
+- **Playwright's Firefox** (on the runner) gives Lean ÷ JS 2.2–2.8×: its Lean runs about 5× slower
+  than Chromium's on the same machine, its JavaScript about as fast. That build runs any wasm
+  several times slower than release Firefox (see "Findings about measuring"), so this says more
+  about the build than about Lean in Firefox.
+- **Interactive at every size:** a slider previewing a point operation (brightness, saturation)
+  reaches the screen 25–35 ms after the input, and a blur or sharpen preview 105–134 ms, about the
+  same at 1, 4 and 12 MP, because previews run on a preview image of at most 1280 px on a side (on
+  GitHub's runner: 13–18 ms and 55–91 ms). A brush move costs 1.2 ms (1 MP) to 10 ms (12 MP) of
+  script, at most 18 ms, and reaches the screen with the next frame (17 ms median, 21 ms longest).
+- **Long work does not freeze the page:** applying an operation at full resolution, rotating and
+  exporting run as jobs, a slice of rows per animation frame. At 12 MP the longest frame during
+  them is 67–100 ms, except one frame of 600 ms in a blur (most likely wasm memory growing), while a blur
+  takes 3.3 s and an export 1.8 s.
+- **Memory:** 16 MiB of wasm memory at load, 57 MiB with a 12 MP image open, 1.23 GiB after 50 brush
+  strokes on it (the undo history's 1 GiB budget then holds 23 entries, 22 undoable steps); wasm
+  memory never shrinks.
+- **Download:** 292 KB with brotli (wasm 266 KB, glue 15 KB, runtime 9.5 KB).
+- **Video** (the [video lab](../examples/Video.lean), the same filters on every frame of a 30 fps
+  video): every filter keeps up at 640×360, except blur at 27 fps. At 1280×720 the colour filters
+  and edge detection keep up, emboss runs at 19 fps, and sharpen and blur at 6–8 fps. At
+  1920×1080, grabbing and drawing alone keep up and the colour filters reach 19–22 fps.
+
+### Each operation: Lean (wasm) against plain JavaScript and the canvas
+
+[`examples/EditorBench.lean`](../examples/EditorBench.lean) runs one operation of the editor's
+core at a time, synchronously and at full resolution, on a generated test image;
+[`bench/editor/ops.js`](../bench/editor/ops.js) implements every operation in plain JavaScript
+(typed arrays, straightforward loops, no SIMD, workers or WebGL), with the same integer arithmetic,
+so the outputs are byte-identical. [`tests/browser/editor-bench.mjs`](../tests/browser/editor-bench.mjs)
+times both in the same page: Lean as the synchronous `input` event that runs the command (update,
+a tiny view and diff included), JavaScript as the call, the canvas built-in as the draw plus a
+`getImageData` of the whole result (the draw alone is only recorded: the canvas rasterises later).
+The tables give MPix/s, input megapixels per second from the median time (higher is better): in
+each cell Lean · JavaScript · canvas built-in, "–" where there is no built-in or the time is under
+the timer's resolution. `node bench/editor/mpix-table.mjs <file.json>` prints them from the raw
+timings that `tests/browser/editor-bench.mjs` writes.
+
+**Cloud VM, Chromium 141** (`bench/editor/results-chromium.json`, medians of 5 runs, 3 for an
+operation whose warm-up took over 1.5 s):
+
+| MPix/s: Lean · JS · canvas | 1 MP (1152×864) | 4 MP (2304×1728) | 12 MP (4000×3000) |
+|---|--:|--:|--:|
+| brightness, contrast, gamma (lookup table) | 74.8 · 29.9 · 13.7 | 83.6 · 32.1 · 42.2 | 91.6 · 48.7 · 48.5 |
+| saturation and hue (colour matrix) | 63.8 · 26.5 · 15.2 | 66.0 · 52.3 · 65.9 | 67.9 · 51.5 · 67.2 |
+| Gaussian blur, radius 2 | 11.6 · 10.4 · 33.9 | 10.7 · 11.2 · 24.0 | 11.5 · 10.3 · 27.0 |
+| Gaussian blur, radius 8 | 4.0 · 4.2 · 34.4 | 4.5 · 3.8 · 25.5 | 4.3 · 3.8 · 28.1 |
+| unsharp mask | 9.9 · 9.4 · – | 9.3 · 8.7 · – | 10.1 · 8.0 · – |
+| emboss (3×3) | 26.0 · 18.8 · – | 26.4 · 18.8 · – | 24.8 · 17.7 · – |
+| edges (Sobel) | 37.1 · 24.3 · – | 38.2 · 24.2 · – | 38.1 · 22.6 · – |
+| rotate 90° | 92.2 · 83.6 · 51.0 | 59.3 · 51.0 · 30.3 | 69.7 · 37.3 · 33.6 |
+| rotate 180° | 111 · 106 · 91.3 | 140 · 101 · 103 | 136 · 101 · 102 |
+| flip horizontally | 114 · 103 · 88.1 | 115 · 63.6 · 73.1 | 136 · 104 · 102 |
+| flip vertically | 829 · 243 · 60.3 | 766 · 269 · 93.5 | 750 · 313 · 105 |
+| resize to 50% (bilinear) | 120 · 123 · 369 | 120 · 117 · 346 | 123 · 122 · 404 |
+| downscale to 1/8 (box) | 124 · 153 · 1106 | 134 · 153 · 1475 | 134 · 154 · 1667 |
+| composite, normal at 60% | 54.1 · 15.0 · 129 | 51.7 · 15.2 · 130 | 51.5 · 14.0 · 118 |
+| composite, overlay at 60% | 42.7 · 12.7 · 112 | 45.0 · 11.7 · 117 | 45.4 · 12.5 · 115 |
+| histogram | 126 · 158 · – | 85.1 · 146 · – | 129 · 154 · – |
+| PNG, stored | 45.0 · 37.0 · – | 42.9 · 19.4 · – | 43.7 · 30.0 · – |
+| PNG, level 1 (filters, LZ77, fixed Huffman) | 22.0 · 11.6 · 60.7 | 20.5 · 11.0 · 74.4 | 23.8 · 11.7 · 68.6 |
+| crop | 1659 · 1106 · 498 | 2844 · 1284 · 492 | 3750 · 1132 · 545 |
+| show on a canvas (`putImageData`) | 829 · 1106 · – | 1076 · 1206 · – | 1062 · 1154 · – |
+| *Lean ÷ JS time, geometric mean* | 0.68× (19 operations) | 0.64× (19 operations) | 0.63× (19 operations) |
+
+| size | Lean ÷ JS (geometric mean, 19 operations) | total time Lean ÷ JS | Lean ÷ canvas (14) | wasm memory after |
+|---|--:|--:|--:|--:|
+| 1 MP (1152×864) | 0.68× (second run: 0.73×) | 0.75× (0.76×) | 1.10× (1.35×) | 19 MiB |
+| 4 MP (2304×1728) | 0.64× (0.72×) | 0.71× (0.76×) | 1.26× (1.29×) | 64 MiB |
+| 12 MP (4000×3000) | 0.63× (0.61×) | 0.69× (0.73×) | 1.28× (1.22×) | 186 MiB |
+
+A second run of the same build minutes later (`bench/editor/results-chromium-2.json`) moved 12 of
+Lean's 54 timings over 2 ms by more than 10% (at most 1.5×, the histogram at 4 MP), and
+JavaScript's by up to 4.2× (the lookup table at 1 MP: 33 ms, then 8 ms; Lean 13 ms both times).
+The ranges in the summary span both runs.
+
+**GitHub's runner, Chromium 151** (CI run 39344001445 at `ceb6393`, whose merge with `main` is
+`a1328be`; `bench/editor/results-ci-chromium.json`, medians of 3 runs):
+
+| MPix/s: Lean · JS · canvas | 1 MP (1152×864) | 4 MP (2304×1728) | 12 MP (4000×3000) |
+|---|--:|--:|--:|
+| brightness, contrast, gamma (lookup table) | 114 · 108 · 66.8 | 132 · 188 · 69.0 | 139 · 186 · 69.0 |
+| saturation and hue (colour matrix) | 106 · 82.3 · 80.3 | 110 · 49.3 · 82.3 | 113 · 49.9 · 81.7 |
+| Gaussian blur, radius 2 | 18.5 · 8.5 · 59.2 | 18.6 · 16.0 · 55.0 | 18.7 · 16.0 · 49.1 |
+| Gaussian blur, radius 8 | 7.1 · 6.2 · 61.8 | 7.1 · 6.2 · 55.3 | 7.1 · 6.2 · 54.2 |
+| unsharp mask | 16.1 · 10.8 · – | 16.2 · 13.6 · – | 16.3 · 13.6 · – |
+| emboss (3×3) | 37.6 · 17.6 · – | 38.0 · 17.4 · – | 38.0 · 27.8 · – |
+| edges (Sobel) | 51.3 · 25.0 · – | 51.8 · 34.0 · – | 52.0 · 33.8 · – |
+| rotate 90° | 221 · 158 · 105 | 219 · 159 · 99.5 | 197 · 158 · 85.9 |
+| rotate 180° | 237 · 181 · 161 | 260 · 183 · 163 | 263 · 184 · 165 |
+| flip horizontally | 243 · 175 · 163 | 254 · 179 · 159 | 261 · 184 · 163 |
+| flip vertically | 1991 · 398 · 166 | 2342 · 452 · 161 | 2500 · 462 · 164 |
+| resize to 50% (bilinear) | 184 · 114 · 585 | 205 · 192 · 622 | 209 · 104 · 649 |
+| downscale to 1/8 (box) | 161 · 106 · 1991 | 173 · 225 · 2342 | 176 · 225 · 2609 |
+| composite, normal at 60% | 88.9 · 22.2 · 226 | 89.1 · 22.1 · 225 | 91.3 · 22.1 · 231 |
+| composite, overlay at 60% | 64.2 · 19.6 · 199 | 65.3 · 19.7 · 197 | 66.4 · 19.6 · 202 |
+| histogram | 216 · 93.0 · – | 220 · 249 · – | 218 · 248 · – |
+| PNG, stored | 69.1 · 40.0 · – | 69.6 · 49.3 · – | 69.5 · 48.6 · – |
+| PNG, level 1 (filters, LZ77, fixed Huffman) | 31.2 · 9.9 · 97.6 | 32.7 · 19.8 · 117 | 33.3 · 19.6 · 113 |
+| crop | 4977 · 1422 · 829 | 7963 · 1593 · 948 | 8571 · 1791 · 976 |
+| show on a canvas (`putImageData`) | 2488 · 4977 · – | 2654 · 2654 · – | 3000 · 3333 · – |
+| *Lean ÷ JS time, geometric mean* | 0.51× (19 operations) | 0.61× (19 operations) | 0.60× (19 operations) |
+
+**GitHub's runner, Playwright's Firefox 153** (the same run; `bench/editor/results-ci-firefox.json`):
+
+| MPix/s: Lean · JS · canvas | 1 MP (1152×864) | 4 MP (2304×1728) | 12 MP (4000×3000) |
+|---|--:|--:|--:|
+| brightness, contrast, gamma (lookup table) | 23.7 · 124 · 47.4 | 26.9 · 133 · 47.4 | 27.7 · 128 · 47.1 |
+| saturation and hue (colour matrix) | 16.9 · 31.1 · 49.8 | 17.4 · 30.6 · 52.4 | 17.5 · 63.5 · 52.9 |
+| Gaussian blur, radius 2 | 3.3 · 14.6 · 17.5 | 3.3 · 14.6 · 17.7 | 3.3 · 14.7 · 17.0 |
+| Gaussian blur, radius 8 | 1.3 · 5.6 · 39.8 | 1.3 · 5.6 · 37.2 | 1.3 · 5.7 · 34.7 |
+| unsharp mask | 2.8 · 9.8 · – | 2.8 · 9.6 · – | 2.8 · 9.8 · – |
+| emboss (3×3) | 5.5 · 21.2 · – | 5.5 · 20.8 · – | 5.5 · 20.9 · – |
+| edges (Sobel) | 10.2 · 13.5 · – | 10.2 · 13.1 · – | 10.3 · 13.6 · – |
+| rotate 90° | 55.3 · 142 · 124 | 57.7 · 147 · 105 | 58.5 · 133 · 96.0 |
+| rotate 180° | 58.5 · 142 · 142 | 60.3 · 166 · 147 | 61.5 · 148 · 150 |
+| flip horizontally | 55.3 · 166 · 199 | 60.3 · 159 · 181 | 61.2 · 141 · 188 |
+| flip vertically | – · 498 · 199 | 1991 · 442 · 181 | 2400 · 480 · 188 |
+| resize to 50% (bilinear) | 30.2 · 142 · 995 | 31.1 · 159 · 664 | 31.7 · 160 · 750 |
+| downscale to 1/8 (box) | 31.1 · 199 · – | 33.2 · 210 · 3981 | 33.4 · 214 · 6000 |
+| composite, normal at 60% | 16.1 · 16.9 · 249 | 16.3 · 17.2 · 284 | 16.3 · 17.5 · 286 |
+| composite, overlay at 60% | 11.6 · 15.1 · 249 | 11.6 · 15.4 · 234 | 11.6 · 15.5 · 250 |
+| histogram | 31.1 · 199 · – | 31.1 · 199 · – | 31.5 · 207 · – |
+| PNG, stored | 13.3 · 14.9 · – | 13.5 · 15.1 · – | 13.4 · 15.1 · – |
+| PNG, level 1 (filters, LZ77, fixed Huffman) | 4.5 · 8.5 · 39.8 | 4.6 · 8.8 · 46.3 | 4.7 · 9.5 · 47.4 |
+| crop | – · 995 · 995 | 3981 · 1991 · 1327 | 6000 · 1714 · 1333 |
+| show on a canvas (`putImageData`) | 332 · 332 · – | 306 · 306 · – | 308 · 2000 · – |
+| *Lean ÷ JS time, geometric mean* | 2.78× (17 operations) | 2.21× (19 operations) | 2.19× (19 operations) |
+
+On the runner, Chromium gives the same picture as the cloud VM with Lean further ahead: Lean ÷ JS
+0.51×, 0.61× and 0.60× (total time 0.56–0.70×), Lean ÷ canvas 1.19–1.29×. Playwright's Firefox
+gives 2.78×, 2.21× and 2.19× (at 1 MP over 17 operations: flip vertically and crop take Lean
+under its 1 ms timer; total time 2.81–2.91×) and Lean ÷ canvas 4.7–7.0×. Against Chromium on the
+same runner, its Lean takes 4.95× the time (geometric mean over the operations and sizes, 1.0–7.1×)
+and its JavaScript 1.22× (0.5–3.3×). Playwright's Firefox build runs wasm several times slower
+than release Firefox ("Findings about measuring": about 8×), so its ratios say more about that
+build than about Lean in Firefox; release Firefox, self-driven as in "Method", is still to be
+measured on the reference Mac.
+
+**What the Lean side does.** Lean's code is the obvious algorithm written for the compiler: pixel
+loops are tail-recursive functions over a uniquely owned `ByteArray` (updated in place), with bounds
+and the array's exclusivity checked once per row rather than per byte, pixels read and written as
+32-bit words (a few `@[extern c inline]` primitives, whose Lean bodies are the specification), and
+constants hoisted out of loops. Two of its choices go beyond the plain port: the blur adds the two
+symmetric taps before multiplying and works on two channels per multiplication, and the PNG encoder
+uses a slicing-by-4 CRC-32 and compares match lengths a word at a time. Before that pass (the first
+version of the core, measured the same way; its raw timings are `bench/editor/results-chromium.json`
+as of `3ca07a4`) Lean took 1.5× the JavaScript's time: the histogram's counters were a boxed `Array
+UInt32` (6.3×), every byte store re-checked the array's reference count (rotations and lookup tables
+2–2.7×), and Sobel ran in `Float` (3.9×).
+
+**Findings.**
+
+- *Decimal literals and `Float.ofNat` in a loop are expensive in Lean 4.34.* A literal like `0.5`
+  compiles to a call of `Float.ofScientific` per iteration, and `Float.ofNat` parses the constant
+  2^53 from a string on every call: the first test-image generator took 69 s for 12 MP in wasm, the
+  brush 8× longer than it should. Top-level `Float` constants and `UInt64.toFloat` avoid both.
+- *JavaScript pays for fresh typed arrays.* Each run writes into a new 48 MB array, and touching its
+  pages costs about 30 ms at 12 MP; wasm memory, once grown, is reused. That is most of Lean's
+  advantage on copies (flip vertically, crop).
+- *Showing pixels costs the same as in JavaScript:* `Cmd.putImage` hands the browser a view of wasm
+  memory, and `putImageData` from it is as fast as from a JavaScript array.
+
+**Allocations** ([`tests/browser/editor-allocs.mjs`](../tests/browser/editor-allocs.mjs), on builds
+that count every `malloc` and `free`, `LEANUI_COUNT_ALLOCS=1`; raw counts in
+[`bench/editor/allocs-chromium.md`](../bench/editor/allocs-chromium.md), at `5c7314c`): no
+operation allocates per pixel. A run costs 43–224 allocations (its output image and temporaries,
+plus about 40 for the event's update, view and diff), the same at 1 and 4 MP; the colour matrix
+about 600 and the lookup-table adjustment about 3,900 (the floating-point setup of the matrix, the
+256-entry table) and the histogram about 1,650, all independent of the size. PNG encoding
+allocates in proportion to the image's bytes, about three objects per 5,552-byte Adler-32 block
+(2,200 allocations at 1 MP, 8,660 at 4 MP), not per pixel. In the editor, a slider input costs
+about 3,900 (blur radius) to 8,100 (brightness: its lookup table's setup, as in the adjust-lut run)
+allocations, and a brush move about 1,000.
+
+### The editor: input to pixels
+
+[`tests/browser/editor-perf.mjs`](../tests/browser/editor-perf.mjs) drives the editor with
+generated JPEGs (decoded by the browser, then handed to Lean). *To pixels* runs from the input to
+the end of the next frame's rendering (a task queued from that frame's `requestAnimationFrame`
+callback: after its style, layout and paint), timed in the page; in Chromium every slider input
+and UI click is also traced, as in "Method" (the brush moves and opening a JPEG are timed in the
+page only): *script* is the event's dispatch (Lean's update, view and diff, and the
+buffer applied, `putImageData` included), *render* the main-thread frame work after it. Sliders:
+medians of 8 inputs; the brush: 40 moves; opening a JPEG: one run per size. Cloud VM, Chromium 141
+([`bench/editor/perf-chromium.json`](../bench/editor/perf-chromium.json)):
+
+| | 1 MP | 4 MP | 12 MP |
+|---|--:|--:|--:|
+| open a JPEG (file chosen to canvas shown) | 171 ms | 357 ms | 613 ms |
+| preview size | 1152×864 | 1280×960 | 1280×960 |
+| slider: brightness (lookup table), to pixels (script + render) | 34 ms (29 + 4) | 25 ms (22 + 3) | 33 ms (30 + 5) |
+| slider: saturation (colour matrix) | 27 ms (24 + 3) | 31 ms (27 + 4) | 35 ms (29 + 4) |
+| slider: blur radius 6 and 7, alternating (on a half-size proxy where the preview radius is 2 px or more: not radius 6 at 12 MP) | 116 ms (110 + 3) | 110 ms (106 + 4) | 122 ms (118 + 4) |
+| slider: sharpen | 126 ms (120 + 3) | 134 ms (130 + 4) | 105 ms (101 + 4) |
+| brush: a move, script, median / longest | 1.2 / 1.9 ms | 7.7 / 14 ms | 10 / 18 ms |
+| brush: a move, to pixels, median / longest | 17 / 18 ms | 17 / 21 ms | 17 / 21 ms |
+| brush: stroke start (copies the layer once) | 13 ms | 25 ms | 63 ms |
+
+On GitHub's Chromium 151 runner ([`perf-ci-chromium.json`](../bench/editor/perf-ci-chromium.json))
+the sliders reach the screen in 13–18 ms for the point operations, 55–71 ms for the blur preview
+and 64–91 ms for sharpen; a brush move costs 0.7–5 ms of script (at most 10 ms) and reaches the
+screen with the next frame (17 ms). In Playwright's Firefox at 1 MP
+([`perf-ci-firefox.json`](../bench/editor/perf-ci-firefox.json), no traces) they take 58–73 ms,
+284 ms and 371 ms, and a brush move 6 ms of script.
+
+A slider's preview costs one preview-sized operation, a composite of the layers' previews, a
+histogram of every fourth row, and showing the result; the image's size matters only for opening
+it and for the work below. Render is 3–5 ms: the canvas is filled during the script
+(`putImageData`), and the frame's own work is small. A brush move's time to pixels is one frame
+(16.7 ms at 60 Hz) whenever its script fits in the frame.
+
+### Long work: frames stay short
+
+Applying an operation to the full-resolution layer, rotating and exporting run as jobs: a slice of
+rows per animation frame, sized by a per-operation cost and adapted to the frame time (about 25 ms
+of work a frame), with a progress bar. Time from the click to the result, and the longest frame
+meanwhile (cloud VM, the same file):
+
+| | 1 MP | 4 MP | 12 MP |
+|---|--:|--:|--:|
+| apply brightness | 73 ms, 33 ms | 360 ms, 50 ms | 640 ms, 67 ms |
+| apply blur radius 6 | 274 ms, 50 ms | 1,020 ms, 50 ms | 3,260 ms, 600 ms |
+| edge detect | 90 ms, 33 ms | 270 ms, 83 ms | 593 ms, 83 ms |
+| rotate 90° | 73 ms, 33 ms | 273 ms, 67 ms | 490 ms, 67 ms |
+| export PNG (5.3 MB at 12 MP) | 246 ms, 67 ms | 718 ms, 117 ms | 1,809 ms, 100 ms |
+
+The 600 ms frame is most likely wasm memory growing. In four more 12 MP blurs on fresh pages (a
+probe, not in the committed data) the longest frame was 100–133 ms, and it was always the job's
+first frame, where the memory grows from 102 to 148 MiB for the job's full-size buffers. In the
+run above the page had already done the sliders, the brush and one job (apply brightness), so its
+memory was larger and grew in a bigger step. The job's slices
+themselves stay at a few frames. Before the work was sliced (`cc99a41`,
+[`perf-chromium-before-slicing.json`](../bench/editor/perf-chromium-before-slicing.json)), the
+same machine froze for 5.8 s exporting a 12 MP PNG (one frame; 6.2 s in all) and 1.0 s rotating
+it. On GitHub's Chromium runner a 12 MP blur takes 1.5 s (longest frame 50 ms) and an export 0.9 s
+(167 ms); in Playwright's Firefox at 1 MP every job's longest frame is 17–50 ms, and the export's
+167 ms.
+
+### UI scaling: layers and history
+
+On a 1 MP image (the image's size changes only the compositing). Each row loads a fresh page,
+builds the panel (10 or 100 layers, or 200 history steps of a layer's opacity), does one warm-up
+action, then measures one: a click on another layer or history step (select, show or hide,
+whose warm-up clicks another layer's checkbox twice, and jump), a second click on Undo, or a
+second change of the opacity slider (a new step); medians of 5 runs. Cloud VM, traced Chromium
+141 (`perf-chromium.json`):
+
+| | script | render | to pixels |
+|---|--:|--:|--:|
+| select a layer, 10 layers | 0.6 ms | 3.9 ms | 13 ms |
+| select a layer, 100 layers | 0.9 ms | 4.9 ms | 16 ms |
+| show or hide a layer (recomposite), 10 layers | 7.7 ms | 5.5 ms | 16 ms |
+| show or hide a layer (recomposite), 100 layers | 6.7 ms | 4.9 ms | 15 ms |
+| jump in a 200-step history | 7.7 ms | 8.9 ms | 17 ms |
+| undo, 200 steps | 6.6 ms | 5.0 ms | 12 ms |
+| a new step when the history is full (drops the oldest) | 6.3 ms | 4.2 ms | 11 ms |
+
+A click costs 4.5–17 ms of main-thread work (script plus render), the same with 100 layers as
+with 10; *to pixels* adds the wait for the next frame. On GitHub's Chromium runner the same rows
+cost 2.7–10 ms of work; in Playwright's Firefox (10 layers and the history), 1–21 ms of script.
+The panels are keyed lists of memoised rows, so a click diffs only what changed. A layer nothing
+was painted on is skipped when compositing, which keeps 100 mostly empty layers as cheap as 10;
+100 layers of 1 MP take 429 MiB.
+
+### Memory and download
+
+Wasm memory is 16 MiB at load and grows on demand (it never shrinks). A 12 MP image takes 57 MiB
+open (its pixels, its preview, the canvas). Each history step keeps the images it replaced (a brush
+stroke copies the layer it paints on once, 48 MB at 12 MP); the history is trimmed to 200 steps or
+1 GiB of replaced images, so 50 strokes on a 12 MP image leave 1.23 GiB of wasm memory and 23
+history entries (22 undoable steps). Download (brotli 11, `5c7314c`): `app.wasm` 266 KB, `app.js` 15 KB, `leanui.js`
+9.5 KB, the page 1.9 KB.
+
+### What is interactive, where the main thread blocks, and what would move to a worker
+
+- **Point operations and painting are interactive at any size:** previews reach the screen in
+  25–35 ms, and a brush move's script fits in a frame even at 12 MP at the median (10 ms; the
+  longest move took 18 ms and reached the screen in 21 ms), because only the preview and the
+  stroke's rectangle are touched.
+- **Neighbourhood filters preview at about 8–10 updates a second** (blur and sharpen, 105–134 ms
+  per input at preview size). This is the clearest gap: a faster blur (a box-filter approximation
+  is a few operations a pixel whatever the radius) or computing the preview in a worker while the
+  page shows the last one would both help.
+- **Full-resolution work does not freeze the page**, apart from one 600 ms frame in the 12 MP blur
+  (the other 12 MP jobs' longest frames are 67–100 ms), but takes seconds at 12 MP (blur 3.3 s,
+  export 1.8 s) and occupies the main thread: during a job the page stays responsive (the progress
+  bar moves, the view zooms, the side panels scroll), but the view cannot be panned and edits are
+  disabled until it finishes. This is what
+  would move to a Web Worker: a second wasm instance with its own copy of the layer (no shared
+  memory, since the page is not cross-origin isolated), receiving the pixels and returning the
+  result as transferred `ArrayBuffer`s (a copy each way, tens of milliseconds at 12 MP, against
+  seconds of work). The commands that would start and answer such work are effects like the ones
+  the framework already has (`Cmd.readFile` returns bytes the same way).
+- **Opening** a 12 MP JPEG takes 0.6 s from choosing the file to the canvas: the browser's
+  decoding (`createImageBitmap`, off the main thread), reading the pixels back, copying them into
+  wasm memory, and Lean's preview and first composite (not measured separately).
+
+### Video: the filters on every frame
+
+The [video lab](../examples/Video.lean) (`/editor/video/`) plays a video file in a `<video>`,
+which the browser decodes. On each animation frame it asks for the frame the video shows
+(`Cmd.grabFrame`: a WebCodecs `VideoFrame` copied into wasm memory as RGBA), runs one of the
+editor's filters on it in Lean, draws it (`Cmd.drawBitmap`) and waits for the next animation
+frame. A frame already filtered is not filtered again, and a filter slower than the video drops
+frames rather than queueing them. The number below is **frames filtered and drawn per second**.
+[`tests/browser/video.mjs`](../tests/browser/video.mjs) `--perf` makes each test video in the
+page: an animated canvas encoded by `VideoEncoder` (VP8, 4 s, exactly 30 fps, a keyframe a second)
+into a WebM file. It plays each video once on its own to see what the browser presents (first
+row). It then plays the video in the lab for 3 s per filter, and times each grab (the request to
+the reply, asynchronous) and the Lean side of each new frame (the bytes into wasm, the filter,
+the view and the `putImageData`, synchronous).
+
+Cloud VM, Chromium 141 (headless, software video decoding and canvas), `5c7314c`
+([`bench/editor/video-chromium.json`](../bench/editor/video-chromium.json)): *CI machine, to be
+re-measured on the reference Mac*.
+
+| filter | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 30 | 30 | 29.7 |
+| none (grab and draw) | 30 · 1.7 · 0.8 | 30 · 6.8 · 2.4 | 30.1 · 12.5 · 4.8 |
+| vivid (contrast, saturation) | 30 · 1.8 · 4.5 | 29.6 · 6.4 · 17 | 19.1 · 12.1 · 34.3 |
+| black and white | 29.7 · 2.2 · 5.4 | 29.9 · 5.8 · 16.4 | 18.8 · 12.1 · 34.3 |
+| invert (a lookup table) | 30.3 · 1.7 · 3.8 | 29.9 · 6 · 13.1 | 22.3 · 11.9 · 26.5 |
+| edge detect (Sobel) | 30 · 1.8 · 7.4 | 28.2 · 5.8 · 23.4 | 14 · 12.6 · 50 |
+| emboss (3×3) | 30 · 1.8 · 10.4 | 19.2 · 5.9 · 39.3 | 9 · 12.4 · 86.7 |
+| sharpen (unsharp mask, radius 2) | 29.4 · 1.7 · 25.8 | 8.2 · 6.3 · 106.5 | 4 · 12.6 · 223.4 |
+| blur (Gaussian, radius 4) | 26.8 · 1.6 · 32.1 | 6.1 · 6.6 · 145.3 | 3.1 · 12.5 · 293.8 |
+
+- **The frame rate follows the per-frame cost.** One frame costs a grab plus the Lean side, and
+  the loop waits for an animation frame between frames. So a frame costing 45 ms (emboss at
+  720p) takes three 16.7 ms animation frames, and the lab draws about 20 fps of a 30 fps video;
+  the measurement is 19.2.
+- **Moving the pixels is cheap.** Without a filter, a 1080p frame is grabbed in 12.5 ms (the
+  asynchronous `VideoFrame` conversion to RGBA), then handed to Lean and drawn in 4.8 ms (8 MB
+  copied into wasm memory, then `putImageData` from it). The frame reaches `update` unshared,
+  so the colour filters write into it: a counting build (`LEANUI_COUNT_ALLOCS=1`) shows one
+  frame-sized allocation per inverted frame, two for edges (its output) and blur (its
+  temporary). Before `stepMsgs` handed messages over unshared, every in-place filter copied the
+  frame first: 2.4–5.8 ms a frame at 1080p
+  ([`video-chromium-before-unshared.json`](../bench/editor/video-chromium-before-unshared.json) at
+  `fda2bf5` against [`video-chromium-after-unshared.json`](../bench/editor/video-chromium-after-unshared.json)
+  at `e9150de`).
+- **The filters cost what they cost in the editor** (the Lean side minus the copy, per pixel, at
+  720p and 1080p): 10–16 ns for a lookup table and a colour matrix, 22–23 ns for edges, 40 ns
+  for emboss, 105–155 ns for the unsharp mask and the blur. The neighbourhood filters are the
+  gap, as in the editor's previews.
+- **What would raise the rates**, none of it done: a box-filter blur, whose cost does not grow
+  with the radius; filtering at preview size, as the editor's blur preview does; grabbing the
+  next frame while the current one is filtered (this hides the grab); and filtering in a worker.
+  The worker is the largest change, because frames would then be filtered in parallel.
+
+**GitHub's runner** (`ubuntu-24.04`, the `bench` run at `54181cf`;
+[`video-ci-chromium.json`](../bench/editor/video-ci-chromium.json),
+[`video-ci-firefox.json`](../bench/editor/video-ci-firefox.json)), same measurement. Runners are
+different machines from run to run, so compare the rows within a table.
+
+| Chromium 151 | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 30 | 30 | 30 |
+| none (grab and draw) | 30 · 1.2 · 0.2 | 30 · 3.9 · 0.5 | 30 · 6.9 · 1.2 |
+| vivid (contrast, saturation) | 30 · 1.2 · 2.5 | 30 · 4 · 9 | 30 · 7.2 · 20.1 |
+| black and white | 29.7 · 1.2 · 2.5 | 29.7 · 3.9 · 9.2 | 30 · 7.3 · 20.5 |
+| invert (a lookup table) | 29.7 · 1.1 · 2.2 | 29.7 · 3.9 · 7.2 | 29.4 · 6.6 · 16 |
+| edge detect (Sobel) | 29.7 · 1.2 · 5.1 | 29.3 · 3.8 · 16.9 | 21.3 · 7.3 · 36.5 |
+| emboss (3×3) | 29.7 · 1.2 · 6.6 | 29.8 · 3.8 · 25.7 | 14.3 · 7.1 · 59.6 |
+| sharpen (unsharp mask, radius 2) | 29.3 · 1.2 · 15.3 | 15.2 · 3.9 · 59.6 | 6.8 · 7.2 · 136.9 |
+| blur (Gaussian, radius 4) | 29.7 · 1.2 · 20.4 | 11.3 · 4.7 · 82 | 5.1 · 6.7 · 185.6 |
+
+On this runner every filter but blur and sharpen keeps up with the video at 720p (they reach 11 and
+15 fps). At 1080p the colour filters do, edges and emboss reach 21 and 14 fps, and blur and
+sharpen 5–7 fps.
+
+| Playwright's Firefox 153 | 640×360: fps · grab · Lean (ms) | 1280×720 | 1920×1080 |
+|---|--:|--:|--:|
+| the video played alone | 24.8 | 25 | 24.9 |
+| none (grab and draw) | 24.9 · 3 · 0 | 25 · 11 · 1 | 23.6 · 22 · 2 |
+| vivid (contrast, saturation) | 24.6 · 3 · 15 | 14.8 · 11 · 55 | 6.7 · 23 · 122 |
+| black and white | 24.1 · 3 · 15 | 14.3 · 12 · 56 | 6.7 · 22 · 124 |
+| invert (a lookup table) | 24.7 · 3 · 11 | 19.7 · 11 · 38 | 9.3 · 23 · 83 |
+| edge detect (Sobel) | 22.2 · 3 · 23 | 10.5 · 11 · 82 | 4.9 · 22 · 179 |
+| emboss (3×3) | 20.2 · 3 · 45 | 5.2 · 12 · 176 | 2.4 · 23 · 396 |
+| sharpen (unsharp mask, radius 2) | 11.1 · 3 · 87 | 2.8 · 12 · 341 | 1.3 · 23 · 770 |
+| blur (Gaussian, radius 4) | 8.5 · 3 · 113 | 2.2 · 12 · 449 | 1 · 23 · 1018 |
+
+Headless Firefox presents these 30 fps videos at 25 fps even with nothing else running (first
+row), so 25 is its ceiling here. Its timer is coarsened to whole milliseconds. Its Lean side
+takes 5–7× Chromium's on the same runner, which is the gap between Playwright's Firefox build
+and Chromium for any wasm (see "Playwright's Firefox is not Firefox" above): release Firefox
+would need its own measurement.
+
+### Reproducing (the editor)
+
+```bash
+tools/build-app.sh EditorBenchApp editor-bench && tools/build-app.sh EditorApp editor
+./.lake/build/bin/leanui serve dist --port 5331 &
+node tests/browser/editor-bench.mjs http://127.0.0.1:5331/ chromium --sizes 1,4,12 --runs 5
+node tests/browser/editor-perf.mjs http://127.0.0.1:5331/editor/index.html chromium --out perf.json
+node bench/editor/check-goldens.mjs     # the JavaScript port against the Lean goldens
+LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorBenchApp editor-bench-allocs
+LEANUI_COUNT_ALLOCS=1 tools/build-app.sh EditorApp editor-allocs
+node tests/browser/editor-allocs.mjs http://127.0.0.1:5331/   # allocations per operation and event
+tools/build-app.sh VideoApp editor/video
+node tests/browser/video.mjs http://127.0.0.1:5331/editor/video/index.html chromium --perf --out video.json
+```
+
+CI runs them (the operations at 1, 4 and 12 MP, the editor and the video lab, in Chromium and
+Firefox) on a pull request with the `bench` label and uploads the JSON as the
+`editor-bench` artifact; [`bench/editor/README.md`](../bench/editor/README.md)
+has the details and caveats.
 
 ## Method
 

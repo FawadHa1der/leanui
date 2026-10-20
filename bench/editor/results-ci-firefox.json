@@ -1,0 +1,2323 @@
+{
+ "engine": "firefox",
+ "browserVersion": "153.0",
+ "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0",
+ "gpu": "no WebGL",
+ "canvasStatus": null,
+ "commit": "a1328be",
+ "runs": 3,
+ "slowMs": 1500,
+ "slowRuns": 3,
+ "timerNote": "performance.now() coarsened (not cross-origin isolated)",
+ "goldens": "52 of 55 goldens match (not ported: dab, dab erase, stroke); 4 PNG round trips through zlib; 19 operations as in EditorBench.ops",
+ "check": {
+  "w": 333,
+  "h": 250,
+  "rows": [
+   {
+    "op": "adjust-lut",
+    "kind": "checksum",
+    "lean": "333x250 2416388334556578764",
+    "js": "333x250 2416388334556578764",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "adjust-color",
+    "kind": "checksum",
+    "lean": "333x250 429306055254652507",
+    "js": "333x250 429306055254652507",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "blur-2",
+    "kind": "checksum",
+    "lean": "333x250 5454095612778768211",
+    "js": "333x250 5454095612778768211",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "blur-8",
+    "kind": "checksum",
+    "lean": "333x250 7976599678076372127",
+    "js": "333x250 7976599678076372127",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "sharpen",
+    "kind": "checksum",
+    "lean": "333x250 14329810750491378909",
+    "js": "333x250 14329810750491378909",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "emboss",
+    "kind": "checksum",
+    "lean": "333x250 10941893513725136999",
+    "js": "333x250 10941893513725136999",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "edges",
+    "kind": "checksum",
+    "lean": "333x250 7164308664249296871",
+    "js": "333x250 7164308664249296871",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "rotate-90",
+    "kind": "checksum",
+    "lean": "250x333 18351631065690087723",
+    "js": "250x333 18351631065690087723",
+    "match": true,
+    "canvasSame": true
+   },
+   {
+    "op": "rotate-180",
+    "kind": "checksum",
+    "lean": "333x250 6659206321544522027",
+    "js": "333x250 6659206321544522027",
+    "match": true,
+    "canvasSame": true
+   },
+   {
+    "op": "flip-h",
+    "kind": "checksum",
+    "lean": "333x250 2070180853438516331",
+    "js": "333x250 2070180853438516331",
+    "match": true,
+    "canvasSame": true
+   },
+   {
+    "op": "flip-v",
+    "kind": "checksum",
+    "lean": "333x250 13959743227780434891",
+    "js": "333x250 13959743227780434891",
+    "match": true,
+    "canvasSame": true
+   },
+   {
+    "op": "resize-50",
+    "kind": "checksum",
+    "lean": "166x125 5858953597293052497",
+    "js": "166x125 5858953597293052497",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "downscale-8",
+    "kind": "checksum",
+    "lean": "41x31 13729898558874360517",
+    "js": "41x31 13729898558874360517",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "composite-normal",
+    "kind": "checksum",
+    "lean": "333x250 9856192619645684931",
+    "js": "333x250 9856192619645684931",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "composite-overlay",
+    "kind": "checksum",
+    "lean": "333x250 8958815488756709657",
+    "js": "333x250 8958815488756709657",
+    "match": true,
+    "canvasSame": false
+   },
+   {
+    "op": "histogram",
+    "kind": "sum of the counts",
+    "lean": "333000",
+    "js": "333000",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "png-stored",
+    "kind": "PNG size (bytes)",
+    "lean": "333343",
+    "js": "333343",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "png-1",
+    "kind": "PNG size (bytes)",
+    "lean": "15536",
+    "js": "15536",
+    "match": true,
+    "canvasSame": null
+   },
+   {
+    "op": "crop-half",
+    "kind": "checksum",
+    "lean": "166x125 13539668415147082242",
+    "js": "166x125 13539668415147082242",
+    "match": true,
+    "canvasSame": true
+   }
+  ]
+ },
+ "sizes": [
+  {
+   "label": "1 MP",
+   "w": 1152,
+   "h": 864,
+   "pixels": 995328,
+   "leanMakeMs": 1696,
+   "jsMakeMs": 47,
+   "ops": [
+    {
+     "op": "adjust-lut",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      42,
+      43,
+      41
+     ],
+     "js": [
+      8,
+      8,
+      8
+     ],
+     "canvas": [
+      24,
+      21,
+      21
+     ],
+     "canvasDraw": [
+      20,
+      19,
+      18
+     ],
+     "canvasForced": [
+      18,
+      18,
+      17
+     ],
+     "canvasDesc": "filter brightness(1.1) contrast(1.15) (no gamma; CSS brightness scales, Lean adds)",
+     "status": "adjust-lut 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 45,
+      "js": 8,
+      "canvas": 27
+     }
+    },
+    {
+     "op": "adjust-color",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      71,
+      59,
+      58
+     ],
+     "js": [
+      32,
+      34,
+      32
+     ],
+     "canvas": [
+      20,
+      20,
+      19
+     ],
+     "canvasDraw": [
+      18,
+      18,
+      17
+     ],
+     "canvasForced": [
+      16,
+      17,
+      17
+     ],
+     "canvasDesc": "filter saturate(1.3) hue-rotate(20deg) (the same CSS matrices, in floating point)",
+     "status": "adjust-color 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 60,
+      "js": 33,
+      "canvas": 22
+     }
+    },
+    {
+     "op": "blur-2",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      303,
+      305,
+      303
+     ],
+     "js": [
+      68,
+      68,
+      69
+     ],
+     "canvas": [
+      57,
+      58,
+      57
+     ],
+     "canvasDraw": [
+      55,
+      56,
+      54
+     ],
+     "canvasForced": [
+      55,
+      54,
+      54
+     ],
+     "canvasDesc": "filter blur(1px) (σ = 1, as Lean's radius 2)",
+     "status": "blur-2 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 305,
+      "js": 69,
+      "canvas": 60
+     }
+    },
+    {
+     "op": "blur-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      787,
+      788,
+      801
+     ],
+     "js": [
+      183,
+      177,
+      175
+     ],
+     "canvas": [
+      25,
+      25,
+      26
+     ],
+     "canvasDraw": [
+      22,
+      23,
+      23
+     ],
+     "canvasForced": [
+      22,
+      24,
+      22
+     ],
+     "canvasDesc": "filter blur(4px) (σ = 4, as Lean's radius 8)",
+     "status": "blur-8 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 788,
+      "js": 176,
+      "canvas": 29
+     }
+    },
+    {
+     "op": "sharpen",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      355,
+      354,
+      354
+     ],
+     "js": [
+      102,
+      103,
+      102
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "sharpen 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 356,
+      "js": 102,
+      "canvas": null
+     }
+    },
+    {
+     "op": "emboss",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      184,
+      182,
+      182
+     ],
+     "js": [
+      47,
+      48,
+      47
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "emboss 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 184,
+      "js": 48,
+      "canvas": null
+     }
+    },
+    {
+     "op": "edges",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      98,
+      98,
+      97
+     ],
+     "js": [
+      74,
+      74,
+      74
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "edges 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 99,
+      "js": 77,
+      "canvas": null
+     }
+    },
+    {
+     "op": "rotate-90",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      18,
+      17,
+      18
+     ],
+     "js": [
+      6,
+      8,
+      7
+     ],
+     "canvas": [
+      8,
+      8,
+      7
+     ],
+     "canvasDraw": [
+      5,
+      5,
+      5
+     ],
+     "canvasForced": [
+      6,
+      5,
+      5
+     ],
+     "canvasDesc": "translate + rotate(90°) + drawImage",
+     "status": "rotate-90 864x1152 0",
+     "jsN": 0,
+     "jsOut": "864x1152",
+     "warm": {
+      "lean": 19,
+      "js": 7,
+      "canvas": 11
+     }
+    },
+    {
+     "op": "rotate-180",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      17,
+      17,
+      20
+     ],
+     "js": [
+      7,
+      6,
+      7
+     ],
+     "canvas": [
+      8,
+      7,
+      7
+     ],
+     "canvasDraw": [
+      5,
+      5,
+      4
+     ],
+     "canvasForced": [
+      4,
+      4,
+      4
+     ],
+     "canvasDesc": "translate + rotate(180°) + drawImage",
+     "status": "rotate-180 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 17,
+      "js": 8,
+      "canvas": 10
+     }
+    },
+    {
+     "op": "flip-h",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      18,
+      18,
+      17
+     ],
+     "js": [
+      6,
+      6,
+      7
+     ],
+     "canvas": [
+      6,
+      5,
+      5
+     ],
+     "canvasDraw": [
+      4,
+      3,
+      3
+     ],
+     "canvasForced": [
+      3,
+      3,
+      3
+     ],
+     "canvasDesc": "translate + scale(-1, 1) + drawImage",
+     "status": "flip-h 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 18,
+      "js": 7,
+      "canvas": 8
+     }
+    },
+    {
+     "op": "flip-v",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      0,
+      0,
+      0
+     ],
+     "js": [
+      3,
+      2,
+      2
+     ],
+     "canvas": [
+      6,
+      5,
+      5
+     ],
+     "canvasDraw": [
+      3,
+      3,
+      3
+     ],
+     "canvasForced": [
+      3,
+      3,
+      4
+     ],
+     "canvasDesc": "translate + scale(1, -1) + drawImage",
+     "status": "flip-v 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 0,
+      "js": 3,
+      "canvas": 8
+     }
+    },
+    {
+     "op": "resize-50",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      33,
+      33,
+      33
+     ],
+     "js": [
+      7,
+      8,
+      6
+     ],
+     "canvas": [
+      1,
+      1,
+      2
+     ],
+     "canvasDraw": [
+      1,
+      1,
+      1
+     ],
+     "canvasForced": [
+      1,
+      1,
+      1
+     ],
+     "canvasDesc": "drawImage to half size, imageSmoothingQuality low (bilinear)",
+     "status": "resize-50 576x432 0",
+     "jsN": 0,
+     "jsOut": "576x432",
+     "warm": {
+      "lean": 33,
+      "js": 7,
+      "canvas": 3
+     }
+    },
+    {
+     "op": "downscale-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      32,
+      31,
+      34
+     ],
+     "js": [
+      4,
+      5,
+      5
+     ],
+     "canvas": [
+      0,
+      1,
+      0
+     ],
+     "canvasDraw": [
+      0,
+      1,
+      0
+     ],
+     "canvasForced": [
+      0,
+      0,
+      0
+     ],
+     "canvasDesc": "drawImage to 1/8 size, imageSmoothingQuality medium (mipmapped)",
+     "status": "downscale-8 144x108 0",
+     "jsN": 0,
+     "jsOut": "144x108",
+     "warm": {
+      "lean": 33,
+      "js": 5,
+      "canvas": 0
+     }
+    },
+    {
+     "op": "composite-normal",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      62,
+      61,
+      73
+     ],
+     "js": [
+      59,
+      58,
+      62
+     ],
+     "canvas": [
+      3,
+      4,
+      7
+     ],
+     "canvasDraw": [
+      1,
+      1,
+      2
+     ],
+     "canvasForced": [
+      1,
+      1,
+      1
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, source-over",
+     "status": "composite-normal 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 62,
+      "js": 59,
+      "canvas": 8
+     }
+    },
+    {
+     "op": "composite-overlay",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      86,
+      86,
+      86
+     ],
+     "js": [
+      66,
+      75,
+      65
+     ],
+     "canvas": [
+      5,
+      4,
+      4
+     ],
+     "canvasDraw": [
+      2,
+      2,
+      2
+     ],
+     "canvasForced": [
+      2,
+      2,
+      2
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, overlay",
+     "status": "composite-overlay 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 86,
+      "js": 67,
+      "canvas": 7
+     }
+    },
+    {
+     "op": "histogram",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      32,
+      33,
+      32
+     ],
+     "js": [
+      5,
+      5,
+      4
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "histogram 1x1 3981312",
+     "jsN": 3981312,
+     "jsOut": null,
+     "warm": {
+      "lean": 35,
+      "js": 5,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-stored",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      75,
+      75,
+      76
+     ],
+     "js": [
+      67,
+      65,
+      68
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "png-stored 1x1 3982544",
+     "jsN": 3982544,
+     "jsOut": null,
+     "warm": {
+      "lean": 76,
+      "js": 66,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-1",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      221,
+      221,
+      221
+     ],
+     "js": [
+      116,
+      117,
+      117
+     ],
+     "canvas": [
+      25,
+      25,
+      25
+     ],
+     "canvasDraw": [
+      25,
+      25,
+      25
+     ],
+     "canvasForced": null,
+     "canvasDesc": "canvas.toBlob('image/png') (the browser's encoder, async: time until the blob arrives)",
+     "status": "png-1 1x1 89340",
+     "jsN": 89340,
+     "jsOut": null,
+     "warm": {
+      "lean": 224,
+      "js": 119,
+      "canvas": 25
+     },
+     "canvasBlobBytes": 438219
+    },
+    {
+     "op": "crop-half",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      0,
+      1,
+      0
+     ],
+     "js": [
+      1,
+      1,
+      2
+     ],
+     "canvas": [
+      1,
+      1,
+      1
+     ],
+     "canvasDraw": [
+      0,
+      0,
+      0
+     ],
+     "canvasForced": [
+      0,
+      1,
+      0
+     ],
+     "canvasDesc": "drawImage of the centre quarter-area rectangle",
+     "status": "crop-half 576x432 0",
+     "jsN": 0,
+     "jsOut": "576x432",
+     "warm": {
+      "lean": 1,
+      "js": 1,
+      "canvas": 2
+     }
+    }
+   ],
+   "blit": {
+    "op": "blit",
+    "runs": 3,
+    "lean": [
+     3,
+     1,
+     3
+    ],
+    "js": [
+     3,
+     1,
+     4
+    ],
+    "warm": {
+     "lean": 4,
+     "js": 3
+    }
+   },
+   "readback": [
+    5,
+    4,
+    5
+   ],
+   "wasm": {
+    "statsHeapBytes": 20185088,
+    "memoryBytes": 20185088
+   },
+   "seconds": 17.089
+  },
+  {
+   "label": "4 MP",
+   "w": 2304,
+   "h": 1728,
+   "pixels": 3981312,
+   "leanMakeMs": 6414,
+   "jsMakeMs": 180,
+   "ops": [
+    {
+     "op": "adjust-lut",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      148,
+      149,
+      148
+     ],
+     "js": [
+      30,
+      31,
+      30
+     ],
+     "canvas": [
+      84,
+      85,
+      84
+     ],
+     "canvasDraw": [
+      75,
+      75,
+      74
+     ],
+     "canvasForced": [
+      76,
+      76,
+      74
+     ],
+     "canvasDesc": "filter brightness(1.1) contrast(1.15) (no gamma; CSS brightness scales, Lean adds)",
+     "status": "adjust-lut 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 159,
+      "js": 32,
+      "canvas": 95
+     }
+    },
+    {
+     "op": "adjust-color",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      229,
+      229,
+      229
+     ],
+     "js": [
+      130,
+      130,
+      130
+     ],
+     "canvas": [
+      76,
+      74,
+      78
+     ],
+     "canvasDraw": [
+      67,
+      65,
+      66
+     ],
+     "canvasForced": [
+      65,
+      66,
+      80
+     ],
+     "canvasDesc": "filter saturate(1.3) hue-rotate(20deg) (the same CSS matrices, in floating point)",
+     "status": "adjust-color 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 229,
+      "js": 130,
+      "canvas": 86
+     }
+    },
+    {
+     "op": "blur-2",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      1212,
+      1210,
+      1215
+     ],
+     "js": [
+      272,
+      273,
+      273
+     ],
+     "canvas": [
+      225,
+      226,
+      224
+     ],
+     "canvasDraw": [
+      215,
+      216,
+      215
+     ],
+     "canvasForced": [
+      215,
+      215,
+      215
+     ],
+     "canvasDesc": "filter blur(1px) (σ = 1, as Lean's radius 2)",
+     "status": "blur-2 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 1224,
+      "js": 279,
+      "canvas": 238
+     }
+    },
+    {
+     "op": "blur-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      3140,
+      3145,
+      3141
+     ],
+     "js": [
+      705,
+      708,
+      710
+     ],
+     "canvas": [
+      103,
+      107,
+      107
+     ],
+     "canvasDraw": [
+      94,
+      97,
+      97
+     ],
+     "canvasForced": [
+      93,
+      97,
+      100
+     ],
+     "canvasDesc": "filter blur(4px) (σ = 4, as Lean's radius 8)",
+     "status": "blur-8 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 3149,
+      "js": 704,
+      "canvas": 111
+     }
+    },
+    {
+     "op": "sharpen",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      1417,
+      1416,
+      1414
+     ],
+     "js": [
+      408,
+      414,
+      423
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "sharpen 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 1415,
+      "js": 407,
+      "canvas": null
+     }
+    },
+    {
+     "op": "emboss",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      724,
+      725,
+      725
+     ],
+     "js": [
+      191,
+      190,
+      192
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "emboss 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 733,
+      "js": 192,
+      "canvas": null
+     }
+    },
+    {
+     "op": "edges",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      388,
+      393,
+      389
+     ],
+     "js": [
+      304,
+      304,
+      293
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "edges 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 390,
+      "js": 293,
+      "canvas": null
+     }
+    },
+    {
+     "op": "rotate-90",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      69,
+      69,
+      68
+     ],
+     "js": [
+      27,
+      27,
+      25
+     ],
+     "canvas": [
+      38,
+      39,
+      38
+     ],
+     "canvasDraw": [
+      29,
+      29,
+      29
+     ],
+     "canvasForced": [
+      29,
+      28,
+      29
+     ],
+     "canvasDesc": "translate + rotate(90°) + drawImage",
+     "status": "rotate-90 1728x2304 0",
+     "jsN": 0,
+     "jsOut": "1728x2304",
+     "warm": {
+      "lean": 71,
+      "js": 27,
+      "canvas": 50
+     }
+    },
+    {
+     "op": "rotate-180",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      66,
+      66,
+      66
+     ],
+     "js": [
+      24,
+      24,
+      24
+     ],
+     "canvas": [
+      27,
+      26,
+      27
+     ],
+     "canvasDraw": [
+      17,
+      17,
+      18
+     ],
+     "canvasForced": [
+      16,
+      18,
+      17
+     ],
+     "canvasDesc": "translate + rotate(180°) + drawImage",
+     "status": "rotate-180 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 67,
+      "js": 24,
+      "canvas": 39
+     }
+    },
+    {
+     "op": "flip-h",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      66,
+      66,
+      66
+     ],
+     "js": [
+      25,
+      26,
+      24
+     ],
+     "canvas": [
+      24,
+      22,
+      22
+     ],
+     "canvasDraw": [
+      13,
+      12,
+      13
+     ],
+     "canvasForced": [
+      12,
+      11,
+      11
+     ],
+     "canvasDesc": "translate + scale(-1, 1) + drawImage",
+     "status": "flip-h 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 67,
+      "js": 25,
+      "canvas": 33
+     }
+    },
+    {
+     "op": "flip-v",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      2,
+      2,
+      3
+     ],
+     "js": [
+      9,
+      9,
+      9
+     ],
+     "canvas": [
+      23,
+      22,
+      21
+     ],
+     "canvasDraw": [
+      13,
+      12,
+      11
+     ],
+     "canvasForced": [
+      11,
+      11,
+      11
+     ],
+     "canvasDesc": "translate + scale(1, -1) + drawImage",
+     "status": "flip-v 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 2,
+      "js": 9,
+      "canvas": 32
+     }
+    },
+    {
+     "op": "resize-50",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      128,
+      128,
+      127
+     ],
+     "js": [
+      25,
+      24,
+      26
+     ],
+     "canvas": [
+      5,
+      6,
+      6
+     ],
+     "canvasDraw": [
+      3,
+      3,
+      3
+     ],
+     "canvasForced": [
+      3,
+      4,
+      3
+     ],
+     "canvasDesc": "drawImage to half size, imageSmoothingQuality low (bilinear)",
+     "status": "resize-50 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 127,
+      "js": 27,
+      "canvas": 8
+     }
+    },
+    {
+     "op": "downscale-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      120,
+      120,
+      121
+     ],
+     "js": [
+      19,
+      19,
+      20
+     ],
+     "canvas": [
+      1,
+      0,
+      1
+     ],
+     "canvasDraw": [
+      1,
+      0,
+      1
+     ],
+     "canvasForced": [
+      0,
+      0,
+      1
+     ],
+     "canvasDesc": "drawImage to 1/8 size, imageSmoothingQuality medium (mipmapped)",
+     "status": "downscale-8 288x216 0",
+     "jsN": 0,
+     "jsOut": "288x216",
+     "warm": {
+      "lean": 121,
+      "js": 20,
+      "canvas": 1
+     }
+    },
+    {
+     "op": "composite-normal",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      245,
+      245,
+      245
+     ],
+     "js": [
+      231,
+      233,
+      230
+     ],
+     "canvas": [
+      14,
+      14,
+      14
+     ],
+     "canvasDraw": [
+      5,
+      4,
+      4
+     ],
+     "canvasForced": [
+      4,
+      4,
+      3
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, source-over",
+     "status": "composite-normal 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 245,
+      "js": 232,
+      "canvas": 34
+     }
+    },
+    {
+     "op": "composite-overlay",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      345,
+      344,
+      344
+     ],
+     "js": [
+      261,
+      258,
+      259
+     ],
+     "canvas": [
+      17,
+      17,
+      17
+     ],
+     "canvasDraw": [
+      7,
+      7,
+      8
+     ],
+     "canvasForced": [
+      6,
+      6,
+      6
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, overlay",
+     "status": "composite-overlay 2304x1728 0",
+     "jsN": 0,
+     "jsOut": "2304x1728",
+     "warm": {
+      "lean": 345,
+      "js": 259,
+      "canvas": 30
+     }
+    },
+    {
+     "op": "histogram",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      128,
+      129,
+      128
+     ],
+     "js": [
+      20,
+      20,
+      20
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "histogram 1x1 15925248",
+     "jsN": 15925248,
+     "jsOut": null,
+     "warm": {
+      "lean": 128,
+      "js": 20,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-stored",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      296,
+      294,
+      295
+     ],
+     "js": [
+      264,
+      263,
+      263
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "png-stored 1x1 15928259",
+     "jsN": 15928259,
+     "jsOut": null,
+     "warm": {
+      "lean": 295,
+      "js": 267,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-1",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      857,
+      858,
+      858
+     ],
+     "js": [
+      454,
+      474,
+      452
+     ],
+     "canvas": [
+      86,
+      86,
+      87
+     ],
+     "canvasDraw": [
+      86,
+      86,
+      87
+     ],
+     "canvasForced": null,
+     "canvasDesc": "canvas.toBlob('image/png') (the browser's encoder, async: time until the blob arrives)",
+     "status": "png-1 1x1 282994",
+     "jsN": 282994,
+     "jsOut": null,
+     "warm": {
+      "lean": 861,
+      "js": 455,
+      "canvas": 87
+     },
+     "canvasBlobBytes": 1392882
+    },
+    {
+     "op": "crop-half",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      1,
+      1,
+      0
+     ],
+     "js": [
+      2,
+      2,
+      3
+     ],
+     "canvas": [
+      4,
+      3,
+      3
+     ],
+     "canvasDraw": [
+      1,
+      1,
+      0
+     ],
+     "canvasForced": [
+      1,
+      1,
+      0
+     ],
+     "canvasDesc": "drawImage of the centre quarter-area rectangle",
+     "status": "crop-half 1152x864 0",
+     "jsN": 0,
+     "jsOut": "1152x864",
+     "warm": {
+      "lean": 1,
+      "js": 2,
+      "canvas": 6
+     }
+    }
+   ],
+   "blit": {
+    "op": "blit",
+    "runs": 3,
+    "lean": [
+     14,
+     13,
+     2
+    ],
+    "js": [
+     13,
+     13,
+     2
+    ],
+    "warm": {
+     "lean": 14,
+     "js": 13
+    }
+   },
+   "readback": [
+    19,
+    19,
+    18
+   ],
+   "wasm": {
+    "statsHeapBytes": 66977792,
+    "memoryBytes": 66977792
+   },
+   "seconds": 64.813
+  },
+  {
+   "label": "12 MP",
+   "w": 4000,
+   "h": 3000,
+   "pixels": 12000000,
+   "leanMakeMs": 19396,
+   "jsMakeMs": 213,
+   "ops": [
+    {
+     "op": "adjust-lut",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      433,
+      436,
+      433
+     ],
+     "js": [
+      94,
+      95,
+      94
+     ],
+     "canvas": [
+      258,
+      255,
+      255
+     ],
+     "canvasDraw": [
+      229,
+      224,
+      226
+     ],
+     "canvasForced": [
+      224,
+      240,
+      227
+     ],
+     "canvasDesc": "filter brightness(1.1) contrast(1.15) (no gamma; CSS brightness scales, Lean adds)",
+     "status": "adjust-lut 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 456,
+      "js": 95,
+      "canvas": 286
+     }
+    },
+    {
+     "op": "adjust-color",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      687,
+      687,
+      693
+     ],
+     "js": [
+      391,
+      189,
+      187
+     ],
+     "canvas": [
+      247,
+      227,
+      225
+     ],
+     "canvasDraw": [
+      218,
+      198,
+      196
+     ],
+     "canvasForced": [
+      200,
+      198,
+      199
+     ],
+     "canvasDesc": "filter saturate(1.3) hue-rotate(20deg) (the same CSS matrices, in floating point)",
+     "status": "adjust-color 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 688,
+      "js": 393,
+      "canvas": 261
+     }
+    },
+    {
+     "op": "blur-2",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      3652,
+      3645,
+      3647
+     ],
+     "js": [
+      823,
+      816,
+      814
+     ],
+     "canvas": [
+      705,
+      706,
+      705
+     ],
+     "canvasDraw": [
+      676,
+      677,
+      677
+     ],
+     "canvasForced": [
+      684,
+      673,
+      676
+     ],
+     "canvasDesc": "filter blur(1px) (σ = 1, as Lean's radius 2)",
+     "status": "blur-2 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 3675,
+      "js": 830,
+      "canvas": 739
+     }
+    },
+    {
+     "op": "blur-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      9472,
+      9465,
+      9472
+     ],
+     "js": [
+      2117,
+      2158,
+      2123
+     ],
+     "canvas": [
+      352,
+      346,
+      342
+     ],
+     "canvasDraw": [
+      323,
+      317,
+      314
+     ],
+     "canvasForced": [
+      319,
+      323,
+      325
+     ],
+     "canvasDesc": "filter blur(4px) (σ = 4, as Lean's radius 8)",
+     "status": "blur-8 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 9506,
+      "js": 2119,
+      "canvas": 390
+     }
+    },
+    {
+     "op": "sharpen",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      4267,
+      4266,
+      4297
+     ],
+     "js": [
+      1221,
+      1233,
+      1219
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "sharpen 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 4287,
+      "js": 1248,
+      "canvas": null
+     }
+    },
+    {
+     "op": "emboss",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      2185,
+      2184,
+      2184
+     ],
+     "js": [
+      574,
+      576,
+      572
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "emboss 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 2224,
+      "js": 582,
+      "canvas": null
+     }
+    },
+    {
+     "op": "edges",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      1167,
+      1168,
+      1173
+     ],
+     "js": [
+      916,
+      881,
+      883
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "edges 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 1172,
+      "js": 413,
+      "canvas": null
+     }
+    },
+    {
+     "op": "rotate-90",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      204,
+      205,
+      205
+     ],
+     "js": [
+      90,
+      89,
+      90
+     ],
+     "canvas": [
+      125,
+      123,
+      133
+     ],
+     "canvasDraw": [
+      96,
+      95,
+      95
+     ],
+     "canvasForced": [
+      96,
+      95,
+      97
+     ],
+     "canvasDesc": "translate + rotate(90°) + drawImage",
+     "status": "rotate-90 3000x4000 0",
+     "jsN": 0,
+     "jsOut": "3000x4000",
+     "warm": {
+      "lean": 206,
+      "js": 92,
+      "canvas": 163
+     }
+    },
+    {
+     "op": "rotate-180",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      195,
+      195,
+      195
+     ],
+     "js": [
+      81,
+      82,
+      81
+     ],
+     "canvas": [
+      80,
+      80,
+      81
+     ],
+     "canvasDraw": [
+      52,
+      51,
+      51
+     ],
+     "canvasForced": [
+      51,
+      52,
+      51
+     ],
+     "canvasDesc": "translate + rotate(180°) + drawImage",
+     "status": "rotate-180 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 195,
+      "js": 85,
+      "canvas": 116
+     }
+    },
+    {
+     "op": "flip-h",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      196,
+      196,
+      204
+     ],
+     "js": [
+      85,
+      85,
+      100
+     ],
+     "canvas": [
+      64,
+      64,
+      65
+     ],
+     "canvasDraw": [
+      35,
+      36,
+      36
+     ],
+     "canvasForced": [
+      35,
+      35,
+      35
+     ],
+     "canvasDesc": "translate + scale(-1, 1) + drawImage",
+     "status": "flip-h 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 197,
+      "js": 89,
+      "canvas": 97
+     }
+    },
+    {
+     "op": "flip-v",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      5,
+      5,
+      6
+     ],
+     "js": [
+      25,
+      25,
+      25
+     ],
+     "canvas": [
+      63,
+      64,
+      65
+     ],
+     "canvasDraw": [
+      35,
+      36,
+      36
+     ],
+     "canvasForced": [
+      35,
+      36,
+      35
+     ],
+     "canvasDesc": "translate + scale(1, -1) + drawImage",
+     "status": "flip-v 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 5,
+      "js": 41,
+      "canvas": 95
+     }
+    },
+    {
+     "op": "resize-50",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      379,
+      379,
+      379
+     ],
+     "js": [
+      75,
+      74,
+      75
+     ],
+     "canvas": [
+      17,
+      16,
+      16
+     ],
+     "canvasDraw": [
+      10,
+      9,
+      10
+     ],
+     "canvasForced": [
+      8,
+      10,
+      8
+     ],
+     "canvasDesc": "drawImage to half size, imageSmoothingQuality low (bilinear)",
+     "status": "resize-50 2000x1500 0",
+     "jsN": 0,
+     "jsOut": "2000x1500",
+     "warm": {
+      "lean": 381,
+      "js": 78,
+      "canvas": 24
+     }
+    },
+    {
+     "op": "downscale-8",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      359,
+      365,
+      359
+     ],
+     "js": [
+      56,
+      56,
+      55
+     ],
+     "canvas": [
+      2,
+      2,
+      3
+     ],
+     "canvasDraw": [
+      1,
+      2,
+      2
+     ],
+     "canvasForced": [
+      1,
+      1,
+      1
+     ],
+     "canvasDesc": "drawImage to 1/8 size, imageSmoothingQuality medium (mipmapped)",
+     "status": "downscale-8 500x375 0",
+     "jsN": 0,
+     "jsOut": "500x375",
+     "warm": {
+      "lean": 361,
+      "js": 58,
+      "canvas": 2
+     }
+    },
+    {
+     "op": "composite-normal",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      733,
+      734,
+      734
+     ],
+     "js": [
+      687,
+      684,
+      685
+     ],
+     "canvas": [
+      42,
+      42,
+      42
+     ],
+     "canvasDraw": [
+      13,
+      13,
+      14
+     ],
+     "canvasForced": [
+      12,
+      13,
+      12
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, source-over",
+     "status": "composite-normal 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 733,
+      "js": 698,
+      "canvas": 113
+     }
+    },
+    {
+     "op": "composite-overlay",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      1031,
+      1031,
+      1031
+     ],
+     "js": [
+      775,
+      789,
+      773
+     ],
+     "canvas": [
+      49,
+      48,
+      48
+     ],
+     "canvasDraw": [
+      20,
+      20,
+      19
+     ],
+     "canvasForced": [
+      18,
+      20,
+      19
+     ],
+     "canvasDesc": "drawImage base, then top with globalAlpha 0.6, overlay",
+     "status": "composite-overlay 4000x3000 0",
+     "jsN": 0,
+     "jsOut": "4000x3000",
+     "warm": {
+      "lean": 1032,
+      "js": 774,
+      "canvas": 82
+     }
+    },
+    {
+     "op": "histogram",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      381,
+      380,
+      381
+     ],
+     "js": [
+      59,
+      57,
+      58
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "histogram 1x1 48000000",
+     "jsN": 48000000,
+     "jsOut": null,
+     "warm": {
+      "lean": 380,
+      "js": 60,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-stored",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      897,
+      893,
+      885
+     ],
+     "js": [
+      796,
+      795,
+      795
+     ],
+     "canvas": null,
+     "canvasDraw": null,
+     "canvasForced": null,
+     "canvasDesc": null,
+     "status": "png-stored 1x1 48006728",
+     "jsN": 48006728,
+     "jsOut": null,
+     "warm": {
+      "lean": 885,
+      "js": 819,
+      "canvas": null
+     }
+    },
+    {
+     "op": "png-1",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      2579,
+      2553,
+      2551
+     ],
+     "js": [
+      1269,
+      1266,
+      1264
+     ],
+     "canvas": [
+      252,
+      253,
+      253
+     ],
+     "canvasDraw": [
+      252,
+      253,
+      253
+     ],
+     "canvasForced": null,
+     "canvasDesc": "canvas.toBlob('image/png') (the browser's encoder, async: time until the blob arrives)",
+     "status": "png-1 1x1 755477",
+     "jsN": 755477,
+     "jsOut": null,
+     "warm": {
+      "lean": 2563,
+      "js": 1313,
+      "canvas": 252
+     },
+     "canvasBlobBytes": 4052805
+    },
+    {
+     "op": "crop-half",
+     "runs": 3,
+     "reduced": false,
+     "lean": [
+      2,
+      1,
+      2
+     ],
+     "js": [
+      6,
+      7,
+      8
+     ],
+     "canvas": [
+      9,
+      9,
+      10
+     ],
+     "canvasDraw": [
+      3,
+      3,
+      2
+     ],
+     "canvasForced": [
+      2,
+      3,
+      3
+     ],
+     "canvasDesc": "drawImage of the centre quarter-area rectangle",
+     "status": "crop-half 2000x1500 0",
+     "jsN": 0,
+     "jsOut": "2000x1500",
+     "warm": {
+      "lean": 2,
+      "js": 7,
+      "canvas": 19
+     }
+    }
+   ],
+   "blit": {
+    "op": "blit",
+    "runs": 3,
+    "lean": [
+     38,
+     40,
+     39
+    ],
+    "js": [
+     5,
+     6,
+     6
+    ],
+    "warm": {
+     "lean": 52,
+     "js": 39
+    }
+   },
+   "readback": [
+    57,
+    56,
+    57
+   ],
+   "wasm": {
+    "statsHeapBytes": 195297280,
+    "memoryBytes": 195297280
+   },
+   "seconds": 192.379
+  }
+ ],
+ "errors": [],
+ "seconds": 276.6
+}

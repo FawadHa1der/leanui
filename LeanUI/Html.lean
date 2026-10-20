@@ -49,10 +49,18 @@ inductive Payload where
   | key
   /-- The form's fields as `name=value` lines (for `submit`). -/
   | formData
+  /-- The files of the event: dropped (`DataTransfer.files`) or chosen in a file input (its
+  `files`). One line per file, `id\tsize\ttype\tname`; the id names the file in `Cmd.readFile`
+  and `Cmd.decodeImage` (`LeanUI.Input`, `FileInfo.parse`). -/
+  | files
+  /-- A pointer, mouse or wheel event, relative to the listening element: `x y width height
+  buttons modifiers pointerId pressure deltaX deltaY clientX clientY` (`LeanUI.Input`,
+  `Pointer.parse`). -/
+  | pointer
   deriving BEq, Inhabited, Repr
 
 def Payload.code : Payload → UInt32
-  | .none => 0 | .value => 1 | .checked => 2 | .key => 3 | .formData => 4
+  | .none => 0 | .value => 1 | .checked => 2 | .key => 3 | .formData => 4 | .files => 5 | .pointer => 6
 
 /-- How an event becomes a message. `decode` returns `none` to ignore the event (for example a
 `keydown` that is not Enter). -/
@@ -61,11 +69,15 @@ structure Handler (Msg : Type) where
   decode : String → Option Msg
   preventDefault : Bool := false
   stopPropagation : Bool := false
+  /-- On `pointerdown`, capture the pointer to the listening element, so it keeps receiving the
+  pointer's events (moves, `pointerup`) while the button is held, wherever the pointer goes. -/
+  capturePointer : Bool := false
 
 instance : Inhabited (Handler Msg) := ⟨{ decode := fun _ => none }⟩
 
 def Handler.flags (h : Handler Msg) : UInt32 :=
-  (if h.preventDefault then 1 else 0) ||| (if h.stopPropagation then 2 else 0)
+  (if h.preventDefault then 1 else 0) ||| (if h.stopPropagation then 2 else 0) |||
+    (if h.capturePointer then 4 else 0)
 
 def Handler.map (f : α → β) (h : Handler α) : Handler β :=
   { h with decode := fun s => (h.decode s).map f }

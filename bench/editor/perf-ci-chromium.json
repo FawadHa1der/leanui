@@ -1,0 +1,338 @@
+{
+ "engine": "chromium",
+ "version": "151.0.7922.34",
+ "url": "http://127.0.0.1:5332/editor/index.html",
+ "sizes": {
+  "1 MP": {
+   "boot": 109,
+   "openMs": 101.1,
+   "jpegKB": 100,
+   "heapAfterOpenMB": 16,
+   "preview": "1152×864",
+   "slider: brightness (lookup table)": {
+    "script": 11.7,
+    "toPixels": 13.2,
+    "trace": {
+     "script": 11.7,
+     "render": 1.5,
+     "total": 13.2
+    }
+   },
+   "slider: saturation (colour matrix)": {
+    "script": 12.9,
+    "toPixels": 14.5,
+    "trace": {
+     "script": 12.8,
+     "render": 1.5,
+     "total": 14.4
+    }
+   },
+   "slider: blur radius 6": {
+    "script": 53.4,
+    "toPixels": 54.8,
+    "trace": {
+     "script": 53.3,
+     "render": 1.5,
+     "total": 54.7
+    }
+   },
+   "slider: sharpen": {
+    "script": 69.2,
+    "toPixels": 70.8,
+    "trace": {
+     "script": 69.1,
+     "render": 1.5,
+     "total": 70.6
+    }
+   },
+   "brush": {
+    "strokeStart": 5,
+    "moveMedian": 0.7,
+    "moveMax": 1.2,
+    "toPixelsMedian": 16.7,
+    "toPixelsMax": 16.9,
+    "strokeEnd": 2.6
+   },
+   "apply brightness": {
+    "ms": 57.8,
+    "maxGap": 16.8,
+    "frames": 2
+   },
+   "apply blur 6": {
+    "ms": 146.8,
+    "maxGap": 49.9,
+    "frames": 6
+   },
+   "edge detect": {
+    "ms": 55.2,
+    "maxGap": 33.4,
+    "frames": 1
+   },
+   "export PNG": {
+    "ms": 172.2,
+    "maxGap": 50,
+    "frames": 5
+   },
+   "pngKB": 979,
+   "rotate 90": {
+    "ms": 54.5,
+    "maxGap": 16.7,
+    "frames": 2
+   },
+   "heapEndMB": 40
+  },
+  "4 MP": {
+   "boot": 100.4,
+   "openMs": 183.6,
+   "jpegKB": 329,
+   "heapAfterOpenMB": 28,
+   "preview": "1280×960",
+   "slider: brightness (lookup table)": {
+    "script": 13.8,
+    "toPixels": 15.4,
+    "trace": {
+     "script": 13.8,
+     "render": 1.6,
+     "total": 15.5
+    }
+   },
+   "slider: saturation (colour matrix)": {
+    "script": 15.7,
+    "toPixels": 17.5,
+    "trace": {
+     "script": 15.6,
+     "render": 1.7,
+     "total": 17.5
+    }
+   },
+   "slider: blur radius 6": {
+    "script": 56.6,
+    "toPixels": 58.1,
+    "trace": {
+     "script": 56.5,
+     "render": 1.6,
+     "total": 58.1
+    }
+   },
+   "slider: sharpen": {
+    "script": 88.9,
+    "toPixels": 90.6,
+    "trace": {
+     "script": 88.8,
+     "render": 1.6,
+     "total": 90.5
+    }
+   },
+   "brush": {
+    "strokeStart": 7.8,
+    "moveMedian": 3,
+    "moveMax": 4.6,
+    "toPixelsMedian": 16.7,
+    "toPixelsMax": 16.9,
+    "strokeEnd": 2.7
+   },
+   "apply brightness": {
+    "ms": 129.7,
+    "maxGap": 16.7,
+    "frames": 7
+   },
+   "apply blur 6": {
+    "ms": 552.2,
+    "maxGap": 49.9,
+    "frames": 21
+   },
+   "edge detect": {
+    "ms": 167.9,
+    "maxGap": 50.1,
+    "frames": 5
+   },
+   "export PNG": {
+    "ms": 415.5,
+    "maxGap": 50,
+    "frames": 15
+   },
+   "pngKB": 3021,
+   "rotate 90": {
+    "ms": 101.9,
+    "maxGap": 50,
+    "frames": 3
+   },
+   "heapEndMB": 172
+  },
+  "12 MP": {
+   "boot": 103.7,
+   "openMs": 296.8,
+   "jpegKB": 540,
+   "heapAfterOpenMB": 57,
+   "preview": "1280×960",
+   "slider: brightness (lookup table)": {
+    "script": 13.9,
+    "toPixels": 15.5,
+    "trace": {
+     "script": 13.7,
+     "render": 1.6,
+     "total": 15.4
+    }
+   },
+   "slider: saturation (colour matrix)": {
+    "script": 15.5,
+    "toPixels": 17.1,
+    "trace": {
+     "script": 15.4,
+     "render": 1.6,
+     "total": 17.1
+    }
+   },
+   "slider: blur radius 6": {
+    "script": 69.6,
+    "toPixels": 71.2,
+    "trace": {
+     "script": 69.6,
+     "render": 1.6,
+     "total": 71.2
+    }
+   },
+   "slider: sharpen": {
+    "script": 61.9,
+    "toPixels": 63.5,
+    "trace": {
+     "script": 61.8,
+     "render": 1.6,
+     "total": 63.4
+    }
+   },
+   "brush": {
+    "strokeStart": 13.1,
+    "moveMedian": 5,
+    "moveMax": 10,
+    "toPixelsMedian": 16.7,
+    "toPixelsMax": 16.8,
+    "strokeEnd": 2.6
+   },
+   "apply brightness": {
+    "ms": 247.5,
+    "maxGap": 33.3,
+    "frames": 11
+   },
+   "apply blur 6": {
+    "ms": 1536,
+    "maxGap": 50.1,
+    "frames": 56
+   },
+   "edge detect": {
+    "ms": 341.5,
+    "maxGap": 50.1,
+    "frames": 13
+   },
+   "export PNG": {
+    "ms": 916.4,
+    "maxGap": 166.7,
+    "frames": 29
+   },
+   "pngKB": 5152,
+   "rotate 90": {
+    "ms": 183.1,
+    "maxGap": 100,
+    "frames": 5
+   },
+   "heapEndMB": 471
+  }
+ },
+ "ui": {
+  "10 layers: select a layer": {
+   "script": 0.6,
+   "toPixels": 7.5,
+   "trace": {
+    "script": 0.5,
+    "render": 2.2,
+    "total": 2.7
+   }
+  },
+  "10 layers: toggle visibility (recomposite)": {
+   "script": 4.1,
+   "toPixels": 7,
+   "trace": {
+    "script": 4,
+    "render": 2.6,
+    "total": 7.2
+   }
+  },
+  "10 layers: wasm heap MB": 48,
+  "100 layers: select a layer": {
+   "script": 0.5,
+   "toPixels": 6.8,
+   "trace": {
+    "script": 0.6,
+    "render": 3,
+    "total": 3.5
+   }
+  },
+  "100 layers: toggle visibility (recomposite)": {
+   "script": 3.7,
+   "toPixels": 7.5,
+   "trace": {
+    "script": 3.6,
+    "render": 2.6,
+    "total": 6.2
+   }
+  },
+  "100 layers: wasm heap MB": 429,
+  "history steps": 200,
+  "200 steps: jump in history": {
+   "script": 4,
+   "toPixels": 13.1,
+   "trace": {
+    "script": 3.9,
+    "render": 5.4,
+    "total": 10.3
+   }
+  },
+  "200 steps: undo": {
+   "script": 3.5,
+   "toPixels": 7.5,
+   "trace": {
+    "script": 3.5,
+    "render": 3.2,
+    "total": 7.3
+   }
+  },
+  "200 steps: a new step (drops the oldest)": {
+   "script": 3.1,
+   "toPixels": 8.8,
+   "trace": {
+    "script": 3,
+    "render": 2,
+    "total": 5
+   }
+  }
+ },
+ "memory": {
+  "atLoadMB": 16,
+  "after12MPOpenMB": 57,
+  "after50StrokesMB": 1258,
+  "historySteps": 23
+ },
+ "download": {
+  "app.wasm": {
+   "raw": 2294416,
+   "brotli": 265723,
+   "gzip": 402496
+  },
+  "app.js": {
+   "raw": 59824,
+   "brotli": 15236,
+   "gzip": 17159
+  },
+  "leanui.js": {
+   "raw": 32118,
+   "brotli": 9509,
+   "gzip": 10872
+  },
+  "index.html": {
+   "raw": 6709,
+   "brotli": 1871,
+   "gzip": 2302
+  }
+ },
+ "errors": []
+}

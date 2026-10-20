@@ -1,0 +1,138 @@
+{
+ "engine": "chromium",
+ "version": "151.0.7922.34",
+ "url": "http://127.0.0.1:5332/editor/video/index.html",
+ "sizes": {
+  "640×360": {
+   "source": 30,
+   "none": {
+    "fps": 30,
+    "grabMs": 1.2,
+    "leanMs": 0.2
+   },
+   "vivid": {
+    "fps": 30,
+    "grabMs": 1.2,
+    "leanMs": 2.5
+   },
+   "mono": {
+    "fps": 29.7,
+    "grabMs": 1.2,
+    "leanMs": 2.5
+   },
+   "invert": {
+    "fps": 29.7,
+    "grabMs": 1.1,
+    "leanMs": 2.2
+   },
+   "blur": {
+    "fps": 29.7,
+    "grabMs": 1.2,
+    "leanMs": 20.4
+   },
+   "sharpen": {
+    "fps": 29.3,
+    "grabMs": 1.2,
+    "leanMs": 15.3
+   },
+   "edges": {
+    "fps": 29.7,
+    "grabMs": 1.2,
+    "leanMs": 5.1
+   },
+   "emboss": {
+    "fps": 29.7,
+    "grabMs": 1.2,
+    "leanMs": 6.6
+   }
+  },
+  "1280×720": {
+   "source": 30,
+   "none": {
+    "fps": 30,
+    "grabMs": 3.9,
+    "leanMs": 0.5
+   },
+   "vivid": {
+    "fps": 30,
+    "grabMs": 4,
+    "leanMs": 9
+   },
+   "mono": {
+    "fps": 29.7,
+    "grabMs": 3.9,
+    "leanMs": 9.2
+   },
+   "invert": {
+    "fps": 29.7,
+    "grabMs": 3.9,
+    "leanMs": 7.2
+   },
+   "blur": {
+    "fps": 11.3,
+    "grabMs": 4.7,
+    "leanMs": 82
+   },
+   "sharpen": {
+    "fps": 15.2,
+    "grabMs": 3.9,
+    "leanMs": 59.6
+   },
+   "edges": {
+    "fps": 29.3,
+    "grabMs": 3.8,
+    "leanMs": 16.9
+   },
+   "emboss": {
+    "fps": 29.8,
+    "grabMs": 3.8,
+    "leanMs": 25.7
+   }
+  },
+  "1920×1080": {
+   "source": 30,
+   "none": {
+    "fps": 30,
+    "grabMs": 6.9,
+    "leanMs": 1.2
+   },
+   "vivid": {
+    "fps": 30,
+    "grabMs": 7.2,
+    "leanMs": 20.1
+   },
+   "mono": {
+    "fps": 30,
+    "grabMs": 7.3,
+    "leanMs": 20.5
+   },
+   "invert": {
+    "fps": 29.4,
+    "grabMs": 6.6,
+    "leanMs": 16
+   },
+   "blur": {
+    "fps": 5.1,
+    "grabMs": 6.7,
+    "leanMs": 185.6
+   },
+   "sharpen": {
+    "fps": 6.8,
+    "grabMs": 7.2,
+    "leanMs": 136.9
+   },
+   "edges": {
+    "fps": 21.3,
+    "grabMs": 7.3,
+    "leanMs": 36.5
+   },
+   "emboss": {
+    "fps": 14.3,
+    "grabMs": 7.1,
+    "leanMs": 59.6
+   }
+  }
+ },
+ "made": "VideoEncoder",
+ "errors": []
+}

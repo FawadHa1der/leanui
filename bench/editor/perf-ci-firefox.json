@@ -1,0 +1,113 @@
+{
+ "engine": "firefox",
+ "version": "153.0",
+ "url": "http://127.0.0.1:5332/editor/index.html",
+ "sizes": {
+  "1 MP": {
+   "boot": 265,
+   "openMs": 57,
+   "jpegKB": 165,
+   "heapAfterOpenMB": 16,
+   "preview": "1152×864",
+   "slider: brightness (lookup table)": {
+    "script": 56,
+    "toPixels": 58
+   },
+   "slider: saturation (colour matrix)": {
+    "script": 71,
+    "toPixels": 73
+   },
+   "slider: blur radius 6": {
+    "script": 282,
+    "toPixels": 284
+   },
+   "slider: sharpen": {
+    "script": 369,
+    "toPixels": 371
+   },
+   "brush": {
+    "strokeStart": 2,
+    "moveMedian": 6,
+    "moveMax": 8,
+    "toPixelsMedian": 17,
+    "toPixelsMax": 39,
+    "strokeEnd": 11
+   },
+   "apply brightness": {
+    "ms": 107,
+    "maxGap": 33.2,
+    "frames": 2
+   },
+   "apply blur 6": {
+    "ms": 751,
+    "maxGap": 50.3,
+    "frames": 28
+   },
+   "edge detect": {
+    "ms": 182,
+    "maxGap": 33.2,
+    "frames": 7
+   },
+   "export PNG": {
+    "ms": 721,
+    "maxGap": 166.9,
+    "frames": 21
+   },
+   "pngKB": 935,
+   "rotate 90": {
+    "ms": 83,
+    "maxGap": 17.1,
+    "frames": 2
+   },
+   "heapEndMB": 40
+  }
+ },
+ "ui": {
+  "10 layers: select a layer": {
+   "script": 1,
+   "toPixels": 12
+  },
+  "10 layers: toggle visibility (recomposite)": {
+   "script": 13,
+   "toPixels": 16
+  },
+  "10 layers: wasm heap MB": 48,
+  "history steps": 200,
+  "200 steps: jump in history": {
+   "script": 21,
+   "toPixels": 26
+  },
+  "200 steps: undo": {
+   "script": 15,
+   "toPixels": 16
+  },
+  "200 steps: a new step (drops the oldest)": {
+   "script": 12,
+   "toPixels": 14
+  }
+ },
+ "memory": {},
+ "download": {
+  "app.wasm": {
+   "raw": 2294416,
+   "brotli": 265723,
+   "gzip": 402496
+  },
+  "app.js": {
+   "raw": 59824,
+   "brotli": 15236,
+   "gzip": 17159
+  },
+  "leanui.js": {
+   "raw": 32118,
+   "brotli": 9509,
+   "gzip": 10872
+  },
+  "index.html": {
+   "raw": 6709,
+   "brotli": 1871,
+   "gzip": 2302
+  }
+ },
+ "errors": []
+}

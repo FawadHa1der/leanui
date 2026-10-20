@@ -229,6 +229,19 @@ def apply (d : Dom) (ops strs : ByteArray) : Dom := Id.run do
     else if op == Op.storageRemove || op == Op.urlPush || op == Op.urlReplace || op == Op.focus ||
         op == Op.log || op == Op.title || op == Op.blur || op == Op.scrollIntoView then
       d := { d with effects := d.effects.push s!"op{op} {str (pc + 4)}" }; pc := pc + 12
+    else if op == Op.putImage then
+      let e := s!"putImage {str (pc + 4)} blob={word (pc + 12)} {word (pc + 16)}x{word (pc + 20)} dirty={word (pc + 24)},{word (pc + 28)},{word (pc + 32)},{word (pc + 36)}"
+      d := { d with effects := d.effects.push e }; pc := pc + 40
+    else if op == Op.download then
+      d := { d with effects := d.effects.push s!"download {str (pc + 4)} {str (pc + 12)} blob={word (pc + 20)}" }; pc := pc + 24
+    else if op == Op.fileRead || op == Op.imageDecode then
+      d := { d with effects := d.effects.push s!"{if op == Op.fileRead then "readFile" else "decodeImage"} cb={a} file={word (pc + 8)}" }; pc := pc + 12
+    else if op == Op.keysListen then
+      d := { d with effects := d.effects.push s!"op{op} {a}" }; pc := pc + 8
+    else if op == Op.frameGrab then
+      d := { d with effects := d.effects.push s!"grabFrame cb={a} {str (pc + 8)}" }; pc := pc + 16
+    else if op == Op.fileUrl then
+      d := { d with effects := d.effects.push s!"fileUrl cb={a} file={word (pc + 8)}" }; pc := pc + 12
     else
       d := d.err s!"unknown opcode {op} at byte {pc}"; pc := n
   return d

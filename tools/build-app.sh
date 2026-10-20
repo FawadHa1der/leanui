@@ -3,7 +3,7 @@
 # linked against the single-threaded archives (toolchain/build-archives.sh).
 #   tools/build-app.sh <Module> [name] [--debug]     e.g.  tools/build-app.sh Examples.Counter counter
 # --debug keeps function names (--profiling-funcs) for profilers. Environment:
-#   LEANUI_PAGE            page template (default examples/<name>.html, else a minimal page)
+#   LEANUI_PAGE            page template (default examples/<last part of name>.html, else a minimal page)
 #   LEANUI_MALLOC          emscripten allocator (default dlmalloc: same speed within noise as
 #                          mimalloc here, half the linear memory; see docs/BENCHMARKS.md)
 #   LEANUI_INITIAL_MEMORY  initial linear memory in bytes (default 16 MiB; it grows on demand)
@@ -43,7 +43,7 @@ FSFLAG="${LEANUI_FS:-}"; OPT="-O3"; DBG=""; [ "$MODE" = "--debug" ] && DBG="--pr
 CG="-m64 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=1 -D LEAN_EMSCRIPTEN"
 map() { sed "s|^$ROOT|/proj|"; }
 TCD="${LEANUI_TOOLCHAIN:-$ROOT/.toolchain}"
-CNT_CC="true"; CNT_LINK=""; EXPORTS="_leanui_boot,_leanui_event,_leanui_callback,_malloc,_free"
+CNT_CC="true"; CNT_LINK=""; EXPORTS="_leanui_boot,_leanui_event,_leanui_callback,_leanui_callback_bytes,_leanui_bytes_alloc,_leanui_bytes_data,_malloc,_free"
 if [ "${LEANUI_COUNT_ALLOCS:-}" = 1 ]; then
   CNT_CC="emcc $OPT $CG -c /proj/tools/alloc-count.c -o \$W/obj/count.o"
   CNT_LINK="\$W/obj/count.o"
@@ -64,11 +64,11 @@ docker run --rm -v "$ROOT":/proj -v "$TCD":/tc -v "$TCD/ccache":/root/.ccache -e
     /tc/wasm64/lib/libStd.a /tc/wasm64/lib/libInit.a /tc/wasm64/lib/libleanrt.a /tc/wasm64/lib/libuv.a \
     -sMALLOC=${LEANUI_MALLOC:-dlmalloc} -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=${LEANUI_INITIAL_MEMORY:-16777216} -sMAXIMUM_MEMORY=4294967296 -sSTACK_SIZE=1048576 \
     -sMODULARIZE=1 -sEXPORT_NAME=LeanUIApp -sENVIRONMENT=web $FSFLAG \
-    -sEXPORTED_FUNCTIONS=$EXPORTS -sEXPORTED_RUNTIME_METHODS=lengthBytesUTF8,stringToUTF8 \
+    -sEXPORTED_FUNCTIONS=$EXPORTS -sEXPORTED_RUNTIME_METHODS=lengthBytesUTF8,stringToUTF8,HEAPU8 \
     -o /proj/dist/$NAME/app.js
 " 2>&1 | { grep -v "cache:INFO\|system_libs:INFO" || true; } | tail -20
 cp "$ROOT/runtime/leanui.js" "$OUT/leanui.js"
-PAGE="${LEANUI_PAGE:-$ROOT/examples/$NAME.html}"
+PAGE="${LEANUI_PAGE:-$ROOT/examples/$(basename "$NAME").html}"
 if [ -f "$PAGE" ]; then cp "$PAGE" "$OUT/index.html"; else
 cat > "$OUT/index.html" <<HTML
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$NAME · LeanUI</title></head>

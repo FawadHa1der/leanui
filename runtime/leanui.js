@@ -8,6 +8,13 @@
   const HTML = "http://www.w3.org/1999/xhtml";
   // events that do not bubble are delegated in the capture phase
   const CAPTURE = new Set(["focus", "blur", "mouseenter", "mouseleave", "load", "error", "scroll", "pointerenter", "pointerleave"]);
+  // events whose default a listener may prevent only if it is not passive (browsers make some
+  // wheel and touch listeners passive by default)
+  const ACTIVE = new Set(["wheel", "touchstart", "touchmove"]);
+  // KEYS_LISTEN: keys that are only modifiers, and the inputs that take no text (keys pressed
+  // while one of them has focus are reported)
+  const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "Fn", "FnLock", "Hyper", "Super", "Symbol", "SymbolLock", "NumLock", "ScrollLock", "OS"]);
+  const NOT_TEXT = new Set(["checkbox", "radio", "range", "button", "submit", "reset", "file", "color", "image"]);
   const decoder = new TextDecoder();
 
   class Runtime {
@@ -30,20 +37,31 @@
       this.busy = false;
       this.queue = [];
       this.after = [];
+      // commands that run at the end of the buffer that carries them (PUT_IMAGE: after the DOM
+      // changes, while the pixels it reads are still valid)
+      this.late = [];
+      // per blob index of the next buffer: [address, length] in wasm memory (LeanUI.__blob)
+      this.blobs = [];
+      // files the app was given (Payload.files), by id; the 64 most recent are kept
+      this.files = new Map();
+      this.fileSeq = 1;
+      this.keysSub = 0;
       this.tpl = [];
       this.stats = { flushes: 0, ops: 0, bytes: 0 };
     }
 
     // ---- input: events and effect results go to Lean one at a time ----
-    send(kind, a, b, c) {
+    send(kind, a, b, c, d) {
       if (this.crashed) return;
-      if (this.busy) { this.queue.push([kind, a, b, c]); return; }
+      if (this.busy) { this.queue.push([kind, a, b, c, d]); return; }
       this.busy = true;
       try {
-        if (kind === 0) this.transport.event(a, b); else this.transport.callback(a, b, c);
+        if (kind === 0) this.transport.event(a, b);
+        else if (kind === 1) this.transport.callback(a, b, c);
+        else this.transport.callbackBytes(a, b, c, d);
       } catch (e) { this.crash(e); }
       finally { this.busy = false; }
-      if (this.queue.length) { const [k, x, y, z] = this.queue.shift(); this.send(k, x, y, z); }
+      if (this.queue.length) { const [k, x, y, z, u] = this.queue.shift(); this.send(k, x, y, z, u); }
     }
     // An update that throws (in wasm: the native stack overflowed on a view nested about a
     // thousand levels deep, or memory ran out) leaves the app without its state: say so once,
@@ -57,6 +75,8 @@
       } else console.error("LeanUI:", e);
     }
     callback(cb, ok, payload) { this.send(1, cb, ok, payload); }
+    // an effect's result with bytes (a Uint8Array or Uint8ClampedArray; null for none)
+    callbackBytes(cb, ok, payload, bytes) { this.send(2, cb, ok, payload, bytes || new Uint8Array(0)); }
 
     // One real listener per event type, on the container. Listener commands can precede the
     // mount command in a buffer, so wanted types are remembered and attached once it exists.
@@ -64,7 +84,9 @@
       this.wanted.add(type);
       if (!this.container || this.delegated.has(type)) return;
       this.delegated.add(type);
-      this.container.addEventListener(type, (e) => this.onEvent(e), CAPTURE.has(type));
+      const opts = { capture: CAPTURE.has(type) };
+      if (ACTIVE.has(type)) opts.passive = false;
+      this.container.addEventListener(type, (e) => this.onEvent(e), opts);
     }
     onEvent(e) {
       const type = e.type;
@@ -76,7 +98,9 @@
         if (h) {
           const [slot, payload, flags] = h;
           if (flags & 1) e.preventDefault();
-          this.send(0, slot, extract(payload, n, e));
+          // flag 4: capture the pointer, so moves and the pointerup keep coming to this element
+          if (flags & 4 && type === "pointerdown" && n.setPointerCapture) try { n.setPointerCapture(e.pointerId); } catch (x) {}
+          this.send(0, slot, extract(payload, n, e, this));
           if (flags & 2) { e.stopPropagation(); return; }
         }
         if (!bubbles || n === this.container) return;
@@ -153,7 +177,7 @@
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
           case 33: { const cb = w[i + 1]; setTimeout(() => this.callback(cb, true, ""), w[i + 2]); i += 3; break; }
           case 34: { const sub = w[i + 1]; this.timers.set(sub, setInterval(() => this.callback(sub, true, ""), w[i + 2])); i += 3; break; }
-          case 35: { const sub = w[i + 1]; clearInterval(this.timers.get(sub)); this.timers.delete(sub); if (this.urlSub === sub) this.urlSub = 0; i += 2; break; }
+          case 35: { const sub = w[i + 1]; clearInterval(this.timers.get(sub)); this.timers.delete(sub); if (this.urlSub === sub) this.urlSub = 0; if (this.keysSub === sub) this.keysSub = 0; i += 2; break; }
           case 36: try { localStorage.setItem(S(i + 1), S(i + 3)); } catch (e) {} i += 5; break;
           case 37: { const cb = w[i + 1]; let v = null; try { v = localStorage.getItem(S(i + 2)); } catch (e) {} queueMicrotask(() => this.callback(cb, v !== null, v ?? "")); i += 4; break; }
           case 38: try { localStorage.removeItem(S(i + 1)); } catch (e) {} i += 3; break;
@@ -166,9 +190,21 @@
           case 45: { const cb = w[i + 1]; requestAnimationFrame((t) => this.callback(cb, true, String(Math.round(t)))); i += 2; break; }
           case 46: { const sel = S(i + 1); this.after.push(() => { const el = document.querySelector(sel); if (el) el.blur(); }); i += 3; break; }
           case 47: { const sel = S(i + 1); this.after.push(() => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: "nearest" }); }); i += 3; break; }
+          case 48: {
+            const sel = S(i + 1), b = this.blob(bytes, w[i + 3]), iw = w[i + 4], ih = w[i + 5], x = w[i + 6], y = w[i + 7], dw = w[i + 8], dh = w[i + 9];
+            this.late.push(() => this.putImage(sel, b, iw, ih, x, y, dw, dh)); i += 10; break;
+          }
+          case 49: this.readFile(w[i + 1], w[i + 2], false); i += 3; break;
+          case 50: this.readFile(w[i + 1], w[i + 2], true); i += 3; break;
+          case 51: this.download(S(i + 1), S(i + 3), this.blob(bytes, w[i + 5])); i += 6; break;
+          case 52: this.listenKeys(w[i + 1]); i += 2; break;
+          case 53: this.grabFrame(w[i + 1], S(i + 2)); i += 4; break;
+          case 54: { const cb = w[i + 1], f = this.files.get(w[i + 2]); const u = f ? URL.createObjectURL(f) : ""; queueMicrotask(() => this.callback(cb, !!f, u)); i += 3; break; }
           default: throw new Error("LeanUI: unknown opcode " + w[i] + " at word " + i);
         }
       }
+      if (this.late.length) { const a = this.late; this.late = []; a.forEach((f) => f()); }
+      this.blobs.length = 0;
       if (this.after.length) { const a = this.after; this.after = []; queueMicrotask(() => a.forEach((f) => f())); }
     }
 
@@ -244,6 +280,113 @@
         .catch(() => this.callback(cb, false, "0\n"));
     }
 
+    // ---- pixels, files, keys ----
+    // Blob k of the buffer being applied, as a view of wasm memory (read it before returning to
+    // Lean, which may then free or reuse the bytes); null without one (a server-driven page).
+    blob(bytes, k) {
+      const b = this.blobs[k];
+      return b ? new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + b[0], b[1]) : null;
+    }
+    noBytes(what) {
+      if (!this.warnedBytes) { this.warnedBytes = true; console.warn("LeanUI: " + what + " needs the in-page (wasm) host; ignored"); }
+    }
+    // A mistake here (a bitmap whose size does not match its bytes, a bad selector, a canvas with
+    // another kind of context) is logged, not thrown: it would otherwise unwind through the wasm
+    // call and stop the app.
+    putImage(sel, b, iw, ih, x, y, dw, dh) {
+      if (!b) return this.noBytes("PUT_IMAGE");
+      try {
+        if (b.length !== iw * ih * 4) throw new Error("a " + iw + "x" + ih + " bitmap with " + b.length + " bytes");
+        const c = document.querySelector(sel);
+        if (!c || !c.getContext) throw new Error("no canvas matches " + sel);
+        if (dw === 0 || dh === 0) return;
+        const ctx = c.__lui2d || (c.__lui2d = c.getContext("2d"));
+        if (!ctx) throw new Error(sel + " has no 2D context");
+        // ImageData wraps the view (no copy); putImageData copies the dirty rectangle into the canvas
+        ctx.putImageData(new ImageData(b, iw, ih), 0, 0, x, y, dw, dh);
+      } catch (e) { console.error("LeanUI: PUT_IMAGE " + sel + ":", e); }
+    }
+    download(name, type, b) {
+      if (!b) return this.noBytes("DOWNLOAD");
+      const url = URL.createObjectURL(new Blob([b], { type }));   // Blob copies the bytes now
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.style.display = "none";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+    keepFiles(list) {
+      const out = [];
+      for (const f of list) {
+        const id = this.fileSeq++;
+        this.files.set(id, f);
+        if (this.files.size > 64) this.files.delete(this.files.keys().next().value);
+        // a tab or newline in a name would break the lines: they become spaces
+        out.push(id + "\t" + f.size + "\t" + f.type + "\t" + f.name.replace(/[\t\r\n]/g, " "));
+      }
+      return out.join("\n");
+    }
+    // FILE_READ (the file's bytes) and IMAGE_DECODE (RGBA pixels, payload "width height")
+    async readFile(cb, id, decode) {
+      const f = this.files.get(id);
+      try {
+        if (!f) throw new Error("no file " + id);
+        if (!decode) return this.callbackBytes(cb, true, "", new Uint8Array(await f.arrayBuffer()));
+        const bmp = await createImageBitmap(f, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+        const iw = bmp.width, ih = bmp.height;
+        const c = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(iw, ih) : Object.assign(document.createElement("canvas"), { width: iw, height: ih });
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
+      } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
+    }
+    // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". While the
+    // video plays, the time is the presented frame's media time, which requestVideoFrameCallback
+    // reports (VideoFrame's timestamp is 0 in Firefox; currentTime moves between frames); while it
+    // is paused (or without that callback), currentTime, which then names the frame shown.
+    // WebCodecs' VideoFrame converts to RGBA; a 2D canvas draws the frame where it cannot, and
+    // where the frame is rotated or flipped.
+    async grabFrame(cb, sel) {
+      let f = null;
+      try {
+        const v = document.querySelector(sel);
+        if (v && v.error) throw new Error("the browser cannot play this video" + (v.error.message ? ": " + v.error.message : ""));
+        if (!v || !(v.readyState >= 2) || !v.videoWidth) throw new Error("no video frame");
+        if (v.requestVideoFrameCallback && v.__leanuiFrameMs === undefined) {
+          v.__leanuiFrameMs = -1;
+          const seen = (now, md) => { v.__leanuiFrameMs = Math.round(md.mediaTime * 1000); v.requestVideoFrameCallback(seen); };
+          v.requestVideoFrameCallback(seen);
+        }
+        const t = !v.paused && v.__leanuiFrameMs >= 0 ? v.__leanuiFrameMs : Math.round(v.currentTime * 1000);
+        if (typeof VideoFrame === "function") { try { f = new VideoFrame(v); } catch (e) { f = null; } }
+        let w = f ? f.displayWidth : v.videoWidth, h = f ? f.displayHeight : v.videoHeight, px = null;
+        // copyTo copies the stored pixels: a rotated or flipped frame is drawn, which orients it
+        if (f && !f.rotation && !f.flip && f.visibleRect.width === w && f.visibleRect.height === h) {
+          try { const buf = new Uint8Array(4 * w * h); await f.copyTo(buf, { format: "RGBA" }); px = buf; } catch (e) { px = null; }
+        }
+        if (!px) {
+          const c = this.grabCanvas || (this.grabCanvas = new OffscreenCanvas(w, h));
+          if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+          const ctx = c.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(f || v, 0, 0, w, h);
+          px = ctx.getImageData(0, 0, w, h).data;
+        }
+        this.callbackBytes(cb, true, w + " " + h + " " + t, px);
+      } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
+      finally { if (f) f.close(); }
+    }
+    listenKeys(sub) {
+      this.keysSub = sub;
+      if (this.keysListening) return;
+      this.keysListening = true;
+      document.addEventListener("keydown", (e) => {
+        const t = e.composedPath ? e.composedPath()[0] : e.target, k = e.key;
+        if (!this.keysSub || e.isComposing || MODIFIER_KEYS.has(k)) return;
+        if (t && (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t.tagName === "INPUT" && !NOT_TEXT.has(t.type)))) return;
+        this.callback(this.keysSub, true, (e.ctrlKey ? "Ctrl+" : "") + (e.altKey ? "Alt+" : "") + (e.shiftKey ? "Shift+" : "") + (e.metaKey ? "Meta+" : "") + k);
+      });
+    }
+
     listenUrl(sub) {
       this.urlSub = sub;
       if (this.urlListening) return;
@@ -259,7 +402,10 @@
     }
   }
 
-  function extract(kind, el, e) {
+  // a number as Payload.pointer writes it: at most two decimals, never an exponent
+  const num = (v) => String(Math.round((+v || 0) * 100) / 100);
+
+  function extract(kind, el, e, rt) {
     switch (kind) {
       case 1: return String(el.value ?? "");
       case 2: return el.checked ? "true" : "false";
@@ -268,6 +414,19 @@
         const form = el instanceof HTMLFormElement ? el : el.form;
         if (!form) return "";
         const out = []; for (const [k, v] of new FormData(form)) out.push(k + "=" + (typeof v === "string" ? v : v.name)); return out.join("\n");
+      }
+      case 5: {
+        const dt = e.dataTransfer, list = dt && dt.files && dt.files.length ? dt.files : el.files;
+        return list ? rt.keepFiles(list) : "";
+      }
+      case 6: {
+        const r = el.getBoundingClientRect();
+        let dx = 0, dy = 0;
+        if (e.type === "wheel") { const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1; dx = e.deltaX * k; dy = e.deltaY * k; }
+        const mods = (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
+        return num((e.clientX ?? 0) - r.left) + " " + num((e.clientY ?? 0) - r.top) + " " + num(r.width) + " " + num(r.height) + " " +
+          (e.buttons | 0) + " " + mods + " " + (e.pointerId | 0) + " " + num(e.pressure ?? 0) + " " + num(dx) + " " + num(dy) + " " +
+          num(e.clientX ?? 0) + " " + num(e.clientY ?? 0);
       }
       default: return "";
     }
@@ -288,6 +447,13 @@
     constructor(mod) { this.mod = mod; }
     event(slot, payload) { this.mod._leanui_event(slot, ...utf8(this.mod, payload)); }
     callback(cb, ok, payload) { this.mod._leanui_callback(cb, ok ? 1 : 0, ...utf8(this.mod, payload)); }
+    // the bytes are written straight into a Lean ByteArray, which Lean then owns
+    callbackBytes(cb, ok, payload, bytes) {
+      const mod = this.mod, obj = mod._leanui_bytes_alloc(ptr(bytes.length));
+      if (!obj || Number(obj) === 0) return this.callback(cb, false, "not enough memory for " + bytes.length + " bytes");
+      mod.HEAPU8.set(bytes, Number(mod._leanui_bytes_data(obj)));   // HEAPU8 after the allocation: memory may have grown
+      mod._leanui_callback_bytes(cb, ok ? 1 : 0, ...utf8(mod, payload), ptr(obj));
+    }
   }
 
   // Server-driven: Lean runs natively on the server; every event is a POST whose response is the
@@ -318,6 +484,8 @@
     }
     event(slot, payload) { this.post("e\n" + slot + "\n" + payload); }
     callback(cb, ok, payload) { this.post("c\n" + cb + "\n" + (ok ? 1 : 0) + "\n" + payload); }
+    // bytes do not travel to a server: the result arrives as a failure
+    callbackBytes(cb) { this.callback(cb, false, "bytes need the in-page (wasm) host"); }
   }
 
   function applyEncoded(rt, bytes) {
@@ -354,7 +522,7 @@
       try { ok = mod._leanui_boot(...utf8(mod, flags), ...utf8(mod, selector), hydrate ? 1 : 0); }
       finally { rt.busy = false; }
       if (!ok) throw new Error("LeanUI: the app failed to start (see the console)");
-      if (rt.queue.length) { const [k, a, b, c] = rt.queue.shift(); rt.send(k, a, b, c); }
+      if (rt.queue.length) { const [k, a, b, c, d] = rt.queue.shift(); rt.send(k, a, b, c, d); }
       rt.bootMs = performance.now() - t0;
       return rt;
     },
@@ -371,6 +539,8 @@
     boot(opts) { return supported() || !opts.session ? LeanUI.start(opts) : Promise.resolve(LeanUI.connect(opts)); },
     // called by the wasm module (runtime/leanui_wasm.c) once per update
     __flush(heap, ops, opsLen, strs, strsLen) { const rt = LeanUI.active; rt.stats.heapBytes = heap.byteLength; rt.apply(heap, ops, opsLen, strs, strsLen); },
+    // called by the wasm module before a flush whose commands carry byte arrays
+    __blob(k, p, len) { LeanUI.active.blobs[k] = [p, len]; },
     Runtime,
   };
   global.LeanUI = LeanUI;
