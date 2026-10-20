@@ -103,6 +103,9 @@ user agent, the bytes check, and the date if given.
   pushing the image a byte at a time. It is integer arithmetic since the first version, which
   converted five `Nat`s to `Float` per pixel and took 70 s at 12 MP: `Float.ofNat` (Lean 4.34's
   compiled `Float.ofScientific`) parsed the literal `2^53` from a decimal string on every call.
-- Results: `results-<engine>.json` hold the raw timings of a run (the machine is in the user
-  agent; the numbers that go into [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) say where they
-  were measured).
+- Results: each JSON file holds the raw timings of a run (the machine is in the user agent).
+  `results-chromium.json` and `results-chromium-2.json` are two runs on the 4-core cloud VM
+  (Chromium 141); `results-ci-chromium.json` and `results-ci-firefox.json` are GitHub's runner
+  (Chromium 151, Playwright's Firefox 153: the `editor-bench` artifact of a run with the `bench`
+  label). [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) says where and at which commit each was
+  measured, and `node bench/editor/mpix-table.mjs <file.json>` prints its MPix/s tables.
