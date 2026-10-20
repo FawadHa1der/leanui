@@ -167,7 +167,7 @@ jobs:
       # The same pull requests: the keyed benchmark and the race (bench/race/), each in vanilla
       # JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. lean-vir, an interpreter, takes most of
       # the time.
-      - name: Keyed and race benchmarks with lean-vir (Chromium, Firefox)
+      - name: Keyed and race benchmarks with lean-vir (Chromium)
         if: contains(github.event.pull_request.labels.*.name, 'bench')
         continue-on-error: true
         timeout-minutes: 60

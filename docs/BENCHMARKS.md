@@ -984,8 +984,8 @@ JSON is in [`bench/race/ci/`](../bench/race/ci/).
   generations the three Life boards are the same board as the native reference (`4e6b3290`,
   145 alive), in both browsers.
 - **Startup and size** (Chromium): lean-vir is ready 277 ms after navigation (LeanUI 167 ms) and
-  downloads 272 KB with brotli (LeanUI 175 KB): lean-vir's interpreter and loader are 181 KB, the
-  Bench app's IR 83 KB.
+  downloads 272 KB with brotli (LeanUI 175 KB): lean-vir's interpreter and loader are 176 KB, the
+  Bench app's IR 81 KB.
 - **Memory** after 10,000 rows: about the same, 27 MB of array buffers (lean-vir's wasm memory is
   most of it; its loader does not expose the memory itself) against LeanUI's 27.75 MB of wasm memory.
 
@@ -1019,7 +1019,8 @@ The site serves `/race/` cross-origin isolated, so the page's timer is precise t
 (without isolation Chrome rounds it to 0.1 ms, which only the table's smallest clicks feel).
 
 `tests/browser/race.mjs` runs it in CI (Life to generation 100, against the native reference;
-the table once) and fails if the three ever disagree; `--perf` gives the numbers below.
+the table once, in Chromium) and fails if the three ever disagree; `--perf` gives the Chromium
+numbers below, `tests/browser/selfbench.mjs --race` the Firefox ones.
 
 Life, 1,000 clicks, script time:
 
@@ -1137,8 +1138,8 @@ node tests/browser/selfbench.mjs <firefox-binary> firefox --runs 5 --impls leanu
 node tools/bench-tables.mjs keyed-chromium.json keyed-firefox.json      # the keyed tables above
 ```
 
-CI runs the keyed suite with lean-vir and the race (`--perf`, Chromium and Playwright's Firefox) on
-a pull request with the `bench` label, next to the editor's benchmarks.
+CI runs the keyed suite with lean-vir and the race (`--perf`), in Chromium only, on a pull request
+with the `bench` label, next to the editor's benchmarks.
 
 ## Method
 

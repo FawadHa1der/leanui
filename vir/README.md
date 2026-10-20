@@ -62,7 +62,8 @@ arrays, …), and it has no C compiler. So:
   `Float.toUInt8`, `Float.toInt64`).
 * Effects that answer with bytes (`Cmd.readFile`, `Cmd.decodeImage`) are refused: lean-vir copies
   byte arrays across the boundary, and the benchmarked apps need none.
-* It is an interpreter: the benchmarks measure it at tens of times slower than the wasm64 build.
+* It is an interpreter: the benchmarks measure its script time at about 13× the wasm64 build's in
+  the keyed operations and 48× in Life.
 
 ## Updating lean-vir
 
