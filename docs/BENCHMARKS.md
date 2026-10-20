@@ -559,8 +559,9 @@ in the same browser process on the same input.
   exporting run as jobs, a slice of rows per animation frame. At 12 MP the longest frame during
   them is 67–100 ms, except one frame of 600 ms in a blur (most likely wasm memory growing), while a blur
   takes 3.3 s and an export 1.8 s.
-- **Memory:** 16 MB at load, 57 MB with a 12 MP image open, 1.26 GB after 50 brush strokes on it
-  (the undo history's 1 GiB budget then holds 23 steps); wasm memory never shrinks.
+- **Memory:** 16 MiB of wasm memory at load, 57 MiB with a 12 MP image open, 1.23 GiB after 50 brush
+  strokes on it (the undo history's 1 GiB budget then holds 23 entries, 22 undoable steps); wasm
+  memory never shrinks.
 - **Download:** 292 KB with brotli (wasm 266 KB, glue 15 KB, runtime 9.5 KB).
 - **Video** (the [video lab](../examples/Video.lean), the same filters on every frame of a 30 fps
   video): every filter keeps up at 640×360, except blur at 27 fps. At 1280×720 the colour filters
@@ -611,9 +612,9 @@ operation whose warm-up took over 1.5 s):
 
 | size | Lean ÷ JS (geometric mean, 19 operations) | total time Lean ÷ JS | Lean ÷ canvas (14) | wasm memory after |
 |---|--:|--:|--:|--:|
-| 1 MP (1152×864) | 0.68× (second run: 0.73×) | 0.75× (0.76×) | 1.10× (1.35×) | 19 MB |
-| 4 MP (2304×1728) | 0.64× (0.72×) | 0.71× (0.76×) | 1.26× (1.29×) | 64 MB |
-| 12 MP (4000×3000) | 0.63× (0.61×) | 0.69× (0.73×) | 1.28× (1.22×) | 186 MB |
+| 1 MP (1152×864) | 0.68× (second run: 0.73×) | 0.75× (0.76×) | 1.10× (1.35×) | 19 MiB |
+| 4 MP (2304×1728) | 0.64× (0.72×) | 0.71× (0.76×) | 1.26× (1.29×) | 64 MiB |
+| 12 MP (4000×3000) | 0.63× (0.61×) | 0.69× (0.73×) | 1.28× (1.22×) | 186 MiB |
 
 A second run of the same build minutes later (`bench/editor/results-chromium-2.json`) moved 12 of
 Lean's 54 timings over 2 ms by more than 10% (at most 1.5×, the histogram at 4 MP), and
@@ -714,17 +715,19 @@ operation allocates per pixel. A run costs 43–224 allocations (its output imag
 plus about 40 for the event's update, view and diff), the same at 1 and 4 MP; the colour matrix
 about 600 and the lookup-table adjustment about 3,900 (the floating-point setup of the matrix, the
 256-entry table) and the histogram about 1,650, all independent of the size. PNG encoding
-allocates per row (2,200 allocations at 1 MP, 8,660 at 4 MP), not per pixel. In the editor, a
-slider input costs about 8,000 allocations, most of them the histogram's SVG path strings, and a
-brush move about 1,000.
+allocates in proportion to the image's bytes, about three objects per 5,552-byte Adler-32 block
+(2,200 allocations at 1 MP, 8,660 at 4 MP), not per pixel. In the editor, a slider input costs
+about 3,900 (blur radius) to 8,100 (brightness: its lookup table's setup, as in the adjust-lut run)
+allocations, and a brush move about 1,000.
 
 ### The editor: input to pixels
 
 [`tests/browser/editor-perf.mjs`](../tests/browser/editor-perf.mjs) drives the editor with
 generated JPEGs (decoded by the browser, then handed to Lean). *To pixels* runs from the input to
 the end of the next frame's rendering (a task queued from that frame's `requestAnimationFrame`
-callback: after its style, layout and paint), timed in the page; in Chromium every input is also
-traced, as in "Method": *script* is the event's dispatch (Lean's update, view and diff, and the
+callback: after its style, layout and paint), timed in the page; in Chromium every slider input
+and UI click is also traced, as in "Method" (the brush moves and opening a JPEG are timed in the
+page only): *script* is the event's dispatch (Lean's update, view and diff, and the
 buffer applied, `putImageData` included), *render* the main-thread frame work after it. Sliders:
 medians of 8 inputs; the brush: 40 moves; opening a JPEG: one run per size. Cloud VM, Chromium 141
 ([`bench/editor/perf-chromium.json`](../bench/editor/perf-chromium.json)):
@@ -735,7 +738,7 @@ medians of 8 inputs; the brush: 40 moves; opening a JPEG: one run per size. Clou
 | preview size | 1152×864 | 1280×960 | 1280×960 |
 | slider: brightness (lookup table), to pixels (script + render) | 34 ms (29 + 4) | 25 ms (22 + 3) | 33 ms (30 + 5) |
 | slider: saturation (colour matrix) | 27 ms (24 + 3) | 31 ms (27 + 4) | 35 ms (29 + 4) |
-| slider: blur radius 6 (a half-size proxy) | 116 ms (110 + 3) | 110 ms (106 + 4) | 122 ms (118 + 4) |
+| slider: blur radius 6 and 7, alternating (on a half-size proxy where the preview radius is 2 px or more: not radius 6 at 12 MP) | 116 ms (110 + 3) | 110 ms (106 + 4) | 122 ms (118 + 4) |
 | slider: sharpen | 126 ms (120 + 3) | 134 ms (130 + 4) | 105 ms (101 + 4) |
 | brush: a move, script, median / longest | 1.2 / 1.9 ms | 7.7 / 14 ms | 10 / 18 ms |
 | brush: a move, to pixels, median / longest | 17 / 18 ms | 17 / 21 ms | 17 / 21 ms |
@@ -767,13 +770,13 @@ meanwhile (cloud VM, the same file):
 | apply blur radius 6 | 274 ms, 50 ms | 1,020 ms, 50 ms | 3,260 ms, 600 ms |
 | edge detect | 90 ms, 33 ms | 270 ms, 83 ms | 593 ms, 83 ms |
 | rotate 90° | 73 ms, 33 ms | 273 ms, 67 ms | 490 ms, 67 ms |
-| export PNG (5.2 MB at 12 MP) | 246 ms, 67 ms | 718 ms, 117 ms | 1,809 ms, 100 ms |
+| export PNG (5.3 MB at 12 MP) | 246 ms, 67 ms | 718 ms, 117 ms | 1,809 ms, 100 ms |
 
 The 600 ms frame is most likely wasm memory growing. In four more 12 MP blurs on fresh pages (a
 probe, not in the committed data) the longest frame was 100–133 ms, and it was always the job's
-first frame, where the memory grows from 102 to 148 MB for the job's full-size buffers. In the
-run above the page had already done the sliders, the brush and three jobs, so its memory was
-larger and grew in a bigger step. The job's slices
+first frame, where the memory grows from 102 to 148 MiB for the job's full-size buffers. In the
+run above the page had already done the sliders, the brush and one job (apply brightness), so its
+memory was larger and grew in a bigger step. The job's slices
 themselves stay at a few frames. Before the work was sliced (`cc99a41`,
 [`perf-chromium-before-slicing.json`](../bench/editor/perf-chromium-before-slicing.json)), the
 same machine froze for 5.8 s exporting a 12 MP PNG (one frame; 6.2 s in all) and 1.0 s rotating
@@ -784,8 +787,10 @@ it. On GitHub's Chromium runner a 12 MP blur takes 1.5 s (longest frame 50 ms) a
 ### UI scaling: layers and history
 
 On a 1 MP image (the image's size changes only the compositing). Each row loads a fresh page,
-builds the panel (10 or 100 layers, or 200 history steps of a layer's opacity), clicks once to
-warm up, then measures one click on another row; medians of 5 runs. Cloud VM, traced Chromium
+builds the panel (10 or 100 layers, or 200 history steps of a layer's opacity), does one warm-up
+action, then measures one: a click on another layer or history step (select, show or hide,
+whose warm-up clicks another layer's checkbox twice, and jump), a second click on Undo, or a
+second change of the opacity slider (a new step); medians of 5 runs. Cloud VM, traced Chromium
 141 (`perf-chromium.json`):
 
 | | script | render | to pixels |
@@ -803,29 +808,32 @@ with 10; *to pixels* adds the wait for the next frame. On GitHub's Chromium runn
 cost 2.7–10 ms of work; in Playwright's Firefox (10 layers and the history), 1–21 ms of script.
 The panels are keyed lists of memoised rows, so a click diffs only what changed. A layer nothing
 was painted on is skipped when compositing, which keeps 100 mostly empty layers as cheap as 10;
-100 layers of 1 MP take 429 MB.
+100 layers of 1 MP take 429 MiB.
 
 ### Memory and download
 
-Wasm memory is 16 MB at load and grows on demand (it never shrinks). A 12 MP image takes 57 MB
+Wasm memory is 16 MiB at load and grows on demand (it never shrinks). A 12 MP image takes 57 MiB
 open (its pixels, its preview, the canvas). Each history step keeps the images it replaced (a brush
 stroke copies the layer it paints on once, 48 MB at 12 MP); the history is trimmed to 200 steps or
-1 GiB of replaced images, so 50 strokes on a 12 MP image leave 1.26 GB of wasm memory and 23
-undoable steps. Download (brotli 11, `5c7314c`): `app.wasm` 266 KB, `app.js` 15 KB, `leanui.js`
+1 GiB of replaced images, so 50 strokes on a 12 MP image leave 1.23 GiB of wasm memory and 23
+history entries (22 undoable steps). Download (brotli 11, `5c7314c`): `app.wasm` 266 KB, `app.js` 15 KB, `leanui.js`
 9.5 KB, the page 1.9 KB.
 
 ### What is interactive, where the main thread blocks, and what would move to a worker
 
 - **Point operations and painting are interactive at any size:** previews reach the screen in
-  25–35 ms, and a brush move's script fits in a frame even at 12 MP (median 10 ms, longest 18 ms),
-  because only the preview and the stroke's rectangle are touched.
+  25–35 ms, and a brush move's script fits in a frame even at 12 MP at the median (10 ms; the
+  longest move took 18 ms and reached the screen in 21 ms), because only the preview and the
+  stroke's rectangle are touched.
 - **Neighbourhood filters preview at about 8–10 updates a second** (blur and sharpen, 105–134 ms
   per input at preview size). This is the clearest gap: a faster blur (a box-filter approximation
   is a few operations a pixel whatever the radius) or computing the preview in a worker while the
   page shows the last one would both help.
-- **Full-resolution work never freezes the page** but takes seconds at 12 MP (blur 3.3 s, export
-  1.8 s) and occupies the main thread: during a job the page stays responsive (the progress bar
-  moves, the view zooms and scrolls), but edits are disabled until it finishes. This is what
+- **Full-resolution work does not freeze the page**, apart from one 600 ms frame in the 12 MP blur
+  (the other 12 MP jobs' longest frames are 67–100 ms), but takes seconds at 12 MP (blur 3.3 s,
+  export 1.8 s) and occupies the main thread: during a job the page stays responsive (the progress
+  bar moves, the view zooms, the side panels scroll), but the view cannot be panned and edits are
+  disabled until it finishes. This is what
   would move to a Web Worker: a second wasm instance with its own copy of the layer (no shared
   memory, since the page is not cross-origin isolated), receiving the pixels and returning the
   result as transferred `ArrayBuffer`s (a copy each way, tens of milliseconds at 12 MP, against

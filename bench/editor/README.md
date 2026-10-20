@@ -108,10 +108,13 @@ user agent, the bytes check, and the date if given.
   pushing the image a byte at a time. It is integer arithmetic since the first version, which
   converted five `Nat`s to `Float` per pixel and took 70 s at 12 MP: `Float.ofNat` (Lean 4.34's
   compiled `Float.ofScientific`) parsed the literal `2^53` from a decimal string on every call.
-- Results: each JSON file holds the raw timings of a run, with the browser version, the user agent
-  (operating system and architecture only), the WebGL renderer and the commit; the machine itself
-  is not recorded. [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) says where and at which commit
-  each was measured, and names the file behind each table.
+- Results: the `results-*.json` files (the operations) hold every run's time, with the browser
+  version, the user agent (operating system and architecture only), the WebGL renderer and the
+  commit. The `perf-*.json` and `video-*.json` files hold the engine, the browser version, the page
+  URL and the summarised measurements (medians; frames per second with the median grab and Lean
+  times), with no user agent, renderer or commit. None records the machine itself:
+  [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) says where and at which commit each was
+  measured, and names the file behind each table.
   - The operations (`tests/browser/editor-bench.mjs`): `results-chromium.json` and
     `results-chromium-2.json` are two runs on the 4-core cloud VM (Chromium 141);
     `results-ci-chromium.json` and `results-ci-firefox.json` are GitHub's runner (Chromium 151,
