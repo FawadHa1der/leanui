@@ -1,0 +1,138 @@
+{
+ "engine": "firefox",
+ "version": "153.0",
+ "url": "http://127.0.0.1:5332/editor/video/index.html",
+ "sizes": {
+  "640×360": {
+   "source": 24.8,
+   "none": {
+    "fps": 24.9,
+    "grabMs": 3,
+    "leanMs": 0
+   },
+   "vivid": {
+    "fps": 24.6,
+    "grabMs": 3,
+    "leanMs": 15
+   },
+   "mono": {
+    "fps": 24.1,
+    "grabMs": 3,
+    "leanMs": 15
+   },
+   "invert": {
+    "fps": 24.7,
+    "grabMs": 3,
+    "leanMs": 11
+   },
+   "blur": {
+    "fps": 8.5,
+    "grabMs": 3,
+    "leanMs": 113
+   },
+   "sharpen": {
+    "fps": 11.1,
+    "grabMs": 3,
+    "leanMs": 87
+   },
+   "edges": {
+    "fps": 22.2,
+    "grabMs": 3,
+    "leanMs": 23
+   },
+   "emboss": {
+    "fps": 20.2,
+    "grabMs": 3,
+    "leanMs": 45
+   }
+  },
+  "1280×720": {
+   "source": 25,
+   "none": {
+    "fps": 25,
+    "grabMs": 11,
+    "leanMs": 1
+   },
+   "vivid": {
+    "fps": 14.8,
+    "grabMs": 11,
+    "leanMs": 55
+   },
+   "mono": {
+    "fps": 14.3,
+    "grabMs": 12,
+    "leanMs": 56
+   },
+   "invert": {
+    "fps": 19.7,
+    "grabMs": 11,
+    "leanMs": 38
+   },
+   "blur": {
+    "fps": 2.2,
+    "grabMs": 12,
+    "leanMs": 449
+   },
+   "sharpen": {
+    "fps": 2.8,
+    "grabMs": 12,
+    "leanMs": 341
+   },
+   "edges": {
+    "fps": 10.5,
+    "grabMs": 11,
+    "leanMs": 82
+   },
+   "emboss": {
+    "fps": 5.2,
+    "grabMs": 12,
+    "leanMs": 176
+   }
+  },
+  "1920×1080": {
+   "source": 24.9,
+   "none": {
+    "fps": 23.6,
+    "grabMs": 22,
+    "leanMs": 2
+   },
+   "vivid": {
+    "fps": 6.7,
+    "grabMs": 23,
+    "leanMs": 122
+   },
+   "mono": {
+    "fps": 6.7,
+    "grabMs": 22,
+    "leanMs": 124
+   },
+   "invert": {
+    "fps": 9.3,
+    "grabMs": 23,
+    "leanMs": 83
+   },
+   "blur": {
+    "fps": 1,
+    "grabMs": 23,
+    "leanMs": 1018
+   },
+   "sharpen": {
+    "fps": 1.3,
+    "grabMs": 23,
+    "leanMs": 770
+   },
+   "edges": {
+    "fps": 4.9,
+    "grabMs": 22,
+    "leanMs": 179
+   },
+   "emboss": {
+    "fps": 2.4,
+    "grabMs": 23,
+    "leanMs": 396
+   }
+  }
+ },
+ "made": "VideoEncoder",
+ "errors": []
+}

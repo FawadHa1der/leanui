@@ -110,9 +110,18 @@ user agent, the bytes check, and the date if given.
   compiled `Float.ofScientific`) parsed the literal `2^53` from a decimal string on every call.
 - Results: each JSON file holds the raw timings of a run, with the browser version, the user agent
   (operating system and architecture only), the WebGL renderer and the commit; the machine itself
-  is not recorded.
-  `results-chromium.json` and `results-chromium-2.json` are two runs on the 4-core cloud VM
-  (Chromium 141); `results-ci-chromium.json` and `results-ci-firefox.json` are GitHub's runner
-  (Chromium 151, Playwright's Firefox 153: the `editor-bench` artifact of a run with the `bench`
-  label). [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) says where and at which commit each was
-  measured, and `node bench/editor/mpix-table.mjs <file.json>` prints its MPix/s tables.
+  is not recorded. [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) says where and at which commit
+  each was measured, and names the file behind each table.
+  - The operations (`tests/browser/editor-bench.mjs`): `results-chromium.json` and
+    `results-chromium-2.json` are two runs on the 4-core cloud VM (Chromium 141);
+    `results-ci-chromium.json` and `results-ci-firefox.json` are GitHub's runner (Chromium 151,
+    Playwright's Firefox 153: the `editor-bench` artifact of a run with the `bench` label).
+    `node bench/editor/mpix-table.mjs <file.json>` prints their MPix/s tables.
+  - The editor (`tests/browser/editor-perf.mjs`): `perf-chromium.json` (cloud VM),
+    `perf-ci-chromium.json` and `perf-ci-firefox.json` (runner), and
+    `perf-chromium-before-slicing.json` (cloud VM, before export and rotate ran as jobs).
+  - The video lab (`tests/browser/video.mjs --perf`): `video-chromium.json` (cloud VM),
+    `video-ci-chromium.json` and `video-ci-firefox.json` (runner), and the two cloud-VM runs
+    either side of the change that hands messages to `update` unshared
+    (`video-chromium-before-unshared.json`, `video-chromium-after-unshared.json`).
+  - Allocations (`tests/browser/editor-allocs.mjs`, counting builds): `allocs-chromium.md`.
