@@ -1,0 +1,8 @@
+/* Shared by the three Life pages (vanilla, wasm64, lean-vir), so layout and paint cost the same. */
+body { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 8px; color: #222; background: #fff; }
+.board { display: inline-block; background: #e8e8e8; padding: 1px; }
+.r { display: flex; }
+.r i { display: block; width: 8px; height: 8px; margin: 1px; background: #fff; }
+.r i.on { background: #1f6feb; }
+.stats { margin: 6px 0; font-variant-numeric: tabular-nums; }
+.buttons { margin: 0; }

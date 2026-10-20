@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/ejgallego/lean-vir",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "81de859a3ba1cb5da8bc5f128af025dd5a40b343",
+   "name": "lean_vir",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "81de859a3ba1cb5da8bc5f128af025dd5a40b343",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "«leanui-vir»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
