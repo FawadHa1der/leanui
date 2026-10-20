@@ -56,9 +56,9 @@ Lean ÷ JS and Lean ÷ canvas time ratios.
   and compares: the image checksum (`Image.checksum`, FNV-1a; Lean's through the `sum` command),
   the sum of the histogram's counts, the PNG's size. It prints MATCH or DIFF per operation, and
   whether the canvas built-in gives the same pixels (rotations, flips and crop do). The
-  floating-point steps (the adjustment table, the colour matrix, the Gaussian weights, Sobel's
-  square root) use the same IEEE double operations in the same order (`testImage` is integer
-  arithmetic); `Math.pow`,
+  floating-point steps (the adjustment table, the colour matrix, the Gaussian weights, the 3×3
+  convolution's division and bias (emboss), the unsharp mask's amount × 256, Sobel's square root)
+  use the same IEEE double operations in the same order (`testImage` is integer arithmetic); `Math.pow`,
   `exp`, `sin` and `cos` may differ from the C library's in the last bit, which only matters for a
   value within an ulp of a rounding boundary.
 
@@ -90,7 +90,7 @@ user agent, the bytes check, and the date if given.
   [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md), "Findings about measuring"): its Lean ÷ JS
   ratios say nothing about Firefox. Use it for correctness, release browsers for speed.
 - Chromium's `performance.now()` is coarsened to 0.1 ms without cross-origin isolation, so
-  sub-millisecond operations (crop, flips at 1 MP) are coarse.
+  operations of about a millisecond or less are coarse (at 1 MP: crop, and Lean's vertical flip).
 - The canvas built-ins are different algorithms with different results (PNG sizes differ too).
   In a headless browser without a GPU (as in CI) the 2D canvas is rasterised in software; with a
   GPU, the draw may run on it, and the readback then dominates.
@@ -103,7 +103,9 @@ user agent, the bytes check, and the date if given.
   pushing the image a byte at a time. It is integer arithmetic since the first version, which
   converted five `Nat`s to `Float` per pixel and took 70 s at 12 MP: `Float.ofNat` (Lean 4.34's
   compiled `Float.ofScientific`) parsed the literal `2^53` from a decimal string on every call.
-- Results: each JSON file holds the raw timings of a run (the machine is in the user agent).
+- Results: each JSON file holds the raw timings of a run, with the browser version, the user agent
+  (operating system and architecture only), the WebGL renderer and the commit; the machine itself
+  is not recorded.
   `results-chromium.json` and `results-chromium-2.json` are two runs on the 4-core cloud VM
   (Chromium 141); `results-ci-chromium.json` and `results-ci-firefox.json` are GitHub's runner
   (Chromium 151, Playwright's Firefox 153: the `editor-bench` artifact of a run with the `bench`

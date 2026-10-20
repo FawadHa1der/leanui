@@ -514,22 +514,26 @@ memory).
 
 **Machine.** Unlike the rest of this page, these numbers come from a 4-core x86-64 cloud VM
 (Chromium 141 headless, software canvas: `chrome://gpu` reports "Software only") and from
-GitHub's `ubuntu-24.04` runners (Chromium 151 and Playwright's Firefox 153), all on 2026-10-19:
-the operations at `eb0414f` (cloud VM) and `ceb6393` (runners), the editor at `6a3d76c`, the video
-lab at `e9150de` and `6711a38`. **Absolute times are a CI-class machine's, to be re-measured on
+GitHub's `ubuntu-24.04` runners (Chromium 151 and Playwright's Firefox 153): the operations at
+`eb0414f` (cloud VM, 2026-10-19) and `ceb6393` (runners, 2026-10-20 UTC), the editor at `6a3d76c`
+and the video lab at `e9150de` and `6711a38` (2026-10-19). **Absolute times are a CI-class machine's, to be re-measured on
 the reference Mac**; the comparable figures are the ratios, taken in the same browser process on
 the same input.
 
 ### Summary
 
 - **Lean against JavaScript, same algorithms:** all 19 operations give byte-identical results in
-  Lean (wasm) and in plain JavaScript (checked by checksum on every run). In Chromium, Lean takes
+  Lean (wasm) and in plain JavaScript. Every run compares the 16 operations that produce an image
+  by checksum, the histogram by its total and the two PNG encoders by file size; the histogram's
+  and the PNG files' bytes are pinned by the Lean core's goldens, which `ops.js` reproduces
+  (`bench/editor/check-goldens.mjs`, also run every time). In Chromium, Lean takes
   **0.61–0.73× the time** of the JavaScript (geometric mean over the 19 operations at 1, 4 and
   12 MP, two runs on the cloud VM; total time 0.69–0.76×), and 0.51–0.61× on GitHub's runner.
   Lean is slower on the histogram (1.2–1.7×) and the box downscale (1.1–1.2×), about even on the
   blurs, the unsharp mask and the bilinear resize (0.8–1.1×), and faster on compositing
   (0.26–0.32×: an integer division by a constant against JavaScript's floating-point one), edges
-  and emboss (0.59–0.73×), row copies (flip vertically 0.2–0.4×) and PNG encoding (0.48–0.54×).
+  and emboss (0.59–0.73×), row copies (flip vertically 0.2–0.4×) and PNG encoding (level 1
+  0.48–0.54×, stored 0.45–0.82×).
   The lookup-table adjustment's ratio is anywhere from 0.4× to 1.7×, because JavaScript's time for
   it varies fourfold from run to run while Lean's stays put. Some of Lean's wins are
   implementation choices the plain port does not make (below), so "same algorithm" means the same
