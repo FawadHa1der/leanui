@@ -251,9 +251,10 @@ node tests/browser/bench.mjs              # the benchmark (Chromium traces); sel
 ## Continuous integration and deployment
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the native build and every test above on each push
-and pull request, then the browser suites against the wasm64 builds. On `main` it deploys the
-LeanUI site to Cloudflare: a Worker in front of a container that runs the native `leanui-site`,
-so pages are server-rendered and Safari gets server-driven sessions. Setup and secrets:
+and pull request, then the browser suites against the wasm64 builds (and, for the race, the
+lean-vir builds). On `main` it deploys the LeanUI site to Cloudflare: a Worker in front of a
+container that runs the native `leanui-site`, so pages are server-rendered and Safari gets
+server-driven sessions. Setup and secrets:
 [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Documentation
