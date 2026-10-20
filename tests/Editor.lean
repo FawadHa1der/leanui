@@ -744,8 +744,12 @@ def testPng : T Unit := do
   let corrupt := ok.set! 45 (ok.get! 45 ^^^ 0x55)
   let corrupt := Png.setU32BE corrupt (41 + idatLen) (Png.crc32 corrupt 37 (41 + idatLen))
   match Png.decode corrupt with
-  | .ok img => expect "corrupt deflate data is detected" (img != noise 4 4 1) "decoded to the original"
+  | .ok _ => expect "corrupt deflate data is detected" false "decoded"
   | .error _ => expect "corrupt deflate data is detected" true
+  -- the zlib stream's Adler-32 (its last four bytes) is checked: flip a bit of it
+  let lastByte := 41 + idatLen - 1
+  let badAdler := ok.set! lastByte (ok.get! lastByte ^^^ 1)
+  bad "a bad Adler-32" (Png.setU32BE badAdler (41 + idatLen) (Png.crc32 badAdler 37 (41 + idatLen))) "bad Adler-32 checksum"
   -- random corruption of the compressed data (chunk CRC fixed up so that inflate sees it), and
   -- every truncation: the decoder returns an error or an image of the declared size, never crashes
   for level in [0, 1, 9] do

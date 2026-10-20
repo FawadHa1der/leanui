@@ -66,11 +66,16 @@ Lean ÷ JS and Lean ÷ canvas time ratios.
 
 ```bash
 tools/build-app.sh EditorBenchApp editor-bench       # dist/editor-bench (needs the wasm64 archives)
-lake build leanui && .lake/build/bin/leanui serve dist --port 5341 --quiet &
+lake build leanui
+.lake/build/bin/leanui serve dist --port 5341 --quiet &
 node bench/editor/check-goldens.mjs                  # ops.js against the Lean goldens (Node only)
 node tests/browser/editor-bench.mjs http://127.0.0.1:5341/ chromium [firefox] \
-  [--sizes 1,4,12] [--runs 5] [--out bench/editor/results-<engine>.json] [--date YYYY-MM-DD]
+  [--sizes 1,4,12] [--runs 5] [--out .lake/bench/editor-bench-<engine>.json] [--date YYYY-MM-DD]
 ```
+
+The JSON goes to `.lake/bench/` unless `--out` names a file (the committed `results-*.json` are
+replaced only on purpose). The runner exits 1 when the bytes check finds a difference or `ops.js`
+does not match the goldens.
 
 Playwright comes from `LEANUI_PLAYWRIGHT_FROM` (see `tests/browser/playwright.mjs`). The browser is
 Playwright's own build, else `$LEANUI_CHROMIUM` / `$LEANUI_FIREFOX`, else

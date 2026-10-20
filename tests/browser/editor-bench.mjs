@@ -4,7 +4,7 @@
 //   tools/build-app.sh EditorBenchApp editor-bench          # dist/editor-bench
 //   .lake/build/bin/leanui serve dist --port 5341 --quiet &
 //   node tests/browser/editor-bench.mjs http://127.0.0.1:5341/ [chromium|firefox ...]
-//        [--sizes 1,4,12] [--runs 5] [--out bench/editor/results-<engine>.json] [--date YYYY-MM-DD]
+//        [--sizes 1,4,12] [--runs 5] [--out .lake/bench/editor-bench-<engine>.json] [--date YYYY-MM-DD]
 //        [--check 333x250] [--slow-ms 1500] [--slow-runs 3]
 //
 // Per engine: first the bytes check (every operation on a small image, Lean's checksum against
@@ -13,7 +13,8 @@
 // A warm-up slower than --slow-ms cuts that operation to --slow-runs runs at that size (reported).
 // Lean's time is the synchronous `input` event carrying `run OP` (update, view and diff in wasm,
 // then the tiny DOM patch); JS's the call; the canvas built-in's the draw plus getImageData of the
-// whole result. Writes the raw timings as JSON and prints markdown tables.
+// whole result. Writes the raw timings as JSON and prints markdown tables. Exits 1 if the bytes
+// check found a difference or ops.js does not match the goldens (after writing the results).
 //
 // The browser: Playwright's own build for each engine, else $LEANUI_CHROMIUM / $LEANUI_FIREFOX,
 // else $PLAYWRIGHT_BROWSERS_PATH/<engine> (a pre-installed browser of another revision).
@@ -36,7 +37,7 @@ const sizes = opt("sizes", "1,4,12").split(",").map((s) => {
   return { label: s, w: +m[1], h: +m[2] };
 });
 const runs = +opt("runs", "5");
-const outPattern = opt("out", "bench/editor/results-<engine>.json");
+const outPattern = opt("out", ".lake/bench/editor-bench-<engine>.json");
 const date = opt("date", undefined);
 const [cw, ch] = opt("check", "333x250").split("x").map(Number);
 const slowMs = +opt("slow-ms", "1500");
@@ -135,7 +136,9 @@ for (const engine of engines) {
     result.file = out.startsWith(repo + path.sep) ? path.relative(repo, out) : out;
   }
   printMarkdown(result);
+  if (result.check?.rows.some((c) => !c.match)) { console.error(`${engine}: Lean and JS differ (DIFF above)`); process.exitCode = 1; }
 }
+if (goldens.startsWith("FAILED")) { console.error("ops.js does not match the goldens"); process.exitCode = 1; }
 
 function printMarkdown(r) {
   const L = [];

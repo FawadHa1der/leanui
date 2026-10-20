@@ -3,7 +3,7 @@ version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
   "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests",
-  "leanui-editor-tests"]
+  "leanui-editor-tests", "leanui-editor-perf"]
 
 # The runtime core every app links.
 [[lean_lib]]

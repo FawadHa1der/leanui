@@ -298,7 +298,8 @@
       try {
         if (b.length !== iw * ih * 4) throw new Error("a " + iw + "x" + ih + " bitmap with " + b.length + " bytes");
         const c = document.querySelector(sel);
-        if (!c || !c.getContext || dw === 0 || dh === 0) return;
+        if (!c || !c.getContext) throw new Error("no canvas matches " + sel);
+        if (dw === 0 || dh === 0) return;
         const ctx = c.__lui2d || (c.__lui2d = c.getContext("2d"));
         if (!ctx) throw new Error(sel + " has no 2D context");
         // ImageData wraps the view (no copy); putImageData copies the dirty rectangle into the canvas

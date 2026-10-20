@@ -6,8 +6,9 @@ traces), in release Chrome and Firefox, and natively. This page gives the result
 and what was learned getting there.
 
 Measured at commit `93b8470` (2026-10-18); sections that compare two builds name the build they
-compare against. All numbers: an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26,
-headless browsers, medians. Each browser measurement loads a fresh page, does the operation's
+compare against. All numbers except those of "The photo editor" (a cloud VM and GitHub's runners,
+named there): an Apple M4 Max (10 performance and 4 efficiency cores), macOS 26, headless
+browsers, medians. Each browser measurement loads a fresh page, does the operation's
 warm-up clicks, busy-waits 30 ms (so the click does not land on an efficiency core; see below)
 and times one click.
 
@@ -23,7 +24,8 @@ and times one click.
   `3db6ac9` → `93b8470`) took creating 1,000 rows from 7.10 to 3.81 ms of script in Chromium and
   from 1.90 to 0.63 ms natively; no operation got slower in the Chromium A/B, and release Firefox's
   small clicks moved within its timer noise (see "The create path").
-- **The photo editor** ([below](#the-photo-editor)): on its 19 image operations Lean (wasm) takes
+- **The photo editor** ([below](#the-photo-editor); a cloud VM and GitHub's runners, CI machines to
+  be re-measured on the reference Mac): on its 19 image operations Lean (wasm) takes
   0.61–0.73× the time of the same algorithms in plain JavaScript in Chromium (0.51–0.61× on
   GitHub's runners), byte-identical; its sliders
   preview in 20–130 ms at any image size, and full-resolution work runs in frame-sized slices.

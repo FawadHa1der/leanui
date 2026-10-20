@@ -121,6 +121,10 @@ jobs:
           npm install --no-audit --no-fund playwright@1.62.1
           npx playwright install --with-deps chromium firefox
           echo "LEANUI_PLAYWRIGHT_FROM=$RUNNER_TEMP/pw/package.json" >> "$GITHUB_ENV"
+      # The editor core's goldens against an independent Python implementation, and the JavaScript
+      # port the benchmarks compare with against the same goldens (well under a second, no build).
+      - name: Editor goldens (Python reference, JavaScript port)
+        run: python3 tests/editor-ref/reference.py tests/Editor.lean && node bench/editor/check-goldens.mjs
       - name: Browser tests (Chromium, Firefox)
         run: tests/browser/run-all.sh
 

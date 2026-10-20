@@ -7,7 +7,8 @@ below. This document is normative for both.
 
 ## 1. Framing
 
-A buffer is two byte arrays:
+A buffer is two byte arrays (and, in the wasm host, the byte arrays its pixel and file commands
+refer to: *blobs*, section 8):
 
 - **words**: little-endian unsigned 32-bit integers, a sequence of *commands*. Each command is an
   opcode word followed by its operand words (section 3): a fixed number, except for `TEMPLATE`
@@ -32,7 +33,9 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 
 ## 3. Commands
 
-`n` = node handle, `nm` = name id, `s` = string (2 words), `cb`/`sub` = callback id.
+`n` = node handle, `nm` = name id, `s` = string (2 words), `cb`/`sub` = callback id, `blob` = blob
+index (one word, section 8), `file` = file id (payload 5, section 4); other operands are plain
+numbers (`w`, `h`: a bitmap's size; `x`, `y`, `dw`, `dh`: a rectangle in it).
 
 | Op | Name | Operands | Browser semantics |
 |---|---|---|---|
@@ -76,7 +79,7 @@ In the browser, the wasm module passes both arrays as views into its memory (no 
 | 48 | PUT_IMAGE | s selector, blob, w, h, x, y, dw, dh | at the end of this buffer, `putImageData` blob (`w`×`h` RGBA pixels) at (0, 0) of the first `<canvas>` matching `selector`, copying only the rectangle (`x`, `y`, `dw`, `dh`) (section 8) |
 | 49 | FILE_READ | cb, file | reply `cb` with the bytes of file `file` (section 8) |
 | 50 | IMAGE_DECODE | cb, file | reply `cb` with file `file` decoded to RGBA pixels, payload `"<width> <height>"` (section 8) |
-| 51 | DOWNLOAD | s name, s type, blob | offer blob's bytes as a download named `name` of media type `type` |
+| 51 | DOWNLOAD | s name, s type, blob | offer blob's bytes as a download named `name` of media type `type` (section 8) |
 | 52 | KEYS_LISTEN | sub | reply `sub` for every `keydown` on the document except in text fields (`textarea`, `select`, editable content, and `input`s other than checkboxes, radio buttons, ranges, buttons, file and colour pickers), payload `Ctrl+`, `Alt+`, `Shift+`, `Meta+` prefixes (in that order) then `KeyboardEvent.key`; presses of a modifier key alone are not reported, and no default is prevented |
 | 53 | FRAME_GRAB | cb, s selector | reply `cb` with the frame the first `<video>` matching `selector` shows, as RGBA pixels (a WebCodecs `VideoFrame` copied as RGBA, or drawn on a 2D canvas where that conversion is not available or the frame is rotated or flipped), payload `"<width> <height> <timeMs>"` with the frame's media time (from `requestVideoFrameCallback` while the video plays; `currentTime` while it is paused or where that is missing); `ok` = 0 when there is no frame yet, or the video cannot be played (section 8) |
 | 54 | FILE_URL | cb, file | reply `cb` with an object URL for file `file` (`ok` = 0 and an empty payload for an unknown id) |
@@ -208,7 +211,8 @@ the end of the buffer, after its DOM commands (so it may draw on a canvas the sa
 created), but before control returns to Lean. `PUT_IMAGE` wraps the view in an `ImageData`
 (no copy) and `putImageData` copies the dirty rectangle into the canvas; the blob must hold
 exactly `4 × w × h` bytes (RGBA, straight alpha, rows top to bottom). A `PUT_IMAGE` that cannot
-be done (another size, no such canvas or no 2D context) is logged and skipped. The canvas keeps its own
+be done (another size, no canvas matching the selector, or no 2D context) is logged and skipped; one
+with an empty rectangle does nothing. The canvas keeps its own
 size (`width` and `height` attributes, from the view).
 
 Results with bytes (`FILE_READ`, `IMAGE_DECODE`, `FRAME_GRAB`) come back through a second callback,
