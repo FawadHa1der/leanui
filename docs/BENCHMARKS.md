@@ -964,8 +964,9 @@ Lean files, so a LeanUI program can be compared three ways on the same code: wri
 JavaScript, written in Lean and compiled to wasm64 (what the site and every app ship), and the same
 Lean interpreted by lean-vir. The site does not use lean-vir; the race page and the harnesses do.
 
-Measured at `9d84b5c` on a cloud VM (Linux, x86-64; headless Playwright Chromium 141 and release
-Firefox 158.0.1): **CI-machine numbers, to be re-measured on the reference Mac**. The ratios carry
+Measured on a cloud VM (Linux, x86-64; headless Playwright Chromium 141 and release Firefox
+158.0.1), the keyed suite at `9d84b5c` and the race at `983a808`: **CI-machine numbers, to be
+re-measured on the reference Mac**. The ratios carry
 over better than the milliseconds (the VM's rendering is several times slower than the Mac's). The
 JSON is in [`bench/race/ci/`](../bench/race/ci/).
 
@@ -976,9 +977,9 @@ JSON is in [`bench/race/ci/`](../bench/race/ci/).
   and layout). Rendering is the same work (the DOM is identical, and the harness checks it); the
   script alone, Lean's update, view and diff plus applying the commands, is **13.5×** in Chromium
   and **12.5×** in Firefox.
-- **Life** (1,000 clicks, one generation each): **50×** LeanUI wasm64's script time in Chromium
-  (30.9 against 0.62 ms per click) and **48×** in Firefox. Little DOM work per click, so this is
-  mostly Lean's own work, interpreted.
+- **Life** (1,000 clicks, one generation each): **48×** LeanUI wasm64's script time in Chromium
+  (29.2 against 0.60 ms per click) and **48×** in Firefox (34.7 against 0.73 ms). Little DOM work
+  per click, so this is mostly Lean's own work, interpreted.
 - **All three agree**: after every keyed operation the three tables are the same, and after 1,000
   generations the three Life boards are the same board as the native reference (`4e6b3290`,
   145 alive), in both browsers.
@@ -1024,12 +1025,12 @@ Life, 1,000 clicks, script time:
 
 | | Chromium 141 | per click | Firefox 158 | per click |
 |---|--:|--:|--:|--:|
-| vanilla JavaScript | 70 ms | 0.07 ms | 71 ms | 0.07 ms |
-| LeanUI, wasm64 | 621 ms | 0.62 ms | 758 ms | 0.76 ms |
-| LeanUI, lean-vir | 30,883 ms | 30.9 ms | 36,510 ms | 36.5 ms |
-| lean-vir ÷ wasm64 | **50×** | | **48×** | |
+| vanilla JavaScript | 48 ms | 0.05 ms | 88 ms | 0.09 ms |
+| LeanUI, wasm64 | 603 ms | 0.60 ms | 726 ms | 0.73 ms |
+| LeanUI, lean-vir | 29,213 ms | 29.2 ms | 34,673 ms | 34.7 ms |
+| lean-vir ÷ wasm64 | **48×** | | **48×** | |
 
-On Life, LeanUI wasm64 takes about 9× (Chromium) and 11× (Firefox) vanilla's script time: a click
+On Life, LeanUI wasm64 takes about 13× (Chromium) and 8× (Firefox) vanilla's script time: a click
 does little DOM work (vanilla changes the class of the hundred or so cells that changed, through
 references it keeps), so the framework's own work shows: computing the generation, rebuilding the
 rows that changed (40 cells each, most rows change), diffing them and encoding the commands. In
@@ -1040,20 +1041,19 @@ results above):
 
 | operation | Chromium: vanilla | wasm64 | lean-vir | Firefox: vanilla | wasm64 | lean-vir |
 |---|--:|--:|--:|--:|--:|--:|
-| create 1,000 rows | 10.2 ms | 22.8 | 346 | 12.1 ms | 17.7 | 423 |
-| replace all 1,000 rows | 15.4 ms | 35.7 | 522 | 19.3 ms | 44.8 | 518 |
-| update every 10th row | 0.50 ms | 5.50 | 60.5 | 0.68 ms | 4.30 | 54.5 |
-| highlight a row | 0.20 ms | 3.00 | 16.9 | 0.24 ms | 3.82 | 17.8 |
-| swap 2 rows | 0.30 ms | 4.00 | 75.1 | 0.82 ms | 6.00 | 121 |
-| remove a row | 0.10 ms | 3.90 | 37.6 | 0.46 ms | 4.24 | 61.7 |
-| create 10,000 rows | 68.0 ms | 123 | 3,188 | 94.4 ms | 158 | 3,938 |
-| append 1,000 rows | 6.00 ms | 14.8 | 388 | 7.32 ms | 23.7 | 464 |
-| clear 1,000 rows | 8.90 ms | 16.8 | 99.0 | 17.0 ms | 19.4 | 133 |
-| *geometric mean: wasm64 ÷ vanilla, lean-vir ÷ wasm64* | | **5.4×** | **12.9×** | | **3.7×** | **13.6×** |
+| create 1,000 rows | 8.92 ms | 12.5 | 312 | 9.82 ms | 16.1 | 356 |
+| replace all 1,000 rows | 22.0 ms | 30.9 | 442 | 22.4 ms | 44.4 | 567 |
+| update every 10th row | 0.49 ms | 4.15 | 40.4 | 0.78 ms | 6.94 | 57.9 |
+| highlight a row | 0.17 ms | 3.30 | 14.8 | 0.22 ms | 2.76 | 23.1 |
+| swap 2 rows | 0.27 ms | 4.06 | 68.8 | 0.66 ms | 5.70 | 82.2 |
+| remove a row | 0.25 ms | 2.91 | 37.8 | 0.54 ms | 3.62 | 42.8 |
+| create 10,000 rows | 77.1 ms | 131 | 3,435 | 100 ms | 209 | 3,741 |
+| append 1,000 rows | 7.80 ms | 16.5 | 362 | 9.36 ms | 26.5 | 472 |
+| clear 1,000 rows | 11.5 ms | 20.6 | 119 | 15.5 ms | 21.5 | 108 |
+| *geometric mean: wasm64 ÷ vanilla, lean-vir ÷ wasm64* | | **4.1×** | **13.1×** | | **3.8×** | **12.1×** |
 
-Script alone, wasm64 is several times vanilla (the keyed results add rendering, the same for both,
-which brings it to 1.2–1.5×); lean-vir is about 13× wasm64 in both browsers. The page's own timer is
-coarse for the smallest clicks (Chromium's `performance.now()` steps by 0.1 ms here).
+Script alone, wasm64 is about 4× vanilla (the keyed results add rendering, the same for both, which
+brings it to 1.2–1.5×); lean-vir is 12–13× wasm64 in both browsers, as in the keyed suite.
 
 ### The keyed suite with lean-vir
 
@@ -1128,7 +1128,7 @@ fetches it again to check its hash.
 tools/build-app.sh BenchApp bench && tools/build-app.sh LifeApp life   # the wasm64 builds
 vir/build.sh                                                            # dist/vir/{bench,life} (Lean 4.35, vir/README.md)
 bench/race/build.sh                                                     # dist/race
-./.lake/build/bin/leanui serve dist --port 5331 &                       # the race at http://127.0.0.1:5331/race/
+./.lake/build/bin/leanui serve dist --port 5331 --coop &                # the race at http://127.0.0.1:5331/race/ (isolated: a precise timer)
 node tests/browser/race.mjs http://127.0.0.1:5331/ chromium --perf --out race-chromium.json
 node tests/browser/selfbench.mjs <firefox-binary> firefox --race life --json race-life-firefox.json
 node tests/browser/selfbench.mjs <firefox-binary> firefox --race table --runs 3 --json race-table-firefox.json
