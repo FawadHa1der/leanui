@@ -62,4 +62,7 @@ tools/build-app.sh CounterApp counter  # an app: dist/counter/{index.html,leanui
 ```
 
 Never run a bare `lean` or `lake` in this repository's tooling: `lean-toolchain` pins
-`leanprover/lean4:v4.34.0`, and the scripts call that toolchain's binaries by path.
+`leanprover/lean4:v4.34.0`, and the scripts call that toolchain's binaries by path. The one other
+toolchain is `vir/`'s (`vir/lean-toolchain`, Lean 4.35.0): a separate project that runs the
+benchmarked apps on lean-vir instead of wasm64 ([vir/README.md](../vir/README.md)); `vir/build.sh`
+calls it by path the same way.

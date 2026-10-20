@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Life (vanilla JavaScript)</title>
+<link rel="stylesheet" href="../life.css"></head>
+<body>
+<!-- examples/Life.lean written by hand: the same board, rules, markup and outputs, with the usual
+     fast path (typed arrays, direct node references, only changed cells touched). -->
+<div id="app"><div class="life">
+  <div id="board" class="board"></div>
+  <p class="stats">generation <output id="gen">0</output> · alive <output id="pop"></output> · board <output id="hash"></output></p>
+  <p class="buttons"><button type="button" id="step">Step</button> <button type="button" id="reset">Reset</button></p>
+</div></div>
+<script>
+"use strict";
+const COLS = 40, ROWS = 25, N = COLS * ROWS, M = (1n << 64n) - 1n;
+const board = document.getElementById("board");
+const genOut = document.getElementById("gen"), popOut = document.getElementById("pop"), hashOut = document.getElementById("hash");
+const els = new Array(N);
+for (let y = 0; y < ROWS; y++) {
+  const r = document.createElement("div"); r.className = "r";
+  for (let x = 0; x < COLS; x++) r.appendChild(els[y * COLS + x] = document.createElement("i"));
+  board.appendChild(r);
+}
+let cells = new Uint8Array(N), spare = new Uint8Array(N), gen = 0;
+// the first board: the 64-bit LCG of examples/Bench.lean from 1135, a cell alive when its draw divides by 3
+function seed() {
+  let s = 1135n;
+  for (let i = 0; i < N; i++) { s = (s * 6364136223846793005n + 1442695040888963407n) & M; cells[i] = (s >> 33n) % 3n === 0n ? 1 : 0; }
+}
+function show(changedOnly) {
+  let pop = 0, h = 2166136261;
+  for (let i = 0; i < N; i++) {
+    const c = cells[i];
+    if (!changedOnly || c !== spare[i]) els[i].className = c ? "on" : "";
+    pop += c; h = Math.imul(h ^ c, 16777619) >>> 0;
+  }
+  genOut.textContent = gen; popOut.textContent = pop; hashOut.textContent = h.toString(16).padStart(8, "0");
+}
+function step() {
+  const b = cells, out = spare;
+  for (let y = 0; y < ROWS; y++) {
+    const up = (y + ROWS - 1) % ROWS * COLS, mid = y * COLS, down = (y + 1) % ROWS * COLS;
+    for (let x = 0; x < COLS; x++) {
+      const l = (x + COLS - 1) % COLS, r = (x + 1) % COLS;
+      const n = b[up + l] + b[up + x] + b[up + r] + b[mid + l] + b[mid + r] + b[down + l] + b[down + x] + b[down + r];
+      out[mid + x] = n === 3 || (n === 2 && b[mid + x] === 1) ? 1 : 0;
+    }
+  }
+  cells = out; spare = b; gen++;
+  show(true);   // `spare` still holds the previous board: touch only the cells that changed
+}
+function reset() { seed(); gen = 0; spare.fill(2); show(true); }
+document.getElementById("step").addEventListener("click", step);
+document.getElementById("reset").addEventListener("click", reset);
+reset();
+window.__ready = performance.now();
+</script></body></html>

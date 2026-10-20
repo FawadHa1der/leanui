@@ -1,0 +1,226 @@
+{
+ "engine": "chromium",
+ "browserVersion": "141.0.7390.37",
+ "date": "2026-10-20T19:18:39.132Z",
+ "commit": "9d84b5c",
+ "life": {
+  "scenario": "life",
+  "steps": 1000,
+  "same": true,
+  "rows": [
+   {
+    "key": "vanilla",
+    "name": "Vanilla JavaScript",
+    "clicks": 1000,
+    "ms": 47.72499999962747,
+    "gen": 1000,
+    "pop": 145,
+    "board": "4e6b3290",
+    "shown": "4e6b3290"
+   },
+   {
+    "key": "wasm64",
+    "name": "LeanUI · wasm64",
+    "clicks": 1000,
+    "ms": 602.574999996461,
+    "gen": 1000,
+    "pop": 145,
+    "board": "4e6b3290",
+    "shown": "4e6b3290"
+   },
+   {
+    "key": "vir",
+    "name": "LeanUI · lean-vir",
+    "clicks": 1000,
+    "ms": 29212.60000000056,
+    "gen": 1000,
+    "pop": 145,
+    "board": "4e6b3290",
+    "shown": "4e6b3290"
+   }
+  ],
+  "missing": [],
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+  "memory64": true,
+  "crossOriginIsolated": true,
+  "seconds": 37.127
+ },
+ "table": {
+  "scenario": "table",
+  "runs": 3,
+  "same": true,
+  "rows": [
+   {
+    "op": "create1k",
+    "desc": "create 1,000 rows",
+    "ms": {
+     "vanilla": 8.924999999813735,
+     "wasm64": 12.450000000186265,
+     "vir": 311.55000000074506
+    },
+    "sig": {
+     "vanilla": "00cc092f",
+     "wasm64": "00cc092f",
+     "vir": "00cc092f"
+    },
+    "same": true
+   },
+   {
+    "op": "replace1k",
+    "desc": "replace all 1,000 rows",
+    "ms": {
+     "vanilla": 22.03000000026077,
+     "wasm64": 30.929999999701977,
+     "vir": 441.8549999995157
+    },
+    "sig": {
+     "vanilla": "7ddd1c8c",
+     "wasm64": "7ddd1c8c",
+     "vir": "7ddd1c8c"
+    },
+    "same": true
+   },
+   {
+    "op": "update10th",
+    "desc": "update every 10th of 1,000 rows",
+    "ms": {
+     "vanilla": 0.4850000003352761,
+     "wasm64": 4.150000000372529,
+     "vir": 40.375
+    },
+    "sig": {
+     "vanilla": "ddee60d5",
+     "wasm64": "ddee60d5",
+     "vir": "ddee60d5"
+    },
+    "same": true
+   },
+   {
+    "op": "select",
+    "desc": "highlight a row (of 1,000)",
+    "ms": {
+     "vanilla": 0.1699999999254942,
+     "wasm64": 3.300000000745058,
+     "vir": 14.839999999850988
+    },
+    "sig": {
+     "vanilla": "efc93d5b",
+     "wasm64": "efc93d5b",
+     "vir": "efc93d5b"
+    },
+    "same": true
+   },
+   {
+    "op": "swap",
+    "desc": "swap 2 of 1,000 rows",
+    "ms": {
+     "vanilla": 0.27499999944120646,
+     "wasm64": 4.055000000633299,
+     "vir": 68.81500000040978
+    },
+    "sig": {
+     "vanilla": "31aee52f",
+     "wasm64": "31aee52f",
+     "vir": "31aee52f"
+    },
+    "same": true
+   },
+   {
+    "op": "remove",
+    "desc": "remove one of 1,000 rows",
+    "ms": {
+     "vanilla": 0.2549999998882413,
+     "wasm64": 2.9050000002607703,
+     "vir": 37.84499999973923
+    },
+    "sig": {
+     "vanilla": "2884d06d",
+     "wasm64": "2884d06d",
+     "vir": "2884d06d"
+    },
+    "same": true
+   },
+   {
+    "op": "create10k",
+    "desc": "create 10,000 rows",
+    "ms": {
+     "vanilla": 77.09499999973923,
+     "wasm64": 131.40500000026077,
+     "vir": 3434.7000000001863
+    },
+    "sig": {
+     "vanilla": "60ef95db",
+     "wasm64": "60ef95db",
+     "vir": "60ef95db"
+    },
+    "same": true
+   },
+   {
+    "op": "append1k",
+    "desc": "append 1,000 rows to 1,000",
+    "ms": {
+     "vanilla": 7.804999999701977,
+     "wasm64": 16.53000000026077,
+     "vir": 362.28000000026077
+    },
+    "sig": {
+     "vanilla": "ad71bd25",
+     "wasm64": "ad71bd25",
+     "vir": "ad71bd25"
+    },
+    "same": true
+   },
+   {
+    "op": "clear1k",
+    "desc": "clear 1,000 rows",
+    "ms": {
+     "vanilla": 11.544999999925494,
+     "wasm64": 20.59499999973923,
+     "vir": 118.67500000074506
+    },
+    "sig": {
+     "vanilla": "811c9dc5",
+     "wasm64": "811c9dc5",
+     "vir": "811c9dc5"
+    },
+    "same": true
+   }
+  ],
+  "missing": [],
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+  "memory64": true,
+  "crossOriginIsolated": true,
+  "seconds": 139.476
+ },
+ "checks": [
+  {
+   "name": "life 1000: all three ran",
+   "ok": true
+  },
+  {
+   "name": "life 1000: same board",
+   "ok": true
+  },
+  {
+   "name": "life 1000: vanilla = native",
+   "ok": true
+  },
+  {
+   "name": "life 1000: wasm64 = native",
+   "ok": true
+  },
+  {
+   "name": "life 1000: vir = native",
+   "ok": true
+  },
+  {
+   "name": "table: all three ran every operation",
+   "ok": true
+  },
+  {
+   "name": "table: same rows after every operation",
+   "ok": true
+  }
+ ],
+ "errors": []
+}

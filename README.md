@@ -141,6 +141,14 @@ Natively, Lean selects a row in 0.08 ms and creates 1,000 rows in 0.63 ms (updat
 and encoding). The benchmark app is ready about 25 ms after navigation in Chromium and weighs
 168 KB with brotli (wasm, glue and runtime).
 
+**The race** ([`/race/`](bench/race/), on the site too) runs the benchmark app and a 1,000-cell
+Game of Life three ways side by side, timed live in your browser and checked against each other:
+hand-written JavaScript, LeanUI compiled to wasm64, and the same Lean interpreted by
+[lean-vir](https://github.com/ejgallego/lean-vir) (Lean's IR interpreter in WebAssembly; built
+apart, in [`vir/`](vir/README.md), for the benchmarks only). Interpreted, the Lean side of a click
+takes about 13× as long in the keyed operations and 48× in Life (a cloud VM; see
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md#lean-vir-the-same-lean-interpreted)).
+
 ## Writing apps
 
 A few idioms cover most of what an app needs; `examples/` has each of them in a real program.
@@ -232,7 +240,8 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 ./.lake/build/bin/leanui-editor-tests     # the photo editor: image operations, PNG, jobs, the program
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
-                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth
+                                          # apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth,
+                                          # race (vanilla, wasm64 and lean-vir must agree)
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
 ```
@@ -242,9 +251,10 @@ node tests/browser/bench.mjs              # the benchmark (Chromium traces); sel
 ## Continuous integration and deployment
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the native build and every test above on each push
-and pull request, then the browser suites against the wasm64 builds. On `main` it deploys the
-LeanUI site to Cloudflare: a Worker in front of a container that runs the native `leanui-site`,
-so pages are server-rendered and Safari gets server-driven sessions. Setup and secrets:
+and pull request, then the browser suites against the wasm64 builds (and, for the race, the
+lean-vir builds). On `main` it deploys the LeanUI site to Cloudflare: a Worker in front of a
+container that runs the native `leanui-site`, so pages are server-rendered and Safari gets
+server-driven sessions. Setup and secrets:
 [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Documentation
@@ -256,6 +266,7 @@ so pages are server-rendered and Safari gets server-driven sessions. Setup and s
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): performance, memory, startup, method
 - [docs/SERVER.md](docs/SERVER.md): the native server, server rendering, server-driven sessions
 - [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md): the wasm64 toolchain
+- [vir/README.md](vir/README.md): the same apps on lean-vir, for the benchmarks
 - [docs/DEPLOY.md](docs/DEPLOY.md): CI, and the site on Cloudflare Containers
 
 ## License

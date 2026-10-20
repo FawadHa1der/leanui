@@ -1,11 +1,14 @@
 // LeanUI benchmark harness: the js-framework-benchmark keyed operations, run against LeanUI
 // (examples/Bench.lean compiled to wasm64) and a hand-written vanilla reference
-// (bench/vanilla/index.html) with the same markup, stylesheet and labels.
+// (bench/vanilla/index.html) with the same markup, stylesheet and labels; and, when asked for, the
+// same Lean app run by lean-vir's interpreter ("leanvir": dist/vir/bench, built by vir/build.sh).
 //
-//   node tests/browser/bench.mjs [--engines chromium,firefox] [--runs 7] [--impls leanui,vanilla]
-//                                [--json results.json] [--leanui-dir dist/bench] [--only create1k,...]
-//                                [--cpu-only]   (no startup and memory runs)
+//   node tests/browser/bench.mjs [--engines chromium,firefox] [--runs 7] [--impls leanui,vanilla,leanvir]
+//                                [--json results.json] [--leanui-dir dist/bench] [--leanvir-dir dist/vir/bench]
+//                                [--only create1k,...] [--cpu-only]   (no startup and memory runs)
 //
+// The default --impls is leanui,vanilla: leanvir needs the separate lean-vir build, and the
+// interpreter's runs take most of the time.
 // Run it under the host browser lock (one heavy browser at a time). It serves the pages itself.
 //
 // Chromium: every measurement is one traced click. "script" is the click's EventDispatch (the
@@ -37,17 +40,23 @@ const JSON_OUT = opt("json", null);
 const ONLY = opt("only", null);
 // another LeanUI build to measure in place of dist/bench (e.g. an allocator variant)
 const LEANUI_DIR = opt("leanui-dir", "dist/bench").replace(/\/?$/, "/");
+const LEANVIR_DIR = opt("leanvir-dir", "dist/vir/bench").replace(/\/?$/, "/");
 const SKIP_CPU = argv.includes("--no-cpu");
 // only the per-operation CPU times (no startup or memory runs), e.g. for A/B runs of two builds
 const CPU_ONLY = argv.includes("--cpu-only");
 // ms of busy-waiting in the page before each measured click: an idle renderer is often moved to an
-// efficiency core, which makes single-click timings bimodal; spinning first applies to both alike
+// efficiency core, which makes single-click timings bimodal; spinning first applies to all alike
 const SPIN = +opt("spin", "30");
 
-// ---------- a static server for dist/bench (LeanUI), bench/vanilla and bench/bench.css ----------
-const MOUNTS = [["/leanui/", LEANUI_DIR], ["/vanilla/", "bench/vanilla/"], ["/", "bench/"]];
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".css": "text/css", ".json": "application/json" };
-let served = 0;
+// ---------- a static server: each implementation at /<impl>/, and bench/bench.css ----------
+const DIRS = { leanui: LEANUI_DIR, vanilla: "bench/vanilla/", leanvir: LEANVIR_DIR };
+for (const impl of IMPLS) if (!DIRS[impl] || !fs.existsSync(path.join(ROOT, DIRS[impl], "index.html"))) {
+  console.error(`no ${impl} build at ${DIRS[impl] ?? "?"} (leanui: tools/build-app.sh BenchApp bench; leanvir: vir/build.sh bench)`);
+  process.exit(2);
+}
+const MOUNTS = [...Object.entries(DIRS).map(([impl, dir]) => [`/${impl}/`, dir]), ["/", "bench/"]];
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".css": "text/css", ".json": "application/json" };
+const served = [];   // every file served, in order: startup() counts what one page load fetched
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(new URL(req.url, "http://x").pathname);
   for (const [prefix, dir] of MOUNTS) {
@@ -56,17 +65,16 @@ const server = http.createServer((req, res) => {
     if (!file.startsWith(path.join(ROOT, dir))) break;
     if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
     if (!fs.existsSync(file)) break;
-    const body = fs.readFileSync(file);
-    served += body.length;
+    served.push(file);
     res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream", "cache-control": "no-store" });
-    res.end(body);
+    res.end(fs.readFileSync(file));
     return;
   }
   res.writeHead(404); res.end("not found");
 });
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const BASE = `http://127.0.0.1:${server.address().port}`;
-const PAGES = { leanui: `${BASE}/leanui/index.html`, vanilla: `${BASE}/vanilla/index.html` };
+const PAGES = Object.fromEntries(Object.keys(DIRS).map((impl) => [impl, `${BASE}/${impl}/index.html`]));
 
 // ---------- the operations (js-framework-benchmark CPU suite, keyed): bench/ops.mjs ----------
 const row = (i, cell) => `#tbody tr:nth-child(${i}) td:nth-child(${cell}) a`;
@@ -99,7 +107,7 @@ async function tracedClick(page, cdp, sel) {
     traceConfig: { recordMode: "recordAsMuchAsPossible", includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline"] },
   });
   await page.evaluate((ms) => { for (const end = performance.now() + ms; performance.now() < end; ); }, SPIN);
-  await page.click(sel, { timeout: 10000 });
+  await page.click(sel, { timeout: 60000 });   // lean-vir takes seconds for 10,000 rows
   await settle(page);
   const done = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
   await cdp.send("Tracing.end");
@@ -152,8 +160,10 @@ async function runOp(browser, engine, impl, op) {
   return Object.fromEntries(keys.map((k) => [k, r2(median(samples.map((s) => s[k])))]));
 }
 
-// Memory after a sequence of operations (Chromium: JS heap after a full GC, DOM node count, and
-// for LeanUI the wasm linear memory, which only grows).
+// Memory after a sequence of operations (Chromium: JS heap after a full GC, DOM node count, the
+// ArrayBuffer backing stores, wasm memories included, and for LeanUI's wasm64 build its linear
+// memory, which only grows). lean-vir's createProgram does not expose its memory: wasmMB is null
+// (not available) for leanvir, whose wasm memory is counted in buffersMB only.
 const MEMORY = [
   { name: "ready", desc: "after load", steps: [] },
   { name: "run1k", desc: "after creating 1,000 rows", steps: ["#run"] },
@@ -171,8 +181,11 @@ async function memory(browser, impl) {
     await cdp.send("Performance.enable");
     const { metrics } = await cdp.send("Performance.getMetrics");
     const get = (n) => metrics.find((x) => x.name === n)?.value ?? 0;
-    const wasm = await page.evaluate(() => window.__leanui ? window.__leanui.stats.heapBytes || 0 : 0);
-    out[m.name] = { jsHeapMB: r2(get("JSHeapUsedSize") / 1048576), wasmMB: r2(wasm / 1048576), domNodes: get("Nodes") };
+    const { backingStorageSize } = await cdp.send("Runtime.getHeapUsage");
+    // heapBytes: set by the wasm64 host on every update; lean-vir's host never sets it
+    const wasm = await page.evaluate(() => window.__leanui ? window.__leanui.stats.heapBytes ?? null : 0);
+    out[m.name] = { jsHeapMB: r2(get("JSHeapUsedSize") / 1048576), wasmMB: wasm === null ? null : r2(wasm / 1048576),
+      buffersMB: r2(backingStorageSize / 1048576), domNodes: get("Nodes") };
     await page.close();
   }
   return out;
@@ -182,20 +195,21 @@ async function memory(browser, impl) {
 async function startup(browser, impl) {
   const times = [], boots = [];
   for (let i = 0; i < RUNS; i++) {
-    const before = served;
+    const first = served.length;
     const { page } = await open(browser, impl);
     times.push(await page.evaluate(() => window.__ready));
     boots.push(await page.evaluate(() => window.__leanui ? window.__leanui.bootMs : 0));
-    if (i === 0) var bytes = served - before;
+    if (i === 0) var files = served.slice(first);
     await page.close();
   }
-  const files = impl === "leanui" ? ["index.html", "leanui.js", "app.js", "app.wasm"].map((f) => LEANUI_DIR + f).concat(["bench/bench.css"]) : ["bench/vanilla/index.html", "bench/bench.css"];
+  // the files of the first load: their bytes as served, and brotli (quality 11) of each one once
+  const bytes = files.reduce((n, f) => n + fs.statSync(f).size, 0);
   let brotli = 0;
-  for (const f of files) brotli += zlib.brotliCompressSync(fs.readFileSync(path.join(ROOT, f)), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }).length;
+  for (const f of new Set(files)) brotli += zlib.brotliCompressSync(fs.readFileSync(f), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }).length;
   return { readyMs: r2(median(times)), bootMs: r2(median(boots)), transferKB: r2(bytes / 1024), brotliKB: r2(brotli / 1024) };
 }
 
-// Both implementations must build the same table (same LCG, same markup).
+// Every implementation must build the same table (same LCG, same markup).
 async function crossCheck(browser) {
   const texts = {};
   for (const impl of IMPLS) {
@@ -234,17 +248,19 @@ for (const engine of ENGINES) {
 server.close();
 
 // ---------- report ----------
+// ratios: each LeanUI build against vanilla, and the interpreter against the compiled build
+const RATIOS = [["leanui", "vanilla"], ["leanvir", "vanilla"], ["leanvir", "leanui"]].filter((p) => p.every((i) => IMPLS.includes(i)));
+const mb = (x) => (x === null ? "n/a" : `${x} MB`);
 const lines = [];
 for (const [engine, R] of Object.entries(results.engines)) {
   lines.push(`\n## ${engine} ${R.version}  (median of ${RUNS} runs${R.sameTables === undefined ? "" : `; identical tables: ${R.sameTables}`})\n`);
   const metric = engine === "chromium" ? ["total", "script", "render"] : ["layout", "script"];
-  const head = ["operation", ...IMPLS.flatMap((i) => metric.map((m) => `${i} ${m}`))];
-  if (IMPLS.includes("leanui") && IMPLS.includes("vanilla")) head.push(`leanui/vanilla (${metric[0]})`);
+  const head = ["operation", ...IMPLS.flatMap((i) => metric.map((m) => `${i} ${m}`)), ...RATIOS.map(([a, b]) => `${a}/${b} (${metric[0]})`)];
   lines.push("| " + head.join(" | ") + " |", "|" + head.map(() => "---").join("|") + "|");
   for (const op of SKIP_CPU ? [] : OPS) {
     const c = R.cpu[op.name];
-    const cells = [op.desc, ...IMPLS.flatMap((i) => metric.map((m) => `${c[i][m].toFixed(2)} ms`))];
-    if (IMPLS.includes("leanui") && IMPLS.includes("vanilla")) cells.push(`${(c.leanui[metric[0]] / c.vanilla[metric[0]]).toFixed(2)}×`);
+    const cells = [op.desc, ...IMPLS.flatMap((i) => metric.map((m) => `${c[i][m].toFixed(2)} ms`)),
+      ...RATIOS.map(([a, b]) => `${(c[a][metric[0]] / c[b][metric[0]]).toFixed(2)}×`)];
     lines.push("| " + cells.join(" | ") + " |");
   }
   if (Object.keys(R.startup).length) {
@@ -252,8 +268,8 @@ for (const [engine, R] of Object.entries(results.engines)) {
     for (const k of ["readyMs", "bootMs", "transferKB", "brotliKB"]) lines.push(`| ${k} | ` + IMPLS.map((i) => R.startup[i][k]).join(" | ") + " |");
   }
   if (Object.keys(R.memory).length) {
-    lines.push("", "| memory | " + IMPLS.map((i) => `${i} JS heap / wasm / DOM nodes`).join(" | ") + " |", "|---|" + IMPLS.map(() => "---").join("|") + "|");
-    for (const m of MEMORY) lines.push(`| ${m.desc} | ` + IMPLS.map((i) => { const x = R.memory[i][m.name]; return `${x.jsHeapMB} MB / ${x.wasmMB} MB / ${x.domNodes}`; }).join(" | ") + " |");
+    lines.push("", "| memory | " + IMPLS.map((i) => `${i} JS heap / wasm / array buffers / DOM nodes`).join(" | ") + " |", "|---|" + IMPLS.map(() => "---").join("|") + "|");
+    for (const m of MEMORY) lines.push(`| ${m.desc} | ` + IMPLS.map((i) => { const x = R.memory[i][m.name]; return `${mb(x.jsHeapMB)} / ${mb(x.wasmMB)} / ${mb(x.buffersMB)} / ${x.domNodes}`; }).join(" | ") + " |");
   }
 }
 console.log(lines.join("\n"));

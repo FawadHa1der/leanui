@@ -1,0 +1,283 @@
+{
+ "date": "2026-10-20T18:50:37.702Z",
+ "runs": 7,
+ "engines": {
+  "chromium": {
+   "version": "141.0.7390.37",
+   "cpu": {
+    "create1k": {
+     "leanui": {
+      "total": 138.95,
+      "script": 17.03,
+      "render": 121.3
+     },
+     "vanilla": {
+      "total": 128.43,
+      "script": 8.49,
+      "render": 116.22
+     },
+     "leanvir": {
+      "total": 517.5,
+      "script": 430.85,
+      "render": 86.65
+     }
+    },
+    "replace1k": {
+     "leanui": {
+      "total": 141.34,
+      "script": 38.63,
+      "render": 100.44
+     },
+     "vanilla": {
+      "total": 153.62,
+      "script": 18.59,
+      "render": 135.35
+     },
+     "leanvir": {
+      "total": 697.3,
+      "script": 571.82,
+      "render": 134.18
+     }
+    },
+    "update10th": {
+     "leanui": {
+      "total": 32.87,
+      "script": 5.54,
+      "render": 27.07
+     },
+     "vanilla": {
+      "total": 25.65,
+      "script": 0.47,
+      "render": 25.17
+     },
+     "leanvir": {
+      "total": 62.61,
+      "script": 42.95,
+      "render": 19.49
+     }
+    },
+    "select": {
+     "leanui": {
+      "total": 6.53,
+      "script": 1.66,
+      "render": 5.03
+     },
+     "vanilla": {
+      "total": 4.74,
+      "script": 0.11,
+      "render": 4.6
+     },
+     "leanvir": {
+      "total": 17.7,
+      "script": 13.62,
+      "render": 4.65
+     }
+    },
+    "swap": {
+     "leanui": {
+      "total": 34.22,
+      "script": 3.76,
+      "render": 30.35
+     },
+     "vanilla": {
+      "total": 29.45,
+      "script": 0.18,
+      "render": 29.29
+     },
+     "leanvir": {
+      "total": 106.09,
+      "script": 70.15,
+      "render": 32.02
+     }
+    },
+    "remove": {
+     "leanui": {
+      "total": 31.82,
+      "script": 2.02,
+      "render": 29.52
+     },
+     "vanilla": {
+      "total": 35.23,
+      "script": 0.26,
+      "render": 35.01
+     },
+     "leanvir": {
+      "total": 83.91,
+      "script": 55.18,
+      "render": 32.74
+     }
+    },
+    "create10k": {
+     "leanui": {
+      "total": 1694.62,
+      "script": 218.07,
+      "render": 1507.61
+     },
+     "vanilla": {
+      "total": 1241.01,
+      "script": 91.47,
+      "render": 1156.88
+     },
+     "leanvir": {
+      "total": 4818.93,
+      "script": 3912.04,
+      "render": 890.51
+     }
+    },
+    "append1k": {
+     "leanui": {
+      "total": 186.1,
+      "script": 42.15,
+      "render": 139.37
+     },
+     "vanilla": {
+      "total": 118.25,
+      "script": 8,
+      "render": 110.29
+     },
+     "leanvir": {
+      "total": 563.9,
+      "script": 424.93,
+      "render": 131.88
+     }
+    },
+    "clear1k": {
+     "leanui": {
+      "total": 16.23,
+      "script": 14.68,
+      "render": 1.4
+     },
+     "vanilla": {
+      "total": 11.16,
+      "script": 9.83,
+      "render": 1.26
+     },
+     "leanvir": {
+      "total": 98.21,
+      "script": 96.91,
+      "render": 1.23
+     }
+    }
+   },
+   "memory": {
+    "leanui": {
+     "ready": {
+      "jsHeapMB": 1.46,
+      "wasmMB": 16,
+      "buffersMB": 16.09,
+      "domNodes": 47
+     },
+     "run1k": {
+      "jsHeapMB": 1.94,
+      "wasmMB": 16,
+      "buffersMB": 16.09,
+      "domNodes": 11057
+     },
+     "update5": {
+      "jsHeapMB": 1.95,
+      "wasmMB": 16,
+      "buffersMB": 16.09,
+      "domNodes": 11057
+     },
+     "runClear5": {
+      "jsHeapMB": 1.65,
+      "wasmMB": 16,
+      "buffersMB": 16.09,
+      "domNodes": 57
+     },
+     "run10k": {
+      "jsHeapMB": 5.58,
+      "wasmMB": 27.75,
+      "buffersMB": 27.84,
+      "domNodes": 110057
+     }
+    },
+    "vanilla": {
+     "ready": {
+      "jsHeapMB": 1.01,
+      "wasmMB": 0,
+      "buffersMB": 0,
+      "domNodes": 76
+     },
+     "run1k": {
+      "jsHeapMB": 1.19,
+      "wasmMB": 0,
+      "buffersMB": 0,
+      "domNodes": 11076
+     },
+     "update5": {
+      "jsHeapMB": 1.21,
+      "wasmMB": 0,
+      "buffersMB": 0,
+      "domNodes": 11076
+     },
+     "runClear5": {
+      "jsHeapMB": 1.06,
+      "wasmMB": 0,
+      "buffersMB": 0,
+      "domNodes": 76
+     },
+     "run10k": {
+      "jsHeapMB": 2.54,
+      "wasmMB": 0,
+      "buffersMB": 0,
+      "domNodes": 110076
+     }
+    },
+    "leanvir": {
+     "ready": {
+      "jsHeapMB": 1.78,
+      "wasmMB": null,
+      "buffersMB": 7.05,
+      "domNodes": 47
+     },
+     "run1k": {
+      "jsHeapMB": 2.22,
+      "wasmMB": null,
+      "buffersMB": 9.18,
+      "domNodes": 11057
+     },
+     "update5": {
+      "jsHeapMB": 2.28,
+      "wasmMB": null,
+      "buffersMB": 9.18,
+      "domNodes": 11057
+     },
+     "runClear5": {
+      "jsHeapMB": 1.98,
+      "wasmMB": null,
+      "buffersMB": 9.68,
+      "domNodes": 57
+     },
+     "run10k": {
+      "jsHeapMB": 5.86,
+      "wasmMB": null,
+      "buffersMB": 26.99,
+      "domNodes": 110057
+     }
+    }
+   },
+   "startup": {
+    "leanui": {
+     "readyMs": 166.5,
+     "bootMs": 126,
+     "transferKB": 1302.18,
+     "brotliKB": 175.02
+    },
+    "vanilla": {
+     "readyMs": 18,
+     "bootMs": 0,
+     "transferKB": 5.94,
+     "brotliKB": 2.06
+    },
+    "leanvir": {
+     "readyMs": 277.4,
+     "bootMs": 252.2,
+     "transferKB": 1719.25,
+     "brotliKB": 272
+    }
+   },
+   "sameTables": true
+  }
+ }
+}

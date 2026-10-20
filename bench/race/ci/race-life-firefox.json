@@ -1,0 +1,41 @@
+{
+ "scenario": "life",
+ "steps": 1000,
+ "same": true,
+ "rows": [
+  {
+   "key": "vanilla",
+   "name": "Vanilla JavaScript",
+   "clicks": 1000,
+   "ms": 87.59999999999991,
+   "gen": 1000,
+   "pop": 145,
+   "board": "4e6b3290",
+   "shown": "4e6b3290"
+  },
+  {
+   "key": "wasm64",
+   "name": "LeanUI · wasm64",
+   "clicks": 1000,
+   "ms": 725.7400000000016,
+   "gen": 1000,
+   "pop": 145,
+   "board": "4e6b3290",
+   "shown": "4e6b3290"
+  },
+  {
+   "key": "vir",
+   "name": "LeanUI · lean-vir",
+   "clicks": 1000,
+   "ms": 34673.099999999846,
+   "gen": 1000,
+   "pop": 145,
+   "board": "4e6b3290",
+   "shown": "4e6b3290"
+  }
+ ],
+ "missing": [],
+ "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+ "memory64": true,
+ "crossOriginIsolated": true
+}

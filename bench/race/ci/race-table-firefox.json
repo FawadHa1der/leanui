@@ -1,0 +1,146 @@
+{
+ "scenario": "table",
+ "runs": 3,
+ "same": true,
+ "rows": [
+  {
+   "op": "create1k",
+   "desc": "create 1,000 rows",
+   "ms": {
+    "vanilla": 9.820000000000164,
+    "wasm64": 16.11999999999989,
+    "vir": 356.2600000000002
+   },
+   "sig": {
+    "vanilla": "00cc092f",
+    "wasm64": "00cc092f",
+    "vir": "00cc092f"
+   },
+   "same": true
+  },
+  {
+   "op": "replace1k",
+   "desc": "replace all 1,000 rows",
+   "ms": {
+    "vanilla": 22.400000000001455,
+    "wasm64": 44.36000000000058,
+    "vir": 567.0200000000004
+   },
+   "sig": {
+    "vanilla": "7ddd1c8c",
+    "wasm64": "7ddd1c8c",
+    "vir": "7ddd1c8c"
+   },
+   "same": true
+  },
+  {
+   "op": "update10th",
+   "desc": "update every 10th of 1,000 rows",
+   "ms": {
+    "vanilla": 0.7799999999988358,
+    "wasm64": 6.940000000002328,
+    "vir": 57.93999999999505
+   },
+   "sig": {
+    "vanilla": "ddee60d5",
+    "wasm64": "ddee60d5",
+    "vir": "ddee60d5"
+   },
+   "same": true
+  },
+  {
+   "op": "select",
+   "desc": "highlight a row (of 1,000)",
+   "ms": {
+    "vanilla": 0.22000000000116415,
+    "wasm64": 2.7600000000020373,
+    "vir": 23.119999999995343
+   },
+   "sig": {
+    "vanilla": "efc93d5b",
+    "wasm64": "efc93d5b",
+    "vir": "efc93d5b"
+   },
+   "same": true
+  },
+  {
+   "op": "swap",
+   "desc": "swap 2 of 1,000 rows",
+   "ms": {
+    "vanilla": 0.6599999999962165,
+    "wasm64": 5.69999999999709,
+    "vir": 82.16000000000349
+   },
+   "sig": {
+    "vanilla": "31aee52f",
+    "wasm64": "31aee52f",
+    "vir": "31aee52f"
+   },
+   "same": true
+  },
+  {
+   "op": "remove",
+   "desc": "remove one of 1,000 rows",
+   "ms": {
+    "vanilla": 0.5400000000008731,
+    "wasm64": 3.6199999999953434,
+    "vir": 42.779999999998836
+   },
+   "sig": {
+    "vanilla": "2884d06d",
+    "wasm64": "2884d06d",
+    "vir": "2884d06d"
+   },
+   "same": true
+  },
+  {
+   "op": "create10k",
+   "desc": "create 10,000 rows",
+   "ms": {
+    "vanilla": 100.29999999999563,
+    "wasm64": 208.59999999999127,
+    "vir": 3740.8600000000006
+   },
+   "sig": {
+    "vanilla": "60ef95db",
+    "wasm64": "60ef95db",
+    "vir": "60ef95db"
+   },
+   "same": true
+  },
+  {
+   "op": "append1k",
+   "desc": "append 1,000 rows to 1,000",
+   "ms": {
+    "vanilla": 9.360000000000582,
+    "wasm64": 26.460000000006403,
+    "vir": 472.0399999999936
+   },
+   "sig": {
+    "vanilla": "ad71bd25",
+    "wasm64": "ad71bd25",
+    "vir": "ad71bd25"
+   },
+   "same": true
+  },
+  {
+   "op": "clear1k",
+   "desc": "clear 1,000 rows",
+   "ms": {
+    "vanilla": 15.5,
+    "wasm64": 21.45999999999185,
+    "vir": 107.77999999999884
+   },
+   "sig": {
+    "vanilla": "811c9dc5",
+    "wasm64": "811c9dc5",
+    "vir": "811c9dc5"
+   },
+   "same": true
+  }
+ ],
+ "missing": [],
+ "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+ "memory64": true,
+ "crossOriginIsolated": true
+}

@@ -93,7 +93,10 @@ external declaration 'LeanUI.pushU32'") unless the library is loaded:
 
 (`tests/browser/keyed-dom.mjs` runs `tests/KeyedDom.lean` this way). A downstream library with
 `precompileModules = true` gets it loaded automatically, in `lake build` and in the editor.
-Views and `Html.render` do not touch a `Buf` and stay interpretable without it. -/
+Views and `Html.render` do not touch a `Buf` and stay interpretable without it.
+
+Both are `expose`d: lean-vir (`vir/`), which interprets everything, runs their Lean bodies, and
+it needs to see them from other modules. -/
 
 /-- Append a little-endian `u32`. -/
 @[extern c inline "({ lean_object *a_ = #1; uint32_t x_ = #2; size_t n_ = lean_sarray_size(a_); \
@@ -104,7 +107,7 @@ Views and `Html.render` do not touch a `Buf` and stay interpretable without it. 
   } else { \
     a_ = lean_byte_array_push(a_, (uint8_t)x_); a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 8)); \
     a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 16)); a_ = lean_byte_array_push(a_, (uint8_t)(x_ >> 24)); \
-  } a_; })"]
+  } a_; })", expose]
 def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
   b |>.push x.toUInt8 |>.push (x >>> 8).toUInt8 |>.push (x >>> 16).toUInt8 |>.push (x >>> 24).toUInt8
 
@@ -119,7 +122,7 @@ def pushU32 (b : ByteArray) (x : UInt32) : ByteArray :=
     extern lean_object *lean_byte_array_copy_slice(lean_object *, lean_object *, lean_object *, lean_object *, lean_object *, uint8_t); \
     lean_object *t_ = lean_string_to_utf8(s_); \
     a_ = lean_byte_array_copy_slice(t_, lean_box(0), a_, lean_box(n_), lean_box(k_), 0); lean_dec_ref(t_); \
-  } a_; })"]
+  } a_; })", expose]
 def appendUtf8 (b : ByteArray) (s : @& String) : ByteArray := b ++ s.toUTF8
 
 /-- A command buffer under construction, plus the session's interned names. -/

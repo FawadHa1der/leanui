@@ -2,8 +2,9 @@
 # Every browser suite, in headless Chromium and Firefox; exit code 0 iff all of them passed.
 #   tests/browser/run-all.sh [--build | --build-only]
 # Needs the native build (`lake build`) and the wasm builds of the apps below; --build makes them
-# first (tools/build-app.sh, which needs the archives from toolchain/build-archives.sh), and
-# --build-only makes them and stops. Playwright comes from tests/browser/playwright.mjs
+# first (tools/build-app.sh, which needs the archives from toolchain/build-archives.sh; then the
+# lean-vir builds, vir/build.sh, and the race page, bench/race/build.sh), and --build-only makes
+# them and stops. Playwright comes from tests/browser/playwright.mjs
 # (LEANUI_PLAYWRIGHT_FROM). On a shared machine, run it under the host browser lock.
 # LEANUI_CORPUS: where the fuzz corpora go (default .lake/corpus).
 set -uo pipefail
@@ -12,10 +13,12 @@ BIN=.lake/build/bin PORT=5331
 if [ "${1:-}" = --build ] || [ "${1:-}" = --build-only ]; then
   for app in "TodoMVCApp todomvc" "SiteApp site" "CounterApp counter" "BenchApp bench" "EffectsApp effects" \
              "PixelsApp pixels" "EditorApp editor" "VideoApp editor/video" "EditorBenchApp editor-bench" \
-             "LeanUI.Testing.DepthProbe depth-probe"; do
+             "LeanUI.Testing.DepthProbe depth-probe" "LifeApp life"; do
     read -r mod name <<< "$app"
     tools/build-app.sh "$mod" "$name" || { echo "build of $name failed"; exit 1; }
   done
+  vir/build.sh || { echo "lean-vir build failed"; exit 1; }
+  bench/race/build.sh || { echo "race page build failed"; exit 1; }
   [ "$1" = --build-only ] && exit 0
 fi
 CORPUS="${LEANUI_CORPUS:-.lake/corpus}"
@@ -51,4 +54,6 @@ run editor-firefox node tests/browser/editor.mjs "http://127.0.0.1:$PORT/editor/
 run video-chromium node tests/browser/video.mjs "http://127.0.0.1:$PORT/editor/video/index.html" chromium
 run video-firefox node tests/browser/video.mjs "http://127.0.0.1:$PORT/editor/video/index.html" firefox
 run depth node tests/browser/depth.mjs "http://127.0.0.1:$PORT/depth-probe/index.html"
+run race-chromium node tests/browser/race.mjs "http://127.0.0.1:$PORT/" chromium
+run race-firefox node tests/browser/race.mjs "http://127.0.0.1:$PORT/" firefox
 if [ ${#failed[@]} -eq 0 ]; then echo "all browser suites passed"; else echo "failed: ${failed[*]}"; exit 1; fi

@@ -1,4 +1,4 @@
-# Build and test everything (native, then wasm64 in Chromium and Firefox); on main, deploy the
+# Build and test everything (native, then wasm64 and lean-vir in Chromium and Firefox); on main, deploy the
 # LeanUI site to Cloudflare Containers (also on a manual run of main). Setup and secrets: docs/DEPLOY.md.
 name: CI
 
@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    # labelled: adding the `bench` label runs the editor benchmarks (below)
+    # labelled: adding the `bench` label runs the benchmarks (below)
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
@@ -21,24 +21,27 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
 
       # Caches are restored and saved explicitly: actions/cache saves only when the whole job
       # succeeds, and the archives below take half an hour to rebuild.
-      - name: Restore the Lean toolchain
+      # Two Lean releases: the main build's (lean-toolchain) and lean-vir's (vir/lean-toolchain);
+      # elan's lake runs the one its directory names.
+      - name: Restore the Lean toolchains
         id: elan
         uses: actions/cache/restore@v6
         with:
           path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
-      - name: Install the Lean toolchain
+          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'vir/lean-toolchain') }}
+      - name: Install the Lean toolchains
         if: steps.elan.outputs.cache-hit != 'true'
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
-      - name: Save the Lean toolchain
+          "$HOME/.elan/bin/elan" toolchain install "$(cat vir/lean-toolchain)"
+      - name: Save the Lean toolchains
         if: steps.elan.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
@@ -101,7 +104,17 @@ jobs:
           path: .toolchain/ccache
           key: ccache-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-${{ runner.os }}-
-      - name: Build the apps (wasm64)
+      # The lean-vir build (vir/build.sh, apart from the main build: vir/README.md): lean-vir's
+      # checkout and build, its prebuilt interpreter, and LeanUI and the apps compiled by its Lean.
+      - name: Restore the lean-vir build
+        uses: actions/cache/restore@v6
+        with:
+          path: vir/.lake
+          key: vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-${{ hashFiles('vir/lakefile.toml', 'vir/lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-${{ hashFiles('vir/lakefile.toml', 'vir/lake-manifest.json') }}-
+            vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-
+      - name: Build the apps (wasm64, lean-vir) and the race page
         run: tests/browser/run-all.sh --build-only
       - name: Own the compiler cache (Docker wrote it as root)
         run: sudo chown -R "$(id -u):$(id -g)" .toolchain/ccache
@@ -110,6 +123,11 @@ jobs:
         with:
           path: .toolchain/ccache
           key: ccache-${{ runner.os }}-${{ github.sha }}
+      - name: Save the lean-vir build
+        uses: actions/cache/save@v6
+        with:
+          path: vir/.lake
+          key: vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-${{ hashFiles('vir/lakefile.toml', 'vir/lake-manifest.json') }}-${{ github.sha }}
 
       - uses: actions/setup-node@v7
         with:
@@ -129,7 +147,7 @@ jobs:
         run: tests/browser/run-all.sh
 
       # The editor's and the video lab's benchmarks (docs/BENCHMARKS.md, "The photo editor"): only on a pull request
-      # labelled `bench`, and they never fail the build. The JSON goes up as an artifact.
+      # labelled `bench`, and they never fail the build. The JSON goes up as the `bench` artifact.
       - name: Editor benchmarks (Chromium, Firefox)
         if: contains(github.event.pull_request.labels.*.name, 'bench')
         continue-on-error: true
@@ -146,10 +164,25 @@ jobs:
           node tests/browser/editor-perf.mjs http://127.0.0.1:5332/editor/index.html firefox --quick --out "$RUNNER_TEMP/bench/editor-perf-firefox.json" > /dev/null
           node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html chromium --perf --out "$RUNNER_TEMP/bench/video-chromium.json"
           node tests/browser/video.mjs http://127.0.0.1:5332/editor/video/index.html firefox --perf --out "$RUNNER_TEMP/bench/video-firefox.json"
+      # The same pull requests: the keyed benchmark and the race (bench/race/), each in vanilla
+      # JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. lean-vir, an interpreter, takes most of
+      # the time.
+      - name: Keyed and race benchmarks with lean-vir (Chromium)
+        if: contains(github.event.pull_request.labels.*.name, 'bench')
+        continue-on-error: true
+        timeout-minutes: 60
+        run: |
+          mkdir -p "$RUNNER_TEMP/bench"
+          node tests/browser/bench.mjs --engines chromium --runs 5 --impls leanui,vanilla,leanvir --json "$RUNNER_TEMP/bench/keyed-chromium.json"
+          .lake/build/bin/leanui serve dist --port 5333 --quiet --coop &   # cross-origin isolated: a precise timer for the race
+          srv=$!
+          trap 'kill $srv' EXIT
+          for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:5333/race/index.html && break; sleep 0.2; done
+          node tests/browser/race.mjs http://127.0.0.1:5333/ chromium --perf --out "$RUNNER_TEMP/bench/race-chromium.json"
       - uses: actions/upload-artifact@v7
         if: contains(github.event.pull_request.labels.*.name, 'bench')
         with:
-          name: editor-bench
+          name: bench
           path: ${{ runner.temp }}/bench
           retention-days: 14
 
@@ -169,6 +202,11 @@ jobs:
           curl -fsS -o /dev/null http://127.0.0.1:8080/editor/app.wasm
           curl -fsS http://127.0.0.1:8080/editor/video/ | grep -q "LeanUI Video"
           curl -fsS -o /dev/null http://127.0.0.1:8080/editor/video/app.wasm
+          curl -fsS http://127.0.0.1:8080/race/ | grep -q "LeanUI race"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/race/life/wasm64/app.wasm
+          runtime=$(curl -fsS http://127.0.0.1:8080/race/life/vir/app.json | node -p 'JSON.parse(require("fs").readFileSync(0)).runtimeModule')
+          curl -fsS -o /dev/null -D "$RUNNER_TEMP/vir.headers" -H 'accept-encoding: br, gzip' "http://127.0.0.1:8080/race/life/vir/${runtime%.js}.wasm"
+          grep -qi '^content-encoding: br' "$RUNNER_TEMP/vir.headers"
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

@@ -277,6 +277,11 @@ def benchmarks (m : Model) : Html Msg :=
       The js-framework-benchmark keyed operations, against hand-written vanilla JavaScript with the
       same markup, stylesheet and data.
     </p>
+    <p>
+      <a href="/race/">The race</a> runs this benchmark and a Game of Life side by side in your
+      browser, timed live: vanilla JavaScript, LeanUI compiled to wasm64, and LeanUI interpreted by
+      lean-vir. It checks that all three end in the same state.
+    </p>
     {match m.results with
       | .ok r => resultsView r
       | .failed why => <p class="error">Could not load the results: {why}</p>

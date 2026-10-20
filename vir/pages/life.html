@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Life (LeanUI, lean-vir)</title>
+<link rel="stylesheet" href="../life.css"></head>
+<body><div id="app"></div><script src="leanui.js"></script><script src="leanui-vir.js"></script><script>
+LeanUIVir.start({ app: "LeanUIVir.LifeApp", selector: "#app" }).then((rt) => { window.__leanui = rt; window.__ready = performance.now(); },
+  (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+</script></body></html>

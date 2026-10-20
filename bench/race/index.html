@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeanUI race</title><link rel="stylesheet" href="race.css"></head>
+<body>
+<header>
+  <h1>The race <small>one app, three ways, side by side</small></h1>
+  <p>Each panel runs the same app: written by hand in JavaScript, written in Lean and compiled to
+  WebAssembly (wasm64, LeanUI's production build), and the same Lean program run by
+  <a href="https://github.com/ejgallego/lean-vir">lean-vir</a>, Lean's interpreter compiled to
+  WebAssembly. This page clicks each app's own buttons, times every click, and checks that all three
+  end up showing the same thing.</p>
+  <form id="controls" onsubmit="return false">
+    <label>Scenario <select id="scenario">
+      <option value="life">Life: 1,000 cells, one generation per click</option>
+      <option value="table">Table: js-framework-benchmark, 1,000 rows</option>
+    </select></label>
+    <label data-for="life">Clicks <select id="steps"><option>100</option><option selected>1000</option><option>5000</option></select></label>
+    <label data-for="table">Runs per operation <select id="runs"><option>1</option><option selected>3</option><option>7</option></select></label>
+    <button type="button" id="run">Run</button> <button type="button" id="stop" disabled>Stop</button>
+    <span id="status" role="status">Loading…</span>
+  </form>
+</header>
+<main id="panels"></main>
+<section id="results" aria-live="polite"></section>
+<footer>
+  <p><b>How it is measured.</b> Script time is the time the clicks take: the app's own work (for
+  LeanUI, the Lean update, view and diff) and its DOM calls. Style, layout and paint come later, once
+  per frame, for the same DOM in all three, and are not counted. In <i>Life</i> the panels share the
+  time: in each animation frame, the ones that have used the least time so far click until they have
+  used 8 ms more, so all three get the same time and the faster ones get further. <i>Table</i> runs
+  the standard operations one panel at a time, each after its usual warm-up clicks; the median of the
+  runs counts. After a run, this page checks what each app shows: in <i>Life</i> the generation, the
+  live cells and the board (it hashes the cells on the page the way the apps hash theirs), in
+  <i>Table</i> the rows after every operation. “Started in” is the time from loading the panel to the
+  app being ready (the panels load one after another), with the size of what it downloaded,
+  compressed where the server compresses (as the site does). Each run loads the pages afresh. These
+  times come from your browser on your machine; docs/BENCHMARKS.md in the repository has the
+  automated benchmarks and how they differ (fresh page loads, traced rendering).</p>
+</footer>
+<script type="module" src="race.js"></script>
+</body></html>
