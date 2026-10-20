@@ -1004,12 +1004,18 @@ that all three agree.
 - **Life**: Conway's Game of Life on 1,000 cells (40 × 25, wrapping), one generation per click on
   Step ([`examples/Life.lean`](../examples/Life.lean), and
   [`bench/race/life-vanilla.html`](../bench/race/life-vanilla.html) by hand). Each app shows the
-  generation, the live cells and a hash of its board. The panels take turns, 8 ms of clicks each
-  per animation frame, so in the same time the faster ones get further: what you see moving is
-  each one's speed.
+  generation, the live cells and a hash of its board; the referee also hashes the cells each page
+  draws, the same way, so a board drawn wrong cannot pass. The panels share the time: in each
+  animation frame, the ones that have used the least so far click until they have used 8 ms more,
+  so all three get the same time and the faster ones get further: what you see moving is each
+  one's speed.
 - **Table**: the keyed operations below, in the three Bench apps, one panel at a time with each
-  operation's warm-ups; the median of the runs counts. After each operation the referee compares
-  the rows each app shows (ids, labels, the selected row).
+  operation's warm-ups and the runner's 30 ms busy-wait before the timed click; the median of the
+  runs counts. After each operation the referee compares the rows each app shows (ids, labels, the
+  selected row).
+
+The site serves `/race/` cross-origin isolated, so the page's timer is precise to microseconds
+(without isolation Chrome rounds it to 0.1 ms, which only the table's smallest clicks feel).
 
 `tests/browser/race.mjs` runs it in CI (Life to generation 100, against the native reference;
 the table once) and fails if the three ever disagree; `--perf` gives the numbers below.
