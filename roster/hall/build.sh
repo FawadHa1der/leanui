@@ -6,5 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 L="${LEAN_BIN:-$HOME/.elan/toolchains/$(sed 's|/|--|; s|:|---|' lean-toolchain)/bin}"
+# Mathlib's cache runs `lean` to find the toolchain's leantar: this toolchain's
+export PATH="$L:$PATH"
 "$L/lake" exe cache get $(sed -n 's/^public import \(Mathlib\.[A-Za-z0-9.]*\)$/\1/p' RosterHall.lean)
 "$L/lake" build
