@@ -306,7 +306,7 @@ def proved : Html Msg :=
       </Guarantee>
       <Guarantee kind="c" trusts="Trusts Lean's kernel, on the server.">
         <b>Notarize:</b> Lean's kernel proves that this roster is valid, and the server keeps the
-        proof as a receipt.
+        proof as a receipt (its latest 1,000).
       </Guarantee>
       <Guarantee kind="c′" trusts="Trusts nanoda, a second kernel written in Rust, and the verify page with its reference of the published definitions, as served: not Lean's kernel, not this app.">
         <b>Verify:</b> an independent kernel checks the receipt again, in your browser.

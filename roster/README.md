@@ -20,9 +20,9 @@ and the app shows one of:
   checker rejects every one.
 
 A roster on screen can be **notarized**: the server has Lean's kernel prove it valid and keeps the
-proof, a *receipt*. The **verify page** checks a receipt again in the browser, with nanoda (a Lean
-kernel written in Rust, apart from Lean) compiled to WebAssembly, and shows the table it proves
-valid; its "Tamper" button flips one cell and the kernel rejects the result.
+proof, a *receipt* (its latest 1,000). The **verify page** checks a receipt again in the browser,
+with nanoda (a Lean kernel written in Rust, apart from Lean) compiled to WebAssembly, and shows the
+table it proves valid; its "Tamper" button flips one cell and the kernel rejects the result.
 
 ## What is proved, and what each part trusts
 
@@ -93,10 +93,10 @@ more than the app trusts its solver: it checks the roster with `checkRoster`, wr
 `checkRoster_iff` and `decide +kernel`, so that the kernel evaluates the checker), and runs the
 notary on it, one receipt at a time. The receipt is the theorem exported with everything it
 depends on (NDJSON, Lean's export format), served at `/roster/receipts/<id>.ndjson` under a random
-name (the latest 1,000 are kept); the app links it to the verify page. Problems are limited to 100 people and 30 shifts (about 3 s of kernel
-time). [`notary/README.md`](notary/README.md) has the details: for the feasible sample a receipt
-takes about 2.5 s and is 2.0 MB (320 kB gzipped), nearly all of it `Init`, carried along so that
-the receipt checks on its own.
+name (the latest 1,000 are kept); the app links it to the verify page. Problems are limited to 100
+people and 30 shifts (about 3 s of kernel time). [`notary/README.md`](notary/README.md) has the
+details: for the feasible sample a receipt takes about 2.5 s and is 2.0 MB (320 kB gzipped),
+nearly all of it `Init`, carried along so that the receipt checks on its own.
 
 ## The verify page
 
@@ -135,11 +135,13 @@ scope here, as for the other wasm64 apps).
 
 ## Tests
 
-    .lake/build/bin/leanui-kit-tests                    # the checkers, the solver, the lies, receiptSource
-    node tests/browser/roster.mjs URL [chromium|firefox]          # the app, notarizing too under leanui-roster
-    node roster/verify/test.mjs RECEIPT.ndjson                    # the four checks under Node
-    node tests/browser/roster-verify.mjs URL [chromium|firefox]   # the verify page: good, tampered, forged
-    roster/hall/build.sh                                # the completeness proof
+    .lake/build/bin/leanui-kit-tests                   # checkers, solver, lies, receiptSource
+    node tests/browser/roster.mjs URL [ENGINE]         # the app; under leanui-roster, notarizing too
+    node roster/verify/test.mjs RECEIPT.ndjson         # the four checks, under Node
+    node tests/browser/roster-verify.mjs URL [ENGINE]  # the verify page: good, tampered, forged
+    roster/hall/build.sh                               # the completeness proof
+
+ENGINE is `chromium` (the default) or `firefox`.
 
 `tests/browser/run-all.sh` runs the browser ones against `leanui-roster`, on the receipt the app's
 test notarized; CI runs them all, and checks the completeness proof in a job of its own.

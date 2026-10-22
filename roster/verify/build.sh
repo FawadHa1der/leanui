@@ -2,8 +2,8 @@
 # Build the Roster verify page (roster/README.md) into dist/roster/verify/: the page (index.html,
 # verify.js, verify.css, receipt.js), checker.wasm (checker/: nanoda, an independent Lean kernel,
 # as a WASI command), worker.js, which runs it, and reference.json, the fingerprints of the
-# published definitions (reference.mjs), exported like receipts from roster/notary's build of
-# examples/Roster/Core.lean.
+# published definitions and Valid as nanoda prints it (reference.mjs), exported like receipts from
+# roster/notary's build of examples/Roster/Core.lean.
 #   roster/verify/build.sh
 # Needs Rust with the wasm32-wasip1 target (`rustup target add wasm32-wasip1`), Node, and the
 # notary's toolchain, Lean 4.35 (roster/notary/lean-toolchain; elan installs it), whose tools are
