@@ -8,6 +8,7 @@ meta import LeanUI.Json.Derive
 # `leanui-roster`: the Roster demo and its notary
 
     leanui-roster [--port 5370] [--host 127.0.0.1] [--dist dist] [--receipts .lake/roster-receipts] [--quiet]
+    leanui-roster --notarize-sample OUT.ndjson
 
 Run from the repository root (it runs `roster/notary/notarize.sh`). It serves:
 
@@ -39,6 +40,8 @@ structure Opts where
   dist : System.FilePath := "dist"
   receipts : System.FilePath := ".lake/roster-receipts"
   quiet : Bool := false
+  /-- Notarize the Feasible preset's roster into this file, and exit. -/
+  sample : Option System.FilePath := none
 
 partial def parseArgs : List String → Opts → Except String Opts
   | [], o => .ok o
@@ -48,6 +51,7 @@ partial def parseArgs : List String → Opts → Except String Opts
   | "--host" :: h :: rest, o => parseArgs rest { o with host := h }
   | "--dist" :: d :: rest, o => parseArgs rest { o with dist := d }
   | "--receipts" :: d :: rest, o => parseArgs rest { o with receipts := d }
+  | "--notarize-sample" :: f :: rest, o => parseArgs rest { o with sample := some f }
   | "--quiet" :: rest, o => parseArgs rest { o with quiet := true }
   | a :: _, _ => .error s!"unknown argument {a}"
 
@@ -101,8 +105,9 @@ def prune (dir : System.FilePath) : IO Unit := do
   let oldest := kept.qsort fun a b => compare a.1 b.1 == .lt
   for (_, f) in oldest.extract 0 (oldest.size + 1 - maxReceipts) do IO.FS.removeFile f
 
-/-- Notarize a roster `checkRoster` accepted: the receipt's id, or the status to answer and why. -/
-def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (Nat × String) String) := do
+/-- The receipt of a roster `checkRoster` accepted, from the notary, or the status to answer and
+why not. -/
+def prove (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (Nat × String) ByteArray) := do
   unless ← notarizeSh.pathExists do
     return .error (503, s!"no notary at {notarizeSh} (run leanui-roster from the repository root)")
   IO.FS.withTempDir fun dir => do
@@ -115,7 +120,13 @@ def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (N
       let why := (out.stderr.trimAsciiEnd.toString.splitOn "\n").getLast!
       return .error (if out.exitCode == 3 then 503 else 500, why)
     unless o.quiet do IO.print out.stdout
-    let receipt ← IO.FS.readBinFile (dir / "receipt.ndjson")
+    return .ok (← IO.FS.readBinFile (dir / "receipt.ndjson"))
+
+/-- Notarize a roster `checkRoster` accepted: the receipt's id, or the status to answer and why. -/
+def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (Nat × String) String) := do
+  match ← prove o p r with
+  | .error e => return .error e
+  | .ok receipt =>
     -- a random name: one made from the contents could be aimed at another receipt's, by a request
     -- crafted to collide (the receipt states its own roster, and the verify page shows it)
     let id := String.ofList <| (← IO.getRandomBytes 16).toList.flatMap fun b =>
@@ -127,6 +138,16 @@ def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (N
     IO.FS.writeBinFile part receipt
     IO.FS.rename part (o.receipts / s!"{id}.ndjson")
     return .ok id
+
+/-- `--notarize-sample`: the receipt the LeanUI site serves, which has no notary
+(`deploy/cloudflare/stage.sh`): the Feasible preset's roster, as the app's solver finds it. -/
+def notarizeSample (o : Opts) (out : System.FilePath) : IO UInt32 := do
+  let p := Roster.samples[0]!.2
+  let .staffed r := Roster.solve p | IO.eprintln "leanui-roster: the Feasible preset cannot be staffed"; return 1
+  unless p.checkRoster r do IO.eprintln "leanui-roster: the solver's roster for the Feasible preset is not valid"; return 1
+  match ← prove o p r with
+  | .ok receipt => IO.FS.writeBinFile out receipt; return 0
+  | .error (_, why) => IO.eprintln s!"leanui-roster: {why}"; return 1
 
 /-- Each receipt is a Lean process and they all use one Lake build, so the notary takes them one
 at a time (`turn`); `queue` bounds the requests waiting or being served, and turns the rest away. -/
@@ -170,6 +191,7 @@ def main (args : List String) : IO UInt32 := do
   let o ← match parseArgs args {} with
     | .ok o => pure o
     | .error e => IO.eprintln s!"leanui-roster: {e}"; return 2
+  if let some out := o.sample then return ← notarizeSample o out
   unless ← (o.dist / "roster" / "app.wasm").pathExists do
     IO.eprintln s!"[roster] no app at {o.dist / "roster"} (run `tools/build-app.sh RosterApp roster`)"
   unless ← (o.dist / "roster" / "verify" / "checker.wasm").pathExists do

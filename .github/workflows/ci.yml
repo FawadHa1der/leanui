@@ -214,6 +214,12 @@ jobs:
           runtime=$(curl -fsS http://127.0.0.1:8080/race/life/vir/app.json | node -p 'JSON.parse(require("fs").readFileSync(0)).runtimeModule')
           curl -fsS -o /dev/null -D "$RUNNER_TEMP/vir.headers" -H 'accept-encoding: br, gzip' "http://127.0.0.1:8080/race/life/vir/${runtime%.js}.wasm"
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/vir.headers"
+          # the Roster demo, without its notary: the app and the verify page, on the receipt staged
+          curl -fsS http://127.0.0.1:8080/roster/ | grep -q "Roster"
+          curl -fsS -o /dev/null -D "$RUNNER_TEMP/receipt.headers" -H 'accept-encoding: br, gzip' http://127.0.0.1:8080/roster/receipts/feasible.ndjson
+          grep -qi '^content-encoding: br' "$RUNNER_TEMP/receipt.headers"
+          node tests/browser/roster.mjs http://127.0.0.1:8080/roster/ chromium
+          node tests/browser/roster-verify.mjs "http://127.0.0.1:8080/roster/verify/?receipt=/roster/receipts/feasible.ndjson" chromium
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

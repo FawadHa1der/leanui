@@ -85,6 +85,11 @@ and Rust with the `wasm32-wasip1` target. Options: `--port`, `--host`, `--dist`,
 Served by `leanui serve dist` instead, the app works the same, but "Notarize" answers that there
 is no notary.
 
+The LeanUI site serves the demo at `/roster/` (`examples/SiteServer.lean`), without a notary: its
+container has no Lean 4.35. Its one receipt, the Feasible preset's roster, is notarized when the
+site is staged (`leanui-roster --notarize-sample`, run by `deploy/cloudflare/stage.sh`), and
+"Notarize" answers that the site has no notary, with a link to verify that receipt.
+
 ## The notary
 
 `POST /roster/notarize` takes a problem and a roster as JSON. The server trusts the request no
@@ -157,4 +162,5 @@ test notarized; CI runs them all, and checks the completeness proof in a job of 
 * Check 3 trusts `reference.json`, which the build makes with Lean 4.35's `leanexport` from the
   source in this repository; anyone can rebuild it and compare.
 * The receipt names a roster for a problem; it says nothing about who wrote either.
-* The site does not serve the demo yet: it needs `leanui-roster` and Lean 4.35 in the container.
+* The site notarizes nothing: it serves one receipt, made when it was staged. Notarizing there
+  would need Lean 4.35 (`lean`, `leanexport` and the core library) in its container.

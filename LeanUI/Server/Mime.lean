@@ -17,6 +17,8 @@ def table : List (String × String) := [
   ("cjs", "text/javascript; charset=utf-8"),
   ("css", "text/css; charset=utf-8"),
   ("json", "application/json"), ("map", "application/json"), ("webmanifest", "application/manifest+json"),
+  -- JSON lines, such as Lean's export format (the Roster demo's receipts)
+  ("ndjson", "application/x-ndjson"),
   ("wasm", "application/wasm"),
   -- lean-vir's IR packages (vir/README.md; the type its manifests declare): about 8:1 under brotli
   ("irpkg", "application/vnd.lean-vir.ir-package"),
@@ -41,10 +43,11 @@ def extension (name : String) : String :=
 def ofPath (name : String) : String :=
   (table.lookup (extension name)).getD "application/octet-stream"
 
-/-- Is this a type worth compressing (text, JSON, JavaScript, wasm, SVG, lean-vir packages)? -/
+/-- Is this a type worth compressing (text, JSON and JSON lines, JavaScript, wasm, SVG, lean-vir
+packages)? -/
 def compressible (ctype : String) : Bool :=
   ctype.startsWith "text/" || ctype.startsWith "application/json" || ctype.startsWith "application/wasm" ||
   ctype.startsWith "image/svg" || ctype.startsWith "application/xml" || ctype.startsWith "application/manifest" ||
-  ctype.startsWith "application/vnd.lean-vir"
+  ctype.startsWith "application/vnd.lean-vir" || ctype.startsWith "application/x-ndjson"
 
 end LeanUI.Server.Mime

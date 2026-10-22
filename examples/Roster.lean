@@ -22,7 +22,9 @@ proved" panel says which kind of guarantee each part of this is, and what it tru
 
 A roster on screen can be notarized: `POST /roster/notarize` asks `leanui-roster`
 (`examples/RosterServer.lean`) to prove it valid with Lean's kernel. The receipt it exports opens
-in the verify page (`roster/verify/`), which checks it again with an independent kernel.
+in the verify page (`roster/verify/`), which checks it again with an independent kernel. The
+LeanUI site (`examples/SiteServer.lean`) has no notary: it answers with a receipt made when the
+site was built, to verify instead.
 -/
 @[expose] public section
 open LeanUI Attr
@@ -45,7 +47,8 @@ inductive Notary where
   | working
   /-- The receipt's URL, and how long the server took. -/
   | done (url : String) (ms : Nat)
-  | failed (why : String)
+  /-- Why not, and a receipt to verify instead, if the server offers one (the site does). -/
+  | failed (why : String) (sample : Option String := none)
 
 structure Model where
   problem : Problem
@@ -116,6 +119,7 @@ structure Notarized where
 
 structure Refused where
   error : String
+  sample? : Option String
   deriving FromJson
 
 /-- What the notary answered. Without one (a page not served by `leanui-roster`), the POST gets a
@@ -126,7 +130,7 @@ def Notary.ofResponse (res : Response) : Notary :=
     | .ok n => .done n.url n.ms
     | .error e => .failed s!"The notary's answer could not be read: {e}"
   else match Json.decode Refused res.body with
-    | .ok e => .failed e.error
+    | .ok e => .failed e.error e.sample?
     | .error _ =>
       if res.status == 0 then .failed "The server could not be reached."
       else .failed s!"This page is not served by leanui-roster, so there is no notary here (HTTP {res.status})."
@@ -146,7 +150,7 @@ def update : Msg → Model → Model × Cmd Msg
   | .liar b, m => ({ m with liar := b, lies := 0 }, .none)
   | .ask, m => (ask m, .none)
   | .notarize, m => match m.result, m.notary with
-    | .staffed r, .idle | .staffed r, .failed _ =>
+    | .staffed r, .idle | .staffed r, .failed .. =>
       let n := m.requests + 1
       ({ m with notary := .working, requests := n },
         .fetch { method := "POST", url := "/roster/notarize", headers := #[("content-type", "application/json")],
@@ -234,10 +238,11 @@ def notaryView : Notary → Html Msg
       Notarized in {ms} ms: Lean's kernel proved this roster valid.{" "}
       <a id="verify" href={verifyHref url}>Verify this roster in your browser →</a>
     </p>
-  | .failed why =>
+  | .failed why sample =>
     <p class="notary failed">
       <button id="notarize" onClick={.notarize}>Notarize</button>
       {" "}<span id="notary-error">Not notarized: {why}</span>
+      {...sample.toArray.flatMap fun url => #[text " ", <a id="sample" href={verifyHref url}>Verify that receipt in your browser →</a>]}
     </p>
 
 def resultView (m : Model) : Html Msg :=

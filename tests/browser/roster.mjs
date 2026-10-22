@@ -1,7 +1,8 @@
 // Browser test for the Roster app (examples/Roster.lean): presets, the solver's answers drawn on the
 // grid and checked here again from the DOM, the explanation of an impossible problem, the lying
 // solver (every lie rejected, with a reason), edits clearing the result, and notarizing (a receipt
-// link when the page is served by leanui-roster, a plain error otherwise).
+// link when the page is served by leanui-roster; on the site, which has no notary, a link to its
+// sample receipt; a plain error otherwise).
 // node tests/browser/roster.mjs <url of dist/roster/index.html> [chromium|firefox]
 import { pw } from "./playwright.mjs";
 
@@ -155,12 +156,17 @@ if (href) {
 } else {
   notary = await text("#notary-error");
   // the browser logs the failed POST itself (Chromium does): expected without a notary
-  errors.splice(quiet, errors.length - quiet, ...errors.slice(quiet).filter((e) => !/Failed to load resource.*40[45]/.test(e)));
-  // the one failure allowed: no notary at all (leanui serve); leanui-roster must notarize
-  check("not notarized: only because there is no notary", notary.startsWith("Not notarized: This page is not served by leanui-roster"), notary);
+  errors.splice(quiet, errors.length - quiet, ...errors.slice(quiet).filter((e) => !/Failed to load resource.*(40[45]|503)/.test(e)));
+  // the failures allowed: no notary at all (leanui serve), or the site's, which links to its
+  // sample receipt; leanui-roster must notarize
+  const sample = await page.$eval("#sample", (a) => a.getAttribute("href")).catch(() => null);
+  check("not notarized: only because there is no notary",
+    notary.startsWith("Not notarized: This page is not served by leanui-roster") ||
+    (notary.startsWith("Not notarized: This site has no notary") && sample?.startsWith("/roster/verify/?receipt=")), notary);
+  if (sample) notary += " (sample " + sample + ")";
 }
 await click(".grid tbody tr:nth-child(2) .cell >> nth=0");
-check("an edit clears the notary too", (await page.$("#notarize, #verify, #notary-error")) === null);
+check("an edit clears the notary too", (await page.$("#notarize, #verify, #notary-error, #sample")) === null);
 
 const results = { engine: browser.version(), random: [...seen], notary, failed: checks.filter((c) => !c.ok), passed: checks.filter((c) => c.ok).length, errors };
 await browser.close();
