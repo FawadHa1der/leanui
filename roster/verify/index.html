@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roster · verify a receipt (LeanUI)</title>
+<link rel="stylesheet" href="verify.css">
+<script type="module" src="verify.js"></script>
+</head>
+<body>
+<main class="verify">
+  <h1>Verify a roster</h1>
+  <p class="lead">
+    A receipt is a proof, written by Lean, that a roster staffs a problem: everyone works at most
+    one shift, and only one they can do, and every shift gets the people it needs. This page checks
+    it again, in your browser, with <a href="https://github.com/ammkrn/nanoda_lib">nanoda</a>, a
+    Lean kernel written apart from Lean's own (in Rust, compiled to WebAssembly). Receipts come
+    from the <a href="../">Roster app</a>'s Notarize button.
+  </p>
+  <p class="source">
+    <label class="pick"><input id="file" type="file" accept=".ndjson,.json,.txt"><span>Choose a receipt</span></label>
+    or drop one on this page.
+    <span id="status" role="status"></span>
+  </p>
+
+  <section id="verdict" class="verdict" hidden>
+    <h2 id="headline"></h2>
+    <ol id="checks" class="checks"></ol>
+    <p id="why" class="why" hidden></p>
+    <p class="tamper">
+      <button id="tamper" disabled>Tamper: flip one cell</button>
+      <button id="original" hidden>Check the original again</button>
+      <span id="tamper-note" class="note">
+        Changes the receipt's data, not its proof: someone the roster puts on a shift can no longer
+        do it. The receipt must then be rejected.
+      </span>
+    </p>
+  </section>
+
+  <section id="data" hidden>
+    <h2 id="data-title"></h2>
+    <div class="grid-wrap"><table id="grid" class="grid"></table></div>
+    <p class="legend">
+      <span class="swatch"></span> can't do it <span class="swatch can"></span> can do it
+      <span class="swatch works">✓</span> works this shift <span class="swatch works bad">✗</span> works a
+      shift they can't do
+    </p>
+  </section>
+
+  <section id="proved" class="panel" hidden>
+    <h2>What was proved</h2>
+    <p>
+      The theorem <code>Roster.Receipt.valid</code> states <code>Roster.Problem.Valid problem roster</code>
+      for the problem and roster above. <code>Valid p r</code> says three things about the roster
+      <code>r</code>, which gives each person the shift they work, if any (so nobody works two):
+      it has one entry per person; whoever works shift <code>s</code> can do it
+      (<code>canWork p i s</code>: row <code>i</code>, column <code>s</code> is ticked); and every
+      shift gets at least the people it needs (<code>needOf p s</code>), counted with
+      <code>List.count</code>. The proof is a computation: the kernel runs the checker
+      <code>checkRoster</code> on the data, gets <code>true</code>, and
+      <code>checkRoster_iff</code> turns that into <code>Valid</code>. Here is
+      <code>Valid</code> as nanoda reads it from the receipt:
+    </p>
+    <pre id="valid"></pre>
+  </section>
+
+  <section class="panel trusts">
+    <h2>What this trusts</h2>
+    <ul>
+      <li><b>nanoda</b>, an independent kernel for Lean, in <code>checker.wasm</code>: it checks every
+        declaration in the receipt.</li>
+      <li><b>The reference</b>, <code>reference.json</code>: the fingerprints of the published
+        definitions, made when this page was built, from <span id="reference">the published source</span>.
+        A receipt carries its own copy of every definition it uses; they must be these.</li>
+      <li><b>Your browser</b>, which runs both, and this page's script, which compares them.</li>
+    </ul>
+    <p>Not Lean's kernel, which proved the roster when the receipt was made; not the server that made
+      it; not the app.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -7,6 +7,7 @@ public import Effects
 public import Pixels
 public import Life
 public import Roster.Solver
+public import Roster.Receipt
 meta import LeanUI.Json.Derive
 /-!
 # Tests for the kit: `LeanUI.Json`, `LeanUI.Router`, and the effects lab
@@ -29,7 +30,7 @@ effects tests read `examples/effects-assets/*.json`).
   the DOM model.
 * Roster (`examples/Roster`): on 600 random problems (167 can be staffed) and six edge cases, the
   solver's answer always passes `checkAnswer`, and every lie that changes it is rejected; the
-  presets.
+  presets. The Lean source of a receipt (`Roster.receiptSource`), names escaped.
 -/
 public section
 open LeanUI
@@ -1044,6 +1045,22 @@ def testRoster : T Unit := section_ "roster" do
   let n := probs.length
   expect "both kinds of answer" (100 < staffed && 100 < n - staffed) s!"{staffed} of {n} staffed"
   expect "every lie is told" (lies.all (n / 2 < ·)) s!"{lies}"
+  -- the receipt's source (what `roster/notary` compiles): one line per definition, and names as
+  -- Lean string literals that no name can end early
+  let named : Roster.Problem := {
+    people := ["Ana \"A\" B\\", "x\ny\t\r\x00\x7f", "Zoë 😀", ""], shifts := ["Gate 9–12", "end Roster.Receipt"],
+    need := [1, 0], avail := [[true, false], [false, false], [true, true], []] }
+  expectEq "receipt source" (Roster.receiptSource named [some 0, none, some 1, none]) <|
+    "import Roster.Core\n" ++
+    "namespace Roster.Receipt\n" ++
+    "def problem : Roster.Problem := { people := [\"Ana \\\"A\\\" B\\\\\", \"x\\ny\\t\\x0d\\x00\\x7f\", \"Zoë 😀\", \"\"], " ++
+      "shifts := [\"Gate 9–12\", \"end Roster.Receipt\"], need := [1, 0], avail := [[true, false], [false, false], [true, true], []] }\n" ++
+    "def roster : Roster.Roster := [some 0, none, some 1, none]\n" ++
+    "theorem valid : problem.Valid roster := (Roster.Problem.checkRoster_iff problem roster).mp (by decide +kernel)\n" ++
+    "end Roster.Receipt\n"
+  let empty : Roster.Problem := { people := [], shifts := [], need := [], avail := [] }
+  expect "receipt source, empty" ((Roster.receiptSource empty []).splitOn "\n" |>.contains
+    "def problem : Roster.Problem := { people := [], shifts := [], need := [], avail := [] }")
 
 /-! ## Main -/
 

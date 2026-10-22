@@ -1,0 +1,13 @@
+# The notary (README.md): Lean's kernel proves a roster valid and `leanexport` writes the proof out
+# as a receipt. A project of its own, apart from the main build: it is on Lean 4.35.0, whose
+# toolchain bundles `leanexport` (and `nanoda_bin`, a second kernel to re-check receipts with),
+# while the main build is on 4.34.0. It compiles the main tree's `Roster.Core`, which imports only
+# `Init` for that reason.
+name = "roster-notary"
+defaultTargets = ["Examples"]
+
+# The problem, the specification and the checkers, from the main tree
+[[lean_lib]]
+name = "Examples"
+srcDir = "../../examples"
+roots = ["Roster.Core"]

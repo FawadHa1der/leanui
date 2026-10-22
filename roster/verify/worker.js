@@ -1,8 +1,9 @@
 // The verify page's checker, in a Web Worker: runs checker.wasm (checker/: nanoda, an independent
-// Lean kernel) on a receipt. Message in: {ndjson, names}, the receipt's text and the declarations
-// to pretty-print. Message out: the checker's verdict (checker/src/main.rs) and `ms`, how long the
-// check took. A module worker (`new Worker("worker.js", {type: "module"})`); test.mjs imports
-// `check` to run the same code under Node.
+// Lean kernel) on a receipt. Message in: {ndjson, names, data}, the receipt's text, the
+// declarations to pretty-print and the definitions to decode as data. Message out: the checker's
+// verdict (checker/src/main.rs) and `ms`, how long the check took. A module worker
+// (`new Worker("worker.js", {type: "module"})`); test.mjs and reference.mjs import `check` to run
+// the same code under Node.
 
 // checker.wasm is a WASI command: it reads the receipt from stdin and writes its verdict to
 // stdout. These are the WASI (preview 1) calls it needs to run in memory; the others it imports
@@ -10,12 +11,12 @@
 const EBADF = 8;
 
 /** Check `ndjson` (a string or a Uint8Array) with a fresh instance of `module`, the compiled
-    checker.wasm, and pretty-print `names`. A rejection can stop the instance mid-way (nanoda
-    rejects by panicking, which aborts), so each check gets its own. */
-export async function check(module, ndjson, names = []) {
+    checker.wasm, pretty-print `names` and decode `data`. A rejection can stop the instance mid-way
+    (nanoda rejects by panicking, which aborts), so each check gets its own. */
+export async function check(module, ndjson, names = [], data = []) {
   const enc = new TextEncoder();
   const input = typeof ndjson === "string" ? enc.encode(ndjson) : ndjson;
-  const args = ["checker", ...names].map((a) => enc.encode(a + "\0"));
+  const args = ["checker", ...names, ...(data.length ? ["--data", ...data] : [])].map((a) => enc.encode(a + "\0"));
   const out = [], err = [];
   let memory, pos = 0, code = 0;
   const view = () => new DataView(memory.buffer);
@@ -73,10 +74,10 @@ export async function check(module, ndjson, names = []) {
 
 if (typeof WorkerGlobalScope !== "undefined") {
   const module = WebAssembly.compileStreaming(fetch(new URL("checker.wasm", import.meta.url)));
-  self.onmessage = async ({ data: { ndjson, names } }) => {
+  self.onmessage = async ({ data: { ndjson, names, data } }) => {
     try {
       const m = await module, t0 = performance.now();
-      const verdict = await check(m, ndjson, names);
+      const verdict = await check(m, ndjson, names, data);
       self.postMessage({ ...verdict, ms: Math.round(performance.now() - t0) });
     } catch (e) {
       self.postMessage({ ok: false, error: "cannot run the checker: " + e.message });
