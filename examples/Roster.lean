@@ -15,10 +15,10 @@ which is not trusted: with the "Lying solver" switch on it answers wrongly on pu
 next lie in turn each time.
 
 What the app shows is decided by the checker, not by the solver: `judge` keeps an answer only if
-`Problem.checkAnswer` accepts it, and every edit of the problem clears the result. So a roster on
-screen is valid for the problem on screen, and a set of shifts on screen proves that no roster
-exists (`steps_inv` in `examples/RosterProofs.lean`). The "What is proved" panel says which kind
-of guarantee each part of this is, and what it trusts.
+`Problem.checkAnswer` accepts it, and every edit of the problem clears the result. So a roster in
+the result is valid for the problem, and a set of shifts there proves that no roster exists
+(`steps_inv` in `examples/RosterProofs.lean`); the view draws them as they are. The "What is
+proved" panel says which kind of guarantee each part of this is, and what it trusts.
 
 A roster on screen can be notarized: `POST /roster/notarize` asks `leanui-roster`
 (`examples/RosterServer.lean`) to prove it valid with Lean's kernel. The receipt it exports opens
@@ -282,12 +282,12 @@ def proved : Html Msg :=
   <section class="proved">
     <h2>What is proved</h2>
     <p class="kinds">
-      <b>a</b> proved once, for every problem, when the app was built · <b>b</b> checked now, for
+      <b>a</b> proved once, for every problem · <b>b</b> checked now, for
       this answer · <b>c</b> proved for this roster on the server, <b>c′</b> and again in your
       browser · <b>d</b> not trusted
     </p>
     <ul>
-      <Guarantee kind="a" trusts="Trusts Lean's kernel, which checked the proof, and Lean's compiler, which built this page.">
+      <Guarantee kind="a" trusts="Trusts Lean's kernel, which checked the proof, and Lean's compiler, which built this page. The view that draws the result is tested, not proved.">
         <b>The app never shows an unchecked answer.</b> A roster on screen is valid, and “can't be
         staffed” is shown only when no roster can be. <code>steps_inv</code>
       </Guarantee>
@@ -308,7 +308,7 @@ def proved : Html Msg :=
         <b>Notarize:</b> Lean's kernel proves that this roster is valid, and the server keeps the
         proof as a receipt.
       </Guarantee>
-      <Guarantee kind="c′" trusts="Trusts nanoda, a second kernel written in Rust: not Lean, not this app, not the server.">
+      <Guarantee kind="c′" trusts="Trusts nanoda, a second kernel written in Rust, and the verify page with its reference of the published definitions, as served: not Lean's kernel, not this app.">
         <b>Verify:</b> an independent kernel checks the receipt again, in your browser.
       </Guarantee>
       <Guarantee kind="d" trusts="Not trusted: nothing above depends on it.">

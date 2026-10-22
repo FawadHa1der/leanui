@@ -8,12 +8,13 @@
 //     (checker/src/fingerprint.rs) the reference gives it (reference.json: Valid and
 //     checkRoster_iff exported from examples/Roster/Core.lean; build.sh), so the receipt cannot
 //     redefine `Valid` or anything it uses;
-//  4. `problem` and `roster` are plain data (checker/src/data.rs): the table the page shows.
+//  4. `problem` and `roster` are plain data (checker/src/data.rs), with a need for each shift and
+//     a full row for each person: the table the page shows.
 // Sentences put code in `backquotes`.
 
 export const STATEMENT = "Roster.Problem.Valid Roster.Receipt.problem Roster.Receipt.roster";
 // what the page asks the checker for: the declarations to print, the definitions to decode
-export const PRINT = ["Roster.Receipt.valid", "Roster.Problem.Valid"];
+export const PRINT = ["Roster.Receipt.valid"];
 export const DATA = ["Roster.Receipt.problem", "Roster.Receipt.roster"];
 const OWN = "Roster.Receipt.";
 
@@ -38,6 +39,10 @@ export function decode(data) {
           all(need, nat) && all(avail, (row) => all(row, (b) => typeof b === "boolean"))))
       throw "`Roster.Receipt.problem` is not a `Roster.Problem.mk` of names, needs and availability";
     if (!all(roster, (s) => s === null || nat(s))) throw "`Roster.Receipt.roster` is not a list of shifts or `none`";
+    // as leanui-roster requires: then the table shows all that `Valid` reads (`canWork` is false
+    // past the last shift, so nobody works a shift the table does not have)
+    if (!(need.length === shifts.length && avail.length === people.length && all(avail, (row) => row.length === shifts.length)))
+      throw "`Roster.Receipt.problem` does not give each shift a need and each person a row with an entry for each shift";
     return { table: { people, shifts, need, avail, roster } };
   } catch (why) {
     return { why: String(why) };

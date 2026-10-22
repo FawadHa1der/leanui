@@ -156,7 +156,8 @@ if (href) {
   notary = await text("#notary-error");
   // the browser logs the failed POST itself (Chromium does): expected without a notary
   errors.splice(quiet, errors.length - quiet, ...errors.slice(quiet).filter((e) => !/Failed to load resource.*40[45]/.test(e)));
-  check("not notarized: says why", notary.startsWith("Not notarized: ") && notary.length > 20, notary);
+  // the one failure allowed: no notary at all (leanui serve); leanui-roster must notarize
+  check("not notarized: only because there is no notary", notary.startsWith("Not notarized: This page is not served by leanui-roster"), notary);
 }
 await click(".grid tbody tr:nth-child(2) .cell >> nth=0");
 check("an edit clears the notary too", (await page.$("#notarize, #verify, #notary-error")) === null);

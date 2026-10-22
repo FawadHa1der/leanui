@@ -49,15 +49,16 @@ async function verify(ndjson, label, flipped = null) {
   busy(true, !!flipped);
   status(`Checking ${label} (${megabytes(ndjson)})…`);
   const verdict = await check(ndjson);
-  const result = judge(verdict, await reference);
-  show(result, verdict, flipped);
+  const ref = await reference;
+  const result = judge(verdict, ref);
+  show(result, ref, flipped);
   status(`${label} (${megabytes(ndjson)})`);
   window.__verify = { n: (window.__verify?.n ?? 0) + 1, verified: result.verified, checks: result.checks.map((c) => c.ok), ms: verdict.ms, flipped: !!flipped };
   busy(false, !!flipped);
   return result;
 }
 
-function show({ checks, table, verified }, verdict, flipped) {
+function show({ checks, table, verified }, ref, flipped) {
   const v = $("verdict");
   v.hidden = false;
   v.className = "verdict " + (verified ? "verified" : "rejected");
@@ -93,9 +94,9 @@ function show({ checks, table, verified }, verdict, flipped) {
       : flipped ? "The data, with the flipped cell outlined" : "What the receipt claims (not proved)";
     grid(table, flipped);
   }
-  const valid = verdict.printed?.["Roster.Problem.Valid"];
-  $("proved").hidden = !(verified && valid);
-  if (valid) $("valid").textContent = valid.text;
+  // the published definition, which check 3 found the receipt's to be
+  $("proved").hidden = !(verified && ref?.valid);
+  if (ref?.valid) $("valid").textContent = ref.valid;
 }
 
 /** The problem as a grid, people × shifts, with the roster on it. */

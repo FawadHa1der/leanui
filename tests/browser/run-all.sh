@@ -10,7 +10,7 @@
 # LEANUI_CORPUS: where the fuzz corpora go (default .lake/corpus).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
-BIN=.lake/build/bin PORT=5331 ROSTER_PORT=5370
+BIN=.lake/build/bin PORT=5331 ROSTER_PORT=5371   # one above leanui-roster's default
 if [ "${1:-}" = --build ] || [ "${1:-}" = --build-only ]; then
   for app in "TodoMVCApp todomvc" "SiteApp site" "CounterApp counter" "BenchApp bench" "EffectsApp effects" \
              "PixelsApp pixels" "EditorApp editor" "VideoApp editor/video" "EditorBenchApp editor-bench" \
@@ -28,9 +28,9 @@ CORPUS="${LEANUI_CORPUS:-.lake/corpus}"
 "$BIN/leanui" serve dist --port $PORT --quiet > /dev/null 2>&1 &
 SRV=$!
 # The Roster demo on its own server, which notarizes rosters (roster/README.md); its receipts go to
-# a fresh directory, for the verify page's tests below.
+# a fresh directory, for the verify page's tests below. Its errors (the notary's too) stay in the log.
 RECEIPTS="$(mktemp -d)"
-"$BIN/leanui-roster" --port $ROSTER_PORT --receipts "$RECEIPTS" --quiet > /dev/null 2>&1 &
+"$BIN/leanui-roster" --port $ROSTER_PORT --receipts "$RECEIPTS" --quiet > /dev/null &
 ROSTER_SRV=$!
 trap 'kill $SRV $ROSTER_SRV 2>/dev/null; rm -rf "$RECEIPTS"' EXIT
 for _ in $(seq 1 100); do curl -s -o /dev/null "http://127.0.0.1:$PORT/counter/index.html" && break; sleep 0.2; done

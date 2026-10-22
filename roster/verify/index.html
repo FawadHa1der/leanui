@@ -58,8 +58,8 @@
       shift gets at least the people it needs (<code>needOf p s</code>), counted with
       <code>List.count</code>. The proof is a computation: the kernel runs the checker
       <code>checkRoster</code> on the data, gets <code>true</code>, and
-      <code>checkRoster_iff</code> turns that into <code>Valid</code>. Here is
-      <code>Valid</code> as nanoda reads it from the receipt:
+      <code>checkRoster_iff</code> turns that into <code>Valid</code>. Here is the published
+      <code>Valid</code>, which the receipt's is (check 3), as nanoda prints it:
     </p>
     <pre id="valid"></pre>
   </section>
@@ -74,8 +74,8 @@
         A receipt carries its own copy of every definition it uses; they must be these.</li>
       <li><b>Your browser</b>, which runs both, and this page's script, which compares them.</li>
     </ul>
-    <p>Not Lean's kernel, which proved the roster when the receipt was made; not the server that made
-      it; not the app.</p>
+    <p>Not Lean's kernel, which proved the roster when the receipt was made; not the app; not the
+      server that made the receipt, unless it also served this page (leanui-roster serves both).</p>
   </section>
 </main>
 </body>

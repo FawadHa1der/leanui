@@ -16,7 +16,8 @@ src="$1" out="$2"
 for tool in lake lean leanexport; do
   [ -x "$L/$tool" ] || { echo "notarize: no $tool in $L (elan toolchain install $(cat "$N/lean-toolchain"))" >&2; exit 3; }
 done
-ms() { local t=${EPOCHREALTIME/[.,]/}; echo $((t / 1000)); }
+# EPOCHREALTIME is bash 5's; macOS's bash 3.2 has none, and gets whole seconds
+ms() { local t=${EPOCHREALTIME:-$(date +%s).000000}; t=${t/[.,]/}; echo $((t / 1000)); }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail() { cat "$T/log" >&2; rm -f "$out"; echo "notarize: $1" >&2; exit 1; }
 t0=$(ms)

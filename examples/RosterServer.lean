@@ -22,10 +22,11 @@ Run from the repository root (it runs `roster/notary/notarize.sh`). It serves:
 
 The server trusts the request no more than the app trusts its solver: it checks the roster again,
 writes `Roster.receiptSource` to a fresh temporary directory and runs the notary there, which has
-Lean 4.35's kernel prove the roster valid and exports the proof (`roster/notary`). A receipt is
-named by a hash of its contents. The kernel's time grows with the problem, so problems are
-limited to 100 people and 30 shifts (about 3 s) and bodies to 64 KiB, and the notary takes one
-receipt at a time, on a thread of its own, with a short queue: other requests are not held up.
+Lean 4.35's kernel prove the roster valid and exports the proof (`roster/notary`). A receipt gets
+a random name, and the latest 1,000 are kept. The kernel's time grows with the problem, so
+problems are limited to 100 people and 30 shifts (about 3 s) and bodies to 64 KiB, and the notary
+takes one receipt at a time, on a thread of its own, with a short queue: other requests are not
+held up.
 -/
 public section
 open LeanUI LeanUI.Server Std.Async
@@ -88,6 +89,18 @@ def error (status : Nat) (why : String) : Res := Res.json (Json.mkObj [("error",
 
 def notarizeSh : System.FilePath := "roster/notary/notarize.sh"
 
+/-- The receipts kept, about 2 GB: the oldest go first. -/
+def maxReceipts := 1000
+
+/-- Remove the oldest receipts in `dir`, leaving room for one more. -/
+def prune (dir : System.FilePath) : IO Unit := do
+  let mut kept := #[]
+  for e in ← dir.readDir do
+    if e.fileName.endsWith ".ndjson" && !e.fileName.startsWith "." then
+      kept := kept.push ((← e.path.metadata).modified, e.path)
+  let oldest := kept.qsort fun a b => compare a.1 b.1 == .lt
+  for (_, f) in oldest.extract 0 (oldest.size + 1 - maxReceipts) do IO.FS.removeFile f
+
 /-- Notarize a roster `checkRoster` accepted: the receipt's id, or the status to answer and why. -/
 def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (Nat × String) String) := do
   unless ← notarizeSh.pathExists do
@@ -103,16 +116,16 @@ def notarize (o : Opts) (p : Roster.Problem) (r : Roster.Roster) : IO (Except (N
       return .error (if out.exitCode == 3 then 503 else 500, why)
     unless o.quiet do IO.print out.stdout
     let receipt ← IO.FS.readBinFile (dir / "receipt.ndjson")
-    -- 64 bits of Lean's `hash`, not a cryptographic one: a name, not a seal (the receipt states
-    -- its own roster, and the verify page shows it)
-    let id := String.ofList ((Nat.toDigits 16 ((hash receipt).toNat + 2 ^ 64)).drop 1)
-    let file := o.receipts / s!"{id}.ndjson"
-    unless ← file.pathExists do
-      IO.FS.createDirAll o.receipts
-      -- renamed into place once written, so it is never served half written (dotfiles are not served)
-      let part := o.receipts / s!".{id}.ndjson.part"
-      IO.FS.writeBinFile part receipt
-      IO.FS.rename part file
+    -- a random name: one made from the contents could be aimed at another receipt's, by a request
+    -- crafted to collide (the receipt states its own roster, and the verify page shows it)
+    let id := String.ofList <| (← IO.getRandomBytes 16).toList.flatMap fun b =>
+      (Nat.toDigits 16 (b.toNat + 256)).drop 1
+    IO.FS.createDirAll o.receipts
+    prune o.receipts
+    -- renamed into place once written, so it is never served half written (dotfiles are not served)
+    let part := o.receipts / s!".{id}.ndjson.part"
+    IO.FS.writeBinFile part receipt
+    IO.FS.rename part (o.receipts / s!"{id}.ndjson")
     return .ok id
 
 /-- Each receipt is a Lean process and they all use one Lake build, so the notary takes them one

@@ -32,7 +32,7 @@ It runs `lake exe cache get` for only the Mathlib modules `RosterHall.lean` impo
 `lake build`. Nothing of Mathlib is compiled: the cache has about 740 prebuilt files for them (63 MB
 to download, 1.3 GB unpacked; all of Mathlib would be several GB), and checking `RosterHall.lean`
 takes a few seconds. The first run also clones Mathlib and its dependencies (Lake, from
-`lake-manifest.json`): about a minute and a half in all, and 2 GB in `roster/hall/.lake`.
+`lake-manifest.json`): about a minute and a half in all, and 1.5 GB in `roster/hall/.lake`.
 
 To move to a newer Lean, set `lean-toolchain` and `rev` in `lakefile.toml` to the matching Mathlib
 release (Mathlib tags one per Lean release), then run `lake update` here.

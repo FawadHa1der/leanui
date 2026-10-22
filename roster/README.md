@@ -10,10 +10,10 @@ number of people, and each person works at most one shift. "Can we staff this?" 
 and the app shows one of:
 
 * **a roster**, checked: every shift gets the people it needs, all of them available;
-* **"can't be staffed"**, with a reason anyone can check by eye: "Bar 12–15 and Bar 15–18 need 6
-  people, but only 5 can do any of them: Ana, Ben, Chen, Dee and Hana", the shifts and the people
-  highlighted in the grid (a *Hall violator*: a set of shifts that need more people than can do
-  any of them);
+* **"can't be staffed"**, with a reason anyone can check by eye: "These 2 shifts, Bar 12–15 and
+  Bar 15–18, need 6 people, but only 5 people can do any of them: Ana, Ben, Chen, Dee and Hana",
+  the shifts and the people highlighted in the grid (a *Hall violator*: a set of shifts that need
+  more people than can do any of them);
 * **a rejected answer**, with why: the "Lying solver" switch makes the solver answer wrongly on
   purpose, a different lie each time (it puts someone on a shift they can't do, leaves a shift
   short, says it can't be done blaming a shift that can be staffed, or gives no reason), and the
@@ -30,12 +30,12 @@ The app's "What is proved" panel lists these, labelled by kind:
 
 | Kind | Guarantee | Where | Trusts |
 |---|---|---|---|
-| **a**, a theorem about the code, for every input | The app never shows an unchecked answer: after any sequence of messages, a roster on screen is valid for the problem on screen, and a reason on screen means no roster is | `steps_inv`, `examples/RosterProofs.lean` | Lean's kernel; Lean's compiler, which built the app |
+| **a**, a theorem about the code, for every input | The app never shows an unchecked answer: after any sequence of messages, a roster in the model's result is valid for the model's problem, and a reason there means no roster is | `steps_inv`, `examples/RosterProofs.lean` | Lean's kernel; Lean's compiler, which built the app; the view, which draws the result (tested, not proved) |
 | **a** | The checkers are right: `checkRoster` accepts a roster exactly when it is valid, and a violator `checkViolator` accepts rules out every roster | `checkRoster_iff`, `checkViolator_sound`, `checkAnswer_sound`, `examples/Roster/Core.lean` | Lean's kernel |
 | **a** | A reason always exists: every problem without a valid roster has a violator the checker accepts, so a correct solver is never stuck | `Roster.Problem.complete`, `roster/hall/` (Hall's marriage theorem, from Mathlib) | Lean's kernel |
 | **b**, a check of this answer, now | The answer on screen passed `checkAnswer`, in the page | `judge`, `examples/Roster.lean` | the proofs above; Lean's compiler; the browser |
 | **c**, a theorem about this data | Notarized: Lean's kernel proved `Valid problem roster` for this problem and roster | `roster/notary/`, `examples/RosterServer.lean` | Lean's kernel, on the server |
-| **c′** | Verified: an independent kernel checked that theorem again, in the browser | `roster/verify/` | nanoda; the reference (below), built from the published source |
+| **c′** | Verified: an independent kernel checked that theorem again, in the browser | `roster/verify/` | nanoda; the verify page's checks and the reference (below), built from the published source, as served |
 | **d** | The solver only searches | `examples/Roster/Solver.lean` | nothing: nothing above depends on it |
 
 `Valid` is the specification, small enough to read in full:
@@ -56,7 +56,7 @@ three, never `sorryAx`, and no `native_decide`.
 | Path | What | Lean |
 |---|---|---|
 | `examples/Roster/Core.lean` | the problem, `Valid`, the checkers and their soundness. Imports only `Init`, since three projects compile it | 4.34, 4.34 + Mathlib, 4.35 |
-| `examples/Roster/Solver.lean` | the solver (augmenting paths; a violator from the people it could not reach), the lies, the sample problems | 4.34 |
+| `examples/Roster/Solver.lean` | the solver (augmenting paths; a violator from the shifts reachable from a place it could not fill), the lies, the sample problems | 4.34 |
 | `examples/Roster.lean`, `RosterApp.lean`, `roster.html` | the app, a client-side wasm64 app like the others (its style is inline in the page: `tools/build-app.sh` copies only the page) | 4.34 |
 | `examples/RosterProofs.lean` | `steps_inv` | 4.34 |
 | `examples/Roster/Receipt.lean` | `receiptSource`: a problem and a roster as the Lean file the notary compiles | 4.34 |
@@ -92,8 +92,8 @@ more than the app trusts its solver: it checks the roster with `checkRoster`, wr
 `Roster.receiptSource` (a Lean file stating `theorem valid : problem.Valid roster`, proved with
 `checkRoster_iff` and `decide +kernel`, so that the kernel evaluates the checker), and runs the
 notary on it, one receipt at a time. The receipt is the theorem exported with everything it
-depends on (NDJSON, Lean's export format), served at `/roster/receipts/<id>.ndjson`; the app links
-it to the verify page. Problems are limited to 100 people and 30 shifts (about 3 s of kernel
+depends on (NDJSON, Lean's export format), served at `/roster/receipts/<id>.ndjson` under a random
+name (the latest 1,000 are kept); the app links it to the verify page. Problems are limited to 100 people and 30 shifts (about 3 s of kernel
 time). [`notary/README.md`](notary/README.md) has the details: for the feasible sample a receipt
 takes about 2.5 s and is 2.0 MB (320 kB gzipped), nearly all of it `Init`, carried along so that
 the receipt checks on its own.
@@ -116,16 +116,18 @@ make any roster pass. So the page passes a receipt only if all four checks pass 
    structure, so it is the same in every export (`checker/src/fingerprint.rs`). `reference.json`
    is built from the published source, `examples/Roster/Core.lean`, exported the way the notary
    exports receipts, and names the source and its SHA-256.
-4. **Plain data**: `problem` and `roster` are literals (`checker/src/data.rs`), which the page shows
-   as the table. They are decoded by the checker from the terms the kernel checked, not by
-   JavaScript reading the file again.
+4. **Plain data**: `problem` and `roster` are literals (`checker/src/data.rs`), with a need for each
+   shift and a full row of availability for each person, which the page shows as the table. They
+   are decoded by the checker from the terms the kernel checked, not by JavaScript reading the
+   file again.
 
-The page then shows the table, the statement, and the definition of `Valid` as the receipt has it.
+The page then shows the table, the statement, and the published definition of `Valid` (from
+`reference.json`), which check 3 found the receipt's to be.
 `roster/verify/forge.mjs` forges a receipt that the kernel accepts but check 3 rejects (it
 redefines `List.count` so that an empty roster passes); the tests use it.
 
-Checking the feasible sample's receipt takes about 0.25 s in Chromium and 1.2 s in Firefox (CI
-machine, to be re-measured on the reference Mac).
+Checking the feasible sample's receipt takes about 0.25 s in Chromium and 0.8 to 1.2 s in Firefox
+(CI machines, to be re-measured on the reference Mac).
 
 The verify page is plain HTML and JavaScript with wasm32: it runs in any current browser, and on
 its own, with no LeanUI. The app needs Memory64, which Safari does not have yet (Safari is out of
@@ -145,8 +147,11 @@ test notarized; CI runs them all, and checks the completeness proof in a job of 
 ## Not covered
 
 * nanoda is a second implementation, not a verified one: c′ trusts it, as c trusts Lean's kernel.
-  Lean 4.35's toolchain ships other checkers of export files too (`leanchecker`, `lean4lean`,
-  `con-leche`, `con-ron`); `notary/README.md` runs two of them on a receipt.
+  Lean 4.35's toolchain ships other checkers of export files too (`leanchecker --from-export`,
+  `con-leche`, `con-ron`); `notary/README.md` runs `leanchecker` and `nanoda_bin` on a receipt.
+* Whoever serves the verify page could serve one that says anything: c′ is independent of Lean's
+  kernel and of the notary, not of the server, when one server serves both (leanui-roster does).
+  The page is plain files: anyone can serve their own copy, or run `roster/verify/test.mjs`.
 * Check 3 trusts `reference.json`, which the build makes with Lean 4.35's `leanexport` from the
   source in this repository; anyone can rebuild it and compare.
 * The receipt names a roster for a problem; it says nothing about who wrote either.

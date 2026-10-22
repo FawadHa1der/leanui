@@ -7,8 +7,9 @@ The solver is not trusted, and with the "Lying solver" switch on it lies on purp
 shows is decided by `Problem.checkAnswer`, proved sound in `Roster.Core`, and the app's model
 logic is the pure function `update`. So the property that matters is:
 
-* `steps_inv`: after any sequence of messages, a roster on screen is valid for the problem on
-  screen, and a set of shifts on screen means that no valid roster exists.
+* `steps_inv`: after any sequence of messages, a roster in the model's result is valid for the
+  model's problem, and a set of shifts there means that no valid roster exists. (The view, which
+  draws them, is tested: `tests/browser/roster.mjs`.)
 
 It holds because only `ask` sets a result, through `judge`, which keeps an answer only if the
 checker accepts it (`judge_inv`); edits clear the result; and the other messages change neither
