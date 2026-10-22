@@ -6,6 +6,8 @@
 //! stdin: the receipt. Arguments: the names to print. stdout: one line of JSON, either
 //!   {"ok":true,"declarations":n,"axioms":[…],"printed":{name:{"type":…,"text":…} or null}}
 //!   {"ok":false,"error":…,"during":"checking Roster.Receipt.valid"}
+//! `type` is the declaration's type alone (what a theorem states), `text` the whole declaration
+//! (proofs elided); `axioms` are the receipt's axioms, all of them permitted ones.
 //!
 //! WASI rather than wasm32-unknown-unknown: nanoda_lib reads export files only from a path or
 //! from stdin.
@@ -36,7 +38,10 @@ fn reply(v: Value) { println!("{v}"); }
 
 fn main() {
     std::panic::set_hook(Box::new(|info| {
-        let at = info.location().map_or(String::new(), |l| format!(" ({}:{})", l.file(), l.line()));
+        // the file name only: the path is the build machine's
+        let at = info.location().map_or(String::new(), |l| {
+            format!(" ({}:{})", l.file().rsplit('/').next().unwrap_or_default(), l.line())
+        });
         let during = DOING.lock().map_or(String::new(), |d| d.clone());
         let error = format!("{}{at}", info.payload_as_str().unwrap_or("panic"));
         reply(json!({"ok": false, "error": error, "during": during}));

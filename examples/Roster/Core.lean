@@ -48,10 +48,12 @@ def Problem.Valid (p : Problem) (r : Roster) : Prop :=
 /-- `Valid`, with its quantifiers bounded: past the end of the roster nobody works. -/
 def Problem.checkRoster (p : Problem) (r : Roster) : Bool :=
   r.length == p.people.length &&
-  (List.range r.length).all (fun i => match r[i]? with | some (some s) => p.canWork i s | _ => true) &&
+  (List.range r.length).all (fun i =>
+    match r[i]? with | some (some s) => p.canWork i s | _ => true) &&
   (List.range p.shifts.length).all fun s => p.needOf s ≤ r.count (some s)
 
-theorem Problem.checkRoster_iff (p : Problem) (r : Roster) : p.checkRoster r = true ↔ p.Valid r := by
+theorem Problem.checkRoster_iff (p : Problem) (r : Roster) :
+    p.checkRoster r = true ↔ p.Valid r := by
   simp only [checkRoster, Valid, Bool.and_eq_true, beq_iff_eq, List.all_eq_true, List.mem_range,
     decide_eq_true_eq]
   constructor
@@ -78,7 +80,8 @@ need at most as many people as work them (`sum_need_le`; each person counts once
 shifts of `T` are distinct), and those people can each do a shift of `T` (`countP_le_able`). -/
 
 /-- Counting by two predicates that never hold together is counting by either. -/
-theorem countP_or {α} (l : List α) (p q : α → Bool) (h : ∀ a ∈ l, p a = true → q a = true → False) :
+theorem countP_or {α} (l : List α) (p q : α → Bool)
+    (h : ∀ a ∈ l, p a = true → q a = true → False) :
     l.countP (fun a => p a || q a) = l.countP p + l.countP q := by
   induction l with
   | nil => rfl
@@ -87,6 +90,7 @@ theorem countP_or {α} (l : List α) (p q : α → Bool) (h : ∀ a ∈ l, p a =
     have ha := h a (by simp)
     cases hp : p a <;> cases hq : q a <;> simp_all <;> omega
 
+/-- The shifts of `T` need no more people than work them: distinct shifts, so nobody counts twice. -/
 theorem Problem.sum_need_le (p : Problem) (r : Roster) (T : List Nat) (hT : T.Nodup)
     (hneed : ∀ s ∈ T, p.needOf s ≤ r.count (some s)) :
     (T.map p.needOf).sum ≤ r.countP fun o => T.any (o == some ·) := by
@@ -129,7 +133,7 @@ theorem Problem.checkViolator_sound (p : Problem) (T : List Nat) :
   rintro h ⟨r, hlen, hwork, hneed⟩
   simp only [checkViolator, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at h
   obtain ⟨⟨hnd, hlt⟩, hgt⟩ := h
-  have h1 := p.sum_need_le r T hnd fun s hs => hneed s (by simpa using hlt s hs)
+  have h1 := p.sum_need_le r T hnd fun s hs => hneed s (hlt s hs)
   have h2 := p.countP_le_able T r 0 (by simpa using hwork)
   rw [able, ← List.countP_eq_length_filter, List.range_eq_range', ← hlen] at hgt
   omega

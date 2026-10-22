@@ -1,0 +1,20 @@
+# The completeness of the roster checker, proved with Mathlib's Hall theorem (README.md). A
+# project of its own, apart from the main build: Mathlib is large, and the main build stays free of
+# it. Same Lean as the main build (4.34.0), so it compiles the same `Roster.Core` source.
+name = "roster-hall"
+defaultTargets = ["RosterHall"]
+
+# Mathlib's release for this Lean; `lake exe cache get` downloads its prebuilt files (README.md).
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.34.0"
+
+# The problem, the specification and the checkers, from the main tree
+[[lean_lib]]
+name = "Examples"
+srcDir = "../../examples"
+roots = ["Roster.Core"]
+
+[[lean_lib]]
+name = "RosterHall"
