@@ -1,0 +1,18 @@
+[package]
+name = "checker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The Roster verify page's checker: nanoda, an independent Lean kernel, as a WASI command"
+
+[dependencies]
+nanoda_lib = { git = "https://github.com/ammkrn/nanoda_lib", rev = "998e0a84e4c1572ca279ff05007af6ec6639405a" }  # v0.4.26
+serde_json = "1"
+
+[profile.release]
+# nanoda's own release settings: arithmetic that overflows stops the checker instead of wrapping
+overflow-checks = true
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

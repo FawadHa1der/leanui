@@ -1,0 +1,6 @@
+[build]
+target = "wasm32-wasip1"
+
+[target.wasm32-wasip1]
+# nanoda recurses deeply and runs its own checker threads on 16 MiB stacks (nanoda_lib STACK_SIZE)
+rustflags = ["-C", "link-arg=-zstack-size=16777216"]
