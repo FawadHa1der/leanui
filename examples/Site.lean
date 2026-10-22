@@ -214,8 +214,9 @@ def examples (m : Model) : Html Msg :=
       <h2>Roster</h2>
       <p>
         Can we staff this? An untrusted solver answers, and a checker proved correct in Lean
-        decides what the app shows, down to why a day cannot be staffed. A roster comes with a
-        proof, which an independent kernel checks again in your browser.{" "}
+        decides what the app shows, down to why a day cannot be staffed. A notary proves a roster
+        valid with Lean's kernel. This site has none, but it has one roster notarized when it was
+        built, which an independent kernel checks again in your browser.{" "}
         <a href="/roster/">Open the Roster demo</a>
       </p>
     </section>
