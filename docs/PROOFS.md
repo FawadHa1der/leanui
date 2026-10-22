@@ -249,3 +249,15 @@ own induction principle: `lisSearch` (binary search, by `hi - lo`), `lisScan` (b
 Positional diffing, attributes and listeners, `lazy` nodes, hydration, effects, and the rest of
 the command protocol are outside these theorems; they are covered by the native harness
 (`leanui-tests`) and the browser tests of the other lanes.
+
+## 7. Proofs about apps
+
+The examples prove things about their own models, the same way: the model's logic is the pure
+function `update`, so an invariant is a theorem about every sequence of messages.
+
+* TodoMVC (`examples/TodoMVCProofs.lean`): the list keys stay unique under every message.
+* Roster ([roster/README.md](../roster/README.md)): the app never shows an unchecked answer
+  (`examples/RosterProofs.lean`), the checkers that decide what it shows are sound
+  (`examples/Roster/Core.lean`) and complete (`roster/hall/`, with Mathlib), and the rosters it
+  notarizes come with a proof that Lean's kernel checked, which the verify page checks again in
+  the browser with an independent kernel.

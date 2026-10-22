@@ -1,5 +1,6 @@
 module
 public import LeanUI.Server
+public import LeanUI.Json
 public import Site
 /-!
 # `leanui-site`: the LeanUI site, served by Lean
@@ -18,6 +19,11 @@ from `dist/editor` (`tools/build-app.sh EditorApp editor`), so the site's pages 
 `/race/` is the race page, static files from `dist/race` (`bench/race/build.sh`): the same apps in
 vanilla JavaScript, in LeanUI compiled to wasm64 and in LeanUI interpreted by lean-vir (`vir/`),
 side by side. lean-vir runs only there; the site itself is the wasm64 build.
+
+`/roster/` is the Roster demo (`roster/README.md`), static files from `dist/roster`: the app and
+its verify page, with one receipt, the Feasible preset's roster notarized when the site was staged
+(`dist/roster/receipts/feasible.ndjson`, `deploy/cloudflare/stage.sh`). The notary itself needs
+Lean 4.35, which the site does not have: `POST /roster/notarize` says so and offers that receipt.
 -/
 public section
 open LeanUI LeanUI.Server
@@ -58,6 +64,16 @@ def pageRoute (sessions : Sessions) (wasm : Bool) : Route := ⟨fun req => do
   let res ← site.page "site" Site.program sessions mode req
   return some (if page?.isNone then res.withStatus 404 else res)⟩
 
+/-- The Roster demo's `POST /notarize`, with no notary: why, and the sample receipt if there is one. -/
+def rosterNotary (o : Opts) : Route := Route.post "/notarize" fun req => do
+  let sample := "receipts/feasible.ndjson"
+  let why := "This site has no notary: it needs Lean 4.35 on the server (leanui-roster has one)."
+  let answer := if ← (o.dist / "roster" / sample).pathExists then
+      [("error", .str s!"{why} The Feasible preset's roster was notarized when the site was built."),
+       ("sample", .str s!"{req.base}/{sample}")]
+    else [("error", .str why)]
+  return Res.json (Json.mkObj answer).compress 503
+
 def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
   let dist := o.dist / "site"
   Route.first [
@@ -68,6 +84,7 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Route.under "/editor" (Static.route { root := o.dist / "editor" }),
     -- cross-origin isolated: the race times clicks with performance.now(), precise only then
     Route.under "/race" (Static.route { root := o.dist / "race", isolate := true }),
+    Route.under "/roster" (Route.first [rosterNotary o, Static.route { root := o.dist / "roster" }]),
     sessions.route "/leanui",
     pageRoute sessions wasm]
 

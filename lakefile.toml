@@ -2,7 +2,7 @@ name = "leanui"
 version = "0.1.0"
 defaultTargets = ["LeanUI", "LeanUIHost", "LeanUISyntax", "LeanUIKit", "LeanUIServer", "LeanUIProofs",
   "LeanUITesting", "Examples", "leanui-tests", "leanui-props", "leanui-syntax-tests", "leanui-kit-tests",
-  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-notes-tests",
+  "leanui-server-tests", "leanui", "leanui-demo-server", "leanui-perf", "leanui-todomvc-tests", "leanui-site", "leanui-roster", "leanui-notes-tests",
   "leanui-editor-tests", "leanui-editor-perf"]
 
 # The runtime core every app links.
@@ -44,7 +44,8 @@ name = "Examples"
 srcDir = "examples"
 roots = ["Counter", "CounterApp", "TodoMVC", "TodoMVCApp", "Bench", "BenchApp", "Effects", "EffectsApp", "TodoMVCProofs", "Site", "SiteApp", "Notes", "NotesApp", "Pixels", "PixelsApp",
   "Editor.Image", "Editor.Adjust", "Editor.Filter", "Editor.Geometry", "Editor.Composite", "Editor.Paint", "Editor.Png", "Editor.Core",
-  "Editor.Doc", "Editor.Ops", "Editor", "EditorApp", "EditorBench", "EditorBenchApp", "Video", "VideoApp", "Life", "LifeApp"]
+  "Editor.Doc", "Editor.Ops", "Editor", "EditorApp", "EditorBench", "EditorBenchApp", "Video", "VideoApp", "Life", "LifeApp",
+  "Roster.Core", "Roster.Solver", "Roster", "RosterApp", "RosterProofs", "Roster.Receipt"]
 
 [[lean_exe]]
 name = "leanui-tests"
@@ -88,6 +89,12 @@ root = "tests.TodoMVC"
 name = "leanui-site"
 srcDir = "examples"
 root = "SiteServer"
+
+# The Roster demo (roster/README.md): the app, its verify page and the notary (POST /roster/notarize).
+[[lean_exe]]
+name = "leanui-roster"
+srcDir = "examples"
+root = "RosterServer"
 
 [[lean_exe]]
 name = "leanui-notes-tests"

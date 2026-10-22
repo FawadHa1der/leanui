@@ -6,6 +6,8 @@ public import LeanUI.Testing.Harness
 public import Effects
 public import Pixels
 public import Life
+public import Roster.Solver
+public import Roster.Receipt
 meta import LeanUI.Json.Derive
 /-!
 # Tests for the kit: `LeanUI.Json`, `LeanUI.Router`, and the effects lab
@@ -26,6 +28,9 @@ effects tests read `examples/effects-assets/*.json`).
 * Life (`examples/Life.lean`): the board after 0, 100 and 1,000 generations, the values the race
   page's three implementations must show (`tests/browser/race.mjs`), and 100 clicks on Step in
   the DOM model.
+* Roster (`examples/Roster`): on 600 random problems (167 can be staffed) and six edge cases, the
+  solver's answer always passes `checkAnswer`, and every lie that changes it is rejected; the
+  presets. The Lean source of a receipt (`Roster.receiptSource`), names escaped.
 -/
 public section
 open LeanUI
@@ -994,6 +999,69 @@ def testLife : T Unit := section_ "life" do
   let d ← r.dom.get
   expect "protocol" d.errors.isEmpty s!"{d.errors}"
 
+/-! ## Roster -/
+
+deriving instance BEq for Roster.Answer
+
+def testRoster : T Unit := section_ "roster" do
+  let preset (name : String) := (Roster.samples.find? (·.1 == name)).map (·.2) |>.getD default
+  let feasible := preset "feasible"
+  match Roster.solve feasible with
+  | .staffed r => expect "feasible preset" (feasible.checkRoster r) s!"{repr r}"
+  | a => expect "feasible preset" false s!"{repr a}"
+  let impossible := preset "impossible"
+  let a := Roster.solve impossible
+  expectEq "impossible preset" a (.impossible [3, 4])
+  expect "impossible preset checks" (impossible.checkAnswer a)
+  expectEq "impossible preset, in words" (Roster.diagnose impossible a)
+    "Bar 12–15 and Bar 15–18 need 6 people, but only 5 can do any of them: Ana, Ben, Chen, Dee and Hana."
+  -- edge cases: nobody, no shifts, nobody needed, more needed than there are people, short rows
+  let edge : List Roster.Problem := [
+    { people := [], shifts := [], need := [], avail := [] },
+    { people := ["a", "b"], shifts := [], need := [], avail := [] },
+    { people := [], shifts := ["x"], need := [1], avail := [] },
+    { people := ["a", "b"], shifts := ["x", "y"], need := [0, 0], avail := [[true], []] },
+    { people := ["a", "b"], shifts := ["x", "y"], need := [3, 0], avail := [[true, true], [true, true]] },
+    { people := ["a", "b", "c"], shifts := ["x", "y"], need := [1, 1, 5], avail := [[true], [false, true]] }]
+  -- random problems of several sizes, both kinds of answer
+  let sizes := #[(30, 10), (12, 6), (20, 10), (5, 3), (30, 5), (8, 8)]
+  let probs := edge ++ (List.range 600).map fun k =>
+    let (n, m) := sizes[k % sizes.size]!
+    Roster.random (UInt64.ofNat k) n m
+  let mut staffed := 0
+  let mut bad := #[]
+  let mut lies : Array Nat := Roster.Lie.all.map fun _ => 0
+  for p in probs do
+    let a := Roster.solve p
+    if let .staffed _ := a then staffed := staffed + 1
+    if !p.checkAnswer a then bad := bad.push s!"{repr p} answered {repr a}"
+    for h : j in [0:Roster.Lie.all.size] do
+      let l := Roster.Lie.all[j]
+      let b := Roster.lie l p a
+      if b != a then
+        lies := lies.modify j (· + 1)
+        if p.checkAnswer b then bad := bad.push s!"{repr p}: lie {repr l} {repr b} accepted"
+  expect "answers check, lies are rejected" bad.isEmpty s!"{bad.size} failures, first: {bad[0]?}"
+  let n := probs.length
+  expect "both kinds of answer" (100 < staffed && 100 < n - staffed) s!"{staffed} of {n} staffed"
+  expect "every lie is told" (lies.all (n / 2 < ·)) s!"{lies}"
+  -- the receipt's source (what `roster/notary` compiles): one line per definition, and names as
+  -- Lean string literals that no name can end early
+  let named : Roster.Problem := {
+    people := ["Ana \"A\" B\\", "x\ny\t\r\x00\x7f", "Zoë 😀", ""], shifts := ["Gate 9–12", "end Roster.Receipt"],
+    need := [1, 0], avail := [[true, false], [false, false], [true, true], []] }
+  expectEq "receipt source" (Roster.receiptSource named [some 0, none, some 1, none]) <|
+    "import Roster.Core\n" ++
+    "namespace Roster.Receipt\n" ++
+    "def problem : Roster.Problem := { people := [\"Ana \\\"A\\\" B\\\\\", \"x\\ny\\t\\x0d\\x00\\x7f\", \"Zoë 😀\", \"\"], " ++
+      "shifts := [\"Gate 9–12\", \"end Roster.Receipt\"], need := [1, 0], avail := [[true, false], [false, false], [true, true], []] }\n" ++
+    "def roster : Roster.Roster := [some 0, none, some 1, none]\n" ++
+    "theorem valid : problem.Valid roster := (Roster.Problem.checkRoster_iff problem roster).mp (by decide +kernel)\n" ++
+    "end Roster.Receipt\n"
+  let empty : Roster.Problem := { people := [], shifts := [], need := [], avail := [] }
+  expect "receipt source, empty" ((Roster.receiptSource empty []).splitOn "\n" |>.contains
+    "def problem : Roster.Problem := { people := [], shifts := [], need := [], avail := [] }")
+
 /-! ## Main -/
 
 public def main : IO UInt32 := do
@@ -1001,7 +1069,7 @@ public def main : IO UInt32 := do
   let ((), s) ← (do
     testDocuments; testPrinting; testNumbers; testClasses; testAccessors; testLarge
     testUrls; testResolve; testRoutes; testEffectsApp; testInput; testUniqueModel; testUniqueMessages; testPixelsApp
-    testLife : T Unit).run {}
+    testLife; testRoster : T Unit).run {}
   for f in s.failed do IO.println s!"FAIL {f}"
   if s.failed.isEmpty then
     IO.println s!"all {s.passed} checks passed"; return 0

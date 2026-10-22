@@ -1,0 +1,7 @@
+[build]
+target = "wasm32-wasip1"
+
+[target.wasm32-wasip1]
+# the stack nanoda gives its checker threads (nanoda_lib's STACK_SIZE, 16 MiB). It comes first in
+# memory, so a check that overflows it traps instead of overwriting data.
+rustflags = ["-C", "link-arg=-zstack-size=16777216"]

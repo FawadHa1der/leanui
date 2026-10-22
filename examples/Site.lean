@@ -210,6 +210,15 @@ def examples (m : Model) : Html Msg :=
       </p>
       <div class="todo-demo">{(TodoMVC.view m.todo).map Msg.todo}</div>
     </section>
+    <section class="example">
+      <h2>Roster</h2>
+      <p>
+        Can we staff this? An untrusted solver answers, and a checker proved correct in Lean
+        decides what the app shows, down to why a day cannot be staffed. A roster comes with a
+        proof, which an independent kernel checks again in your browser.{" "}
+        <a href="/roster/">Open the Roster demo</a>
+      </p>
+    </section>
   </main>
 
 /-- A non-negative number with `digits` decimals. -/

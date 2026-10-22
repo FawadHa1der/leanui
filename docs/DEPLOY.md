@@ -19,18 +19,23 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
    single-threaded runtime archives (about half an hour on a hosted runner, then cached until
    `toolchain/fork.lock`, the patch or the script changes). `tests/browser/run-all.sh
    --build-only` builds the apps the browser suites load: the wasm64 builds, then the lean-vir
-   builds of the benchmarked apps (`vir/build.sh`, its `vir/.lake` cached like `.lake/build`) and
-   the race page (`bench/race/build.sh`, into `dist/race`).
+   builds of the benchmarked apps (`vir/build.sh`, its `vir/.lake` cached like `.lake/build`), the
+   race page (`bench/race/build.sh`, into `dist/race`) and the Roster demo's verify page
+   (`roster/verify/build.sh`, with Rust's `wasm32-wasip1` target and Lean 4.35).
 4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
-   apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth, race.
+   apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth, race, and the
+   Roster demo's (the app against `leanui-roster`, which notarizes, and the receipt it makes on the
+   verify page).
 5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files (`dist/site`,
-   `dist/editor`, `dist/race`), and writes brotli (quality 11) and gzip siblings of every `.wasm`,
-   `.js`, `.mjs` and `.irpkg` file. The image is built for `linux/amd64` and started, and `/`, the
-   wasm, the stylesheet, the editor, the video lab and the race page (with a wasm64 and a lean-vir
-   file of it) must answer, the wasm brotli-encoded to a client that accepts it. On `main` the
-   staged files are uploaded for the deploy job.
+   `dist/editor`, `dist/race`, `dist/roster` with the Roster demo's one receipt, notarized then),
+   and writes brotli (quality 11) and gzip siblings of every `.wasm`, `.js`, `.mjs`, `.irpkg` and
+   `.ndjson` file. The image is built for `linux/amd64` and started, and `/`, the wasm, the
+   stylesheet, the editor, the video lab, the race page (with a wasm64 and a lean-vir file of it)
+   and the Roster demo must answer, the wasm and the receipt brotli-encoded to a client that
+   accepts it; the Roster demo's app and verify page are tested in Chromium against it. On `main`
+   the staged files are uploaded for the deploy job.
 
 `tests/browser/run-all.sh` is also the local entry point (`--build` builds the apps first). On a
 shared machine, run it under the host browser lock.
@@ -49,7 +54,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   no server rendering: browsers without Memory64 get a message instead), its video lab,
   `/editor/video/` (`dist/editor/video`), and the race page, `/race/` (`dist/race`, static files:
   the same apps in vanilla JavaScript, wasm64 and lean-vir side by side; `bench/race/`). lean-vir
-  runs only there: the site and the editor are the wasm64 builds.
+  runs only there: the site and the editor are the wasm64 builds. And the Roster demo, `/roster/`
+  (`dist/roster`: the app and its verify page, with one receipt made when the site was staged;
+  no notary, which needs Lean 4.35; `roster/README.md`).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
   accept them (`Content-Encoding`, `Vary: Accept-Encoding`). Brotli at quality 11 is smaller than
   compression on the fly: the site's wasm is 194 KB. The container's response does not reach the
@@ -110,9 +117,10 @@ The image needs a Linux x86-64 `leanui-site`, so deploy from Linux (or let CI do
 wasm64 archives built once (`toolchain/build-archives.sh`, needs Docker):
 
 ```bash
-lake build leanui-site && tools/build-app.sh SiteApp site && tools/build-app.sh EditorApp editor &&
+lake build leanui-site leanui-roster && tools/build-app.sh SiteApp site && tools/build-app.sh EditorApp editor &&
   tools/build-app.sh VideoApp editor/video && tools/build-app.sh LifeApp life &&
-  tools/build-app.sh BenchApp bench && vir/build.sh && bench/race/build.sh && deploy/cloudflare/stage.sh
+  tools/build-app.sh BenchApp bench && vir/build.sh && bench/race/build.sh &&
+  tools/build-app.sh RosterApp roster && roster/verify/build.sh && deploy/cloudflare/stage.sh
 ```
 
 ```bash

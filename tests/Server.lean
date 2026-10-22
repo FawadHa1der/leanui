@@ -83,11 +83,13 @@ def testMime : IO Unit := do
   for (f, t) in [("app.wasm", "application/wasm"), ("APP.WASM", "application/wasm"),
                  ("leanui.js", "text/javascript; charset=utf-8"), ("x.mjs", "text/javascript; charset=utf-8"),
                  ("index.html", "text/html; charset=utf-8"), ("s.css", "text/css; charset=utf-8"),
-                 ("a.json", "application/json"), ("i.svg", "image/svg+xml"), ("f.woff2", "font/woff2"),
+                 ("a.json", "application/json"), ("r.ndjson", "application/x-ndjson"),
+                 ("i.svg", "image/svg+xml"), ("f.woff2", "font/woff2"),
                  ("noext", "application/octet-stream"), ("x.unknown", "application/octet-stream"),
                  ("dir.v2/file", "application/octet-stream")] do
     expectEq (Mime.ofPath f) t s!"mime {f}"
   expect (Mime.compressible "application/wasm") "wasm compresses"
+  expect (Mime.compressible "application/x-ndjson") "JSON lines compress"
   expect (!Mime.compressible "image/png") "png does not"
   IO.println "  media types: ok"
 

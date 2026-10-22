@@ -1,5 +1,6 @@
-# Build and test everything (native, then wasm64 and lean-vir in Chromium and Firefox); on main, deploy the
-# LeanUI site to Cloudflare Containers (also on a manual run of main). Setup and secrets: docs/DEPLOY.md.
+# Build and test everything (native, then wasm64 and lean-vir in Chromium and Firefox), and check the
+# Roster demo's completeness proof against Mathlib; on main, deploy the LeanUI site to Cloudflare
+# Containers (also on a manual run of main). Setup and secrets: docs/DEPLOY.md.
 name: CI
 
 on:
@@ -27,20 +28,22 @@ jobs:
 
       # Caches are restored and saved explicitly: actions/cache saves only when the whole job
       # succeeds, and the archives below take half an hour to rebuild.
-      # Two Lean releases: the main build's (lean-toolchain) and lean-vir's (vir/lean-toolchain);
-      # elan's lake runs the one its directory names.
+      # Two Lean releases: the main build's (lean-toolchain) and lean-vir's (vir/lean-toolchain),
+      # which the Roster notary also uses (roster/notary/lean-toolchain); elan's lake runs the one
+      # its directory names.
       - name: Restore the Lean toolchains
         id: elan
         uses: actions/cache/restore@v6
         with:
           path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'vir/lean-toolchain') }}
+          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'vir/lean-toolchain', 'roster/notary/lean-toolchain') }}
       - name: Install the Lean toolchains
         if: steps.elan.outputs.cache-hit != 'true'
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
           "$HOME/.elan/bin/elan" toolchain install "$(cat vir/lean-toolchain)"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat roster/notary/lean-toolchain)"
       - name: Save the Lean toolchains
         if: steps.elan.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -114,7 +117,11 @@ jobs:
           restore-keys: |
             vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-${{ hashFiles('vir/lakefile.toml', 'vir/lake-manifest.json') }}-
             vir-lake-${{ runner.os }}-${{ hashFiles('vir/lean-toolchain') }}-
-      - name: Build the apps (wasm64, lean-vir) and the race page
+      # The Roster verify page's checker: nanoda, a Lean kernel in Rust, as a WASI command
+      # (roster/verify/build.sh)
+      - name: Rust's wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+      - name: Build the apps (wasm64, lean-vir), the race page and the Roster verify page
         run: tests/browser/run-all.sh --build-only
       - name: Own the compiler cache (Docker wrote it as root)
         run: sudo chown -R "$(id -u):$(id -g)" .toolchain/ccache
@@ -207,6 +214,12 @@ jobs:
           runtime=$(curl -fsS http://127.0.0.1:8080/race/life/vir/app.json | node -p 'JSON.parse(require("fs").readFileSync(0)).runtimeModule')
           curl -fsS -o /dev/null -D "$RUNNER_TEMP/vir.headers" -H 'accept-encoding: br, gzip' "http://127.0.0.1:8080/race/life/vir/${runtime%.js}.wasm"
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/vir.headers"
+          # the Roster demo, without its notary: the app and the verify page, on the receipt staged
+          curl -fsS http://127.0.0.1:8080/roster/ | grep -q "Roster"
+          curl -fsS -o /dev/null -D "$RUNNER_TEMP/receipt.headers" -H 'accept-encoding: br, gzip' http://127.0.0.1:8080/roster/receipts/feasible.ndjson
+          grep -qi '^content-encoding: br' "$RUNNER_TEMP/receipt.headers"
+          node tests/browser/roster.mjs http://127.0.0.1:8080/roster/ chromium
+          node tests/browser/roster-verify.mjs "http://127.0.0.1:8080/roster/verify/?receipt=/roster/receipts/feasible.ndjson" chromium
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -214,6 +227,22 @@ jobs:
           name: site-container
           path: ${{ runner.temp }}/site-container.tgz
           retention-days: 7
+
+  # The Roster demo's completeness proof (roster/hall/README.md): Hall's marriage theorem, from
+  # Mathlib, which the main build never reads. Mathlib's prebuilt files come from its cache (only
+  # the modules RosterHall.lean imports); nothing of Mathlib compiles.
+  hall:
+    name: Roster completeness proof (Mathlib)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Lean
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat roster/hall/lean-toolchain)"
+      - name: Check the proof
+        run: roster/hall/build.sh
 
   deploy:
     name: Deploy the site to Cloudflare
