@@ -8,7 +8,7 @@
 //   lane <dist>/qed64/<app>/qed64.json [--stack-mb <n>] [--pool <n>] [--selector <css>] [--flags <s>]
 //       a session of the lane as its page runs one, as a stdin/stdout host (LeanUIQed/Host.lean's
 //       framing): the snapshot and the run file the page's config names, lean.wasm from the cache
-// startLane() is the last as a library. One lean.wasm per process (its glue runs in this global
+// startLane() is `lane` as a library. One lean.wasm per process (its glue runs in this global
 // scope); run with the Node tools/node.sh prints, and --stack-size=8192. The host keeps to the
 // runtime's contract (EMBED-RUNTIME.md in the Lean fork; its sections are cited below). Libraries
 // (--lib) are mounted at /lib/l<i> and are all LEAN_PATH has; lean.js and lean.wasm come from
@@ -28,8 +28,8 @@ vm.runInThisContext(fs.readFileSync(path.join(HERE, "../lane/core.js"), "utf8"),
 const { QedCore } = globalThis;
 
 let booted = false;
-// Boot lean.wasm with `argv`, the way both hosts do: our own shared memory (so we can see the
-// ring), no initial run, then the ring and callMain. stdout comes one byte at a time to onStdout.
+// Boot lean.wasm with `argv` as the lane's browser Worker does too: our own shared memory (so we
+// can see the ring), no initial run, then the ring and callMain. stdout comes byte by byte to onStdout.
 function boot({ argv, libs = [], mounts = [], files = {}, pool = 2, stackMb = 0, onStdout, onReady, onExit }) {
   if (booted) throw new Error("one lean.wasm per process");
   booted = true;
@@ -86,8 +86,8 @@ function boot({ argv, libs = [], mounts = [], files = {}, pool = 2, stackMb = 0,
     },
     onAbort: (what) => { process.stderr.write(`wasm-lean: lean.wasm aborted: ${what}\n`); exit(3); },
   };
-  // PTHREAD stack: each pthread Worker gets this much V8 stack (a Chrome Worker has about 0.5 MiB,
-  // Node 4 MiB; the interpreter's recursion is bounded by it, §6)
+  // stackMb: each pthread's Worker gets this much V8 stack, which bounds the interpreter's recursion
+  // (a Chrome Worker has about 0.5 MiB, Node's 4 MiB by default; §6)
   const req = createRequire(leanJs);
   globalThis.require = stackMb > 0 ? Object.assign((id) => {
     const m = req(id);
@@ -215,6 +215,7 @@ async function make(args) {
       if (running.size >= jobs) break;
       if (!done.has(m) && !running.has(m) && ds.every((d) => done.has(d))) running.set(m, start(m));
     }
+    if (!running.size) throw new Error(`make: these import each other: ${[...deps.keys()].filter((m) => !done.has(m)).join(", ")}`);
     const r = await Promise.race(running.values());
     running.delete(r.m);
     if (r.code !== 0) {

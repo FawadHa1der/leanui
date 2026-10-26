@@ -9,9 +9,9 @@
 #             of run/AppsRun.lean at /workspace/AppsRun.lean, named by --root=/workspace as every
 #             session names it (lane/core.js), so its main module is `AppsRun` in both
 #   wasm/     lean.wasm.br (brotli 9) and lean.wasm.gz (gzip -9), for servers that send them
-# std/ and wasm/ are made once per lock, out/ and snap/ once per STAMP (the lock, the sources and
-# these tools); delete <cache>/build to start over. tools/fetch.mjs and tools/shim.py come first:
-# qed64/build.sh runs all three.
+# std/ and wasm/ are made once per PIN (the lock and qed64/lean-toolchain), out/ and snap/ once per
+# STAMP (the PIN, the sources and these tools); delete <cache>/build to start over.
+# tools/fetch.mjs and tools/shim.py come first: qed64/build.sh runs all three.
 set -euo pipefail
 Q="$(cd "$(dirname "$0")/.." && pwd)"
 C="${LEANUI_QED64_CACHE:-$Q/.cache}"; B="$C/build"
@@ -20,7 +20,7 @@ N="$("$Q/tools/node.sh")"
 W=("$N" --stack-size=8192 "$Q/tools/wasm-lean.mjs")
 hash() { (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1; }
 ms() { echo $(( $(date +%s) - $1 )) s; }
-LOCK="$(hash < "$Q/qed64.lock.json")"
+PIN="$(cat "$Q/qed64.lock.json" "$Q/lean-toolchain" | hash)"
 mkdir -p "$B"
 
 # Init's and Std's .olean files alone, hard-linked, for the bake: given the other facets too, the
@@ -28,13 +28,13 @@ mkdir -p "$B"
 oleans() {
   rm -rf "$2" && mkdir -p "$2"
   (cd "$1" && find . -name '*.olean') | while read -r f; do mkdir -p "$2/$(dirname "$f")"; ln -f "$1/$f" "$2/$f"; done
-  echo "$LOCK" > "$2/.lock"
+  echo "$PIN" > "$2/.lock"
 }
 
-if [ "$(cat "$B/std/.lock" 2>/dev/null)" != "$LOCK" ]; then
+if [ "$(cat "$B/std/.lock" 2>/dev/null)" != "$PIN" ]; then
   t=$(date +%s); echo "bake: Std with lean.wasm"
   mods="$("$N" -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1])).std.modules).join(" "))' "$Q/qed64.lock.json")"
-  rm -rf "$B/std-src" "$B/std.tmp"
+  rm -rf "$B/std-src" "$B/std.tmp" "$B/std-olean"
   for m in $mods; do f="${m//.//}.lean"; mkdir -p "$B/std-src/$(dirname "$f")"; cp "$L/../src/lean/$f" "$B/std-src/$f"; done
   "${W[@]}" make --src "$B/std-src" --out "$B/std.tmp" --lib "$C/init" $mods
   "$N" -e '
@@ -46,13 +46,13 @@ for (const [m, facets] of Object.entries(JSON.parse(fs.readFileSync(lock)).std.m
     if (got !== want) { console.error(`bake: ${m}.${ext} has sha256 ${got}; QED64 built ${want}`); bad++; }
   }
 process.exit(bad ? 1 : 0);' "$Q/qed64.lock.json" "$B/std.tmp"
-  rm -rf "$B/std" && mv "$B/std.tmp" "$B/std" && echo "$LOCK" > "$B/std/.lock"
+  rm -rf "$B/std" && mv "$B/std.tmp" "$B/std" && echo "$PIN" > "$B/std/.lock"
   echo "bake: Std: $(echo $mods | wc -w | tr -d ' ') modules, as QED64 built them, $(ms $t)"
 fi
-[ "$(cat "$B/init-olean/.lock" 2>/dev/null)" = "$LOCK" ] || oleans "$C/init" "$B/init-olean"
-[ "$(cat "$B/std-olean/.lock" 2>/dev/null)" = "$LOCK" ] || oleans "$B/std" "$B/std-olean"
+[ "$(cat "$B/init-olean/.lock" 2>/dev/null)" = "$PIN" ] || oleans "$C/init" "$B/init-olean"
+[ "$(cat "$B/std-olean/.lock" 2>/dev/null)" = "$PIN" ] || oleans "$B/std" "$B/std-olean"
 
-inputs() { echo "$LOCK"; for f in "$@"; do echo "$f $(hash < "$f")"; done; }
+inputs() { echo "$PIN"; for f in "$@"; do echo "$f $(hash < "$f")"; done; }
 STAMP="$(cd "$Q" && inputs $(find .shim -type f | LC_ALL=C sort) ../examples/Bench.lean ../examples/Life.lean \
   LeanUIQed/Host.lean run/AppsRun.lean tools/bake.sh tools/wasm-lean.mjs | hash)"
 if [ "$(cat "$B/snap/.stamp" 2>/dev/null)" != "$STAMP" ]; then
@@ -76,7 +76,7 @@ if [ "$(cat "$B/snap/.stamp" 2>/dev/null)" != "$STAMP" ]; then
   echo "bake: apps.snap $(cat "$B/snap/apps.snap.bytes") bytes, $(wc -c < "$B/snap/apps.snap.gz" | tr -d ' ') gzipped, $(ms $t)"
 fi
 
-if [ "$(cat "$B/wasm/.lock" 2>/dev/null)" != "$LOCK" ]; then
+if [ "$(cat "$B/wasm/.lock" 2>/dev/null)" != "$PIN" ]; then
   t=$(date +%s); rm -rf "$B/wasm" && mkdir -p "$B/wasm"
   # brotli 9: 11 MB in about 20 s (11 saves another 1.6 MB, in 4 minutes)
   "$N" -e '
@@ -84,6 +84,6 @@ const fs = require("fs"), z = require("zlib"), [src, dst] = process.argv.slice(1
 fs.writeFileSync(dst, z.brotliCompressSync(b, { params: { [z.constants.BROTLI_PARAM_QUALITY]: 9, [z.constants.BROTLI_PARAM_LGWIN]: 24, [z.constants.BROTLI_PARAM_SIZE_HINT]: b.length } }));' \
     "$C/rt/lean.wasm" "$B/wasm/lean.wasm.br"
   gzip -9 -n -c "$C/rt/lean.wasm" > "$B/wasm/lean.wasm.gz"
-  echo "$LOCK" > "$B/wasm/.lock"
+  echo "$PIN" > "$B/wasm/.lock"
   echo "bake: lean.wasm.br $(wc -c < "$B/wasm/lean.wasm.br" | tr -d ' ') bytes, .gz $(wc -c < "$B/wasm/lean.wasm.gz" | tr -d ' '), $(ms $t)"
 fi
