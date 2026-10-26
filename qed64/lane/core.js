@@ -1,7 +1,8 @@
-// What the QED64 lane's two hosts of lean.wasm share: its browser Worker and its Node host
-// (tools/wasm-lean.mjs). Lean's memory and command line, the producer of its stdin ring, and the
-// parser of what LeanUIQed/Host.lean writes. A classic script that defines QedCore: the Worker loads
-// it with importScripts, Node evaluates it in its global scope (wasm-lean.mjs), as the glue is.
+// What the QED64 lane's two hosts of lean.wasm share: its browser Worker (lane/qed64.worker.js)
+// and its Node host (tools/wasm-lean.mjs). Lean's memory and command line, the producer of its
+// stdin ring, and LeanUIQed/Host.lean's framing: a message in, the parser of what it writes. A
+// classic script that defines QedCore: the Worker loads it with importScripts, Node evaluates it in
+// its global scope (wasm-lean.mjs), as the glue is.
 (function (global) {
   "use strict";
   const PAGE = 65536;
@@ -52,6 +53,15 @@
     }
   }
 
+  // A message in the host's framing: the header (`e <slot>`, `c <cb> <0|1>`) with the payload's
+  // length in bytes, a newline, then the payload (UTF-8 bytes).
+  const enc = new TextEncoder();
+  const message = (head, body) => {
+    const h = enc.encode(head + " " + body.length + "\n"), m = new Uint8Array(h.length + body.length);
+    m.set(h); m.set(body, h.length);
+    return m;
+  };
+
   // What the host writes, one byte at a time (the glue's TTY hands stdout over byte by byte):
   //   u <n>\n<n bytes>            one update, [u32 opsBytes][ops][strs]
   //   ! <message>\n               a message the host could not parse
@@ -89,5 +99,5 @@
     }
   }
 
-  global.QedCore = { memory, SNAP, ROOT, RUN_FILE, argv, RING_BYTES, Ring, Replies };
+  global.QedCore = { memory, SNAP, ROOT, RUN_FILE, argv, RING_BYTES, Ring, message, Replies };
 })(globalThis);

@@ -12,8 +12,8 @@ compiles `../LeanUI` (through a shim, below) and the benchmarked programs (`exam
 `examples/Life.lean`) unchanged. Nothing large is committed: `qed64.lock.json` pins every download
 by size and sha256, and downloads and builds go to `qed64/.cache` (ignored by git) and `dist/qed64`.
 
-So far this directory holds the Lean side, the build and a Node test. The browser Worker, the pages
-and the race's panel come next.
+It has the Lean side, the build, a Node test and the browser side: a Worker and a page for each
+app, in `dist/qed64/{bench,life}/`. The race does not run it yet.
 
 ## How it runs
 
@@ -24,6 +24,7 @@ and the race's panel come next.
 | Entry | `examples/BenchApp.lean`: `leanui_app Bench.program` | `run/AppsRun.lean`, a plain file run with `lean --run`: `bench` or `life` |
 | Host | `LeanUI/Host/Wasm.lean` + `runtime/leanui_wasm.c`: each update read in place from wasm memory | `LeanUIQed/Host.lean`: messages in on stdin, each update out on stdout as `[u32 opsBytes][ops][strs]` (the server's format) |
 | Build | `tools/build-app.sh BenchApp bench` → `dist/bench/` | `qed64/build.sh` → `dist/qed64/` |
+| Page | `LeanUI.start`: the module in the page, each update applied as Lean makes it | `lane/leanui-qed64.js`: Lean in a Worker (`lane/qed64.worker.js`), each reply applied when it comes |
 | Browsers | needs Memory64 | needs Memory64 and a cross-origin isolated page (shared memory, pthreads) |
 
 A session is one run of
@@ -40,6 +41,41 @@ The host's framing (`LeanUIQed/Host.lean`): `e <slot> <n>\n<payload>` is an even
 `c <cb> <0|1> <n>\n<payload>` an effect's result, `p\n` a ping, `q\n` the end. Each message gets one
 reply: its updates (`u <n>\n` and the bytes), then `. <leanNs> <encodeNs>\n`, Lean's own time. The
 first reply is the mount.
+
+### In the browser
+
+A page (`pages/bench.html`, `pages/life.html`) loads `runtime/leanui.js` and `lane/leanui-qed64.js`.
+`LeanUIQed64.start()` reads `qed64.json`, starts the Worker (a classic one: the glue is a classic
+script) and resolves once the app is mounted; until then the container says how far it has got. It
+rejects, saying why, without Memory64 or cross-origin isolation (COOP and COEP, which
+`leanui serve --coop` and the site's `/race` send).
+
+The Worker is Emscripten's main runtime thread, and never blocks: Lean's pthreads proxy their system
+calls through it. It does what `startLane()` does in Node. It downloads the snapshot itself and
+unpacks it with `DecompressionStream` while `lean.wasm` compiles (from a same-origin URL, not a
+Blob, so that it compiles as it downloads), writes the snapshot, its `.deps` and the run file into
+MEMFS and starts `main`. Once the mount is out, it deletes MEMFS's copy of the snapshot (114 MB):
+Lean holds its own. Every second it kicks the mailbox, as QED64 does (its HARDENING #52: a lost
+wakeup).
+
+The transport (`QedTransport`) is asynchronous, like `leanui.js`'s `RemoteTransport`: a message goes
+to the Worker at once, into Lean's stdin ring; its reply comes back later, with the updates' buffers
+transferred, Lean's own time and the Worker's (from the message reaching it, or the reply before it
+leaving if that is later, to its reply leaving), and the page applies the updates with
+`Runtime.apply`. `idle()` resolves once every message sent has been answered and applied. If Lean
+stops (it exits, `lean.wasm` aborts, an update cannot be applied), `idle()` rejects, the container
+gets a `leanui:error` event and the Worker is terminated.
+
+For the race (`bench/race/lanes.mjs`), the page sets `window.__idle` and `window.__lane` before
+`window.__ready`:
+
+* `bytes`: what the Worker downloaded, which the page's resource timing does not list (42.0 MB);
+* `phases`: the start, in ms: `download` (the snapshot unpacked and `lean.wasm`'s last byte),
+  `runtime` (the rest of compiling, the pthreads, the files), `Lean` (loading the snapshot, the
+  mount), `DOM` (the mount to the page), `pings`;
+* `stats()`: since the mount, the replies and the totals of Lean's time, the Worker's and applying,
+  the stalls (replies whose time in the Worker exceeds Lean's own by more than 500 ms: a lost wakeup
+  that the kick caught), and `floorMs`, the median of 20 empty round trips taken before `__ready`.
 
 ### What breaks under the interpreter, and the shim
 
@@ -86,8 +122,12 @@ The steps, each skipped when its inputs have not changed:
    * `lean.wasm.br` (brotli 9) and `lean.wasm.gz`, for servers that send precompressed files.
 5. `dist/qed64/`: `rt/`, shared by both apps under content-hashed names (`lean.<h>.js`,
    `lean.<h>.wasm` with its `.br` and `.gz`, `apps.<h>.snap.gz` with its `.deps`,
-   `AppsRun.<h>.lean`, `core.<h>.js`, `LICENSE-lean4`, `LICENSE-qed64`), and `bench/qed64.json`,
-   `life/qed64.json`: what a session loads. The large files are hard links into the cache.
+   `AppsRun.<h>.lean`, `qed64.worker.<h>.js`, `core.<h>.js`, `LICENSE-lean4`, `LICENSE-qed64`);
+   `bench/` and `life/`, each the app's page (`index.html`), `leanui.js`, `leanui-qed64.js` and
+   `qed64.json`, what a session loads; and the pages' stylesheets one level up, where the race has
+   them. The large files are hard links into the cache. A server must send `lean.wasm`'s `.br` or
+   `.gz` (`leanui serve` and the site do): unpacked it is 106 MB, and Chrome then downloads it
+   again on every load.
 
 The cache is `qed64/.cache` (about 700 MB: `Init` unpacked, the runtime, Node, the build), or
 `$LEANUI_QED64_CACHE`, which several checkouts can share. `LEAN_BIN` overrides the toolchain. Behind
@@ -119,6 +159,9 @@ line), and drives each one and the compiled reference through the same messages:
 
 It takes about 30 s and prints Lean's time per operation next to the compiled reference's.
 
+In a browser, by hand: `.lake/build/bin/leanui serve dist --coop`, then `/qed64/life/` and
+`/qed64/bench/`. Their buttons work as in the other builds; `window.__lane.stats()` has the figures.
+
 ## Limits
 
 * It is Lean's interpreter: about 150× slower than compiled code in Life, and 65-130× in the keyed
@@ -127,7 +170,8 @@ It takes about 30 s and prints Lean's time per operation next to the compiled re
   and a session holds `lean.wasm`'s 256 MiB memory and more. That is why it is an optional lane.
 * The interpreter's recursion runs on the JavaScript engine's stack, with no guard on the way. In
   Node a session boots with more than 0.3 MiB of pthread stack and creates 10,000 rows with more
-  than 0.4 MiB (it passes at 0.45); a Chrome Worker has about 0.5 MiB.
+  than 0.4 MiB (it passes at 0.45); a Chrome Worker has about 0.5 MiB. In Playwright's Chromium 141
+  and Firefox 142 it creates 10,000 rows.
 * Effects that answer with bytes (`Cmd.readFile`, `Cmd.decodeImage`) are not carried, as in `vir/`;
   the benchmarked apps need none. Apps with inline C of their own (the photo editor, the video lab)
   would need the shim's treatment.
@@ -172,3 +216,18 @@ the test through the pipe, comes 1-10 ms after Lean's own time for 1,000 rows an
 trip is 0.3-0.5 ms. A session is ready (mounted) about 2.2 s after its process starts: 0.43 s to
 unpack the snapshot, 0.57 s more until the runtime is up, then 1.15 s for Lean to load the snapshot
 and mount the app.
+
+In a browser, on the same machine: Playwright's headless Chromium 141 and Firefox 142, `dist/qed64`
+served by `leanui serve --coop` on localhost, one page load each. The times are from the click until
+the page is updated, with Lean's own time in brackets; the operations are each one first click (the
+race takes medians). Playwright's Firefox runs wasm about 8× slower than a release Firefox
+(docs/BENCHMARKS.md, "Findings about measuring").
+
+| | Chromium 141 | Firefox 142 |
+|---|---|---|
+| ready (Life) | 2.7 s | 6.7 s |
+| of which download, runtime, Lean | 1.18, 0.03, 1.42 s | 1.69, 3.26, 1.40 s |
+| Life, one step (median of 100) | 25.2 ms (23.4) | 152 ms (149) |
+| create 1,000 rows | 301 ms (276) | 1,397 ms (1,372) |
+| create 10,000 rows | 2,363 ms (2,230) | 12,936 ms (12,784) |
+| an empty round trip | 0.37 ms | 0.48 ms |

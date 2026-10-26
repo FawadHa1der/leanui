@@ -3,8 +3,11 @@
 # running examples/Bench.lean and examples/Life.lean. Writes
 #   dist/qed64/rt/             what a session loads, for both apps, under content-hashed names:
 #                              lean.<h>.js, lean.<h>.wasm (and its .br, .gz), apps.<h>.snap.gz and
-#                              its .deps, AppsRun.<h>.lean, core.<h>.js, the licences
-#   dist/qed64/{bench,life}/   qed64.json: the session's files and settings
+#                              its .deps, AppsRun.<h>.lean, qed64.worker.<h>.js, core.<h>.js, the
+#                              licences
+#   dist/qed64/{bench,life}/   index.html (pages/<app>.html), runtime/leanui.js, lane/leanui-qed64.js
+#                              and qed64.json: the session's files and settings
+#   dist/qed64/{bench,life}.css   the pages' stylesheets, one level up as in the race (dist/race)
 #   qed64/.lake/build/bin/{bench,life}-host   the compiled reference test/node.mjs compares with
 #   qed64/build.sh
 # The steps: tools/shim.py; lake build (Lean 4.35.0, qed64/lean-toolchain, called by path like the
@@ -29,15 +32,18 @@ rm -rf "$D" && mkdir -p "$D/rt" "$D/bench" "$D/life"
 h() { (sha256sum < "$1" 2>/dev/null || shasum -a 256 < "$1") | cut -c1-"$2"; }
 put() { ln -f "$1" "$D/rt/$2" 2>/dev/null || cp "$1" "$D/rt/$2"; }   # hard links: these are large
 js="lean.$(h "$C/rt/lean.js" 8).js"; wasm="lean.$(h "$C/rt/lean.wasm" 8).wasm"
-snap="apps.$(h "$B/snap/apps.snap.gz" 12).snap"; run="AppsRun.$(h "$Q/run/AppsRun.lean" 8).lean"; core="core.$(h "$Q/lane/core.js" 8).js"
+snap="apps.$(h "$B/snap/apps.snap.gz" 12).snap"; run="AppsRun.$(h "$Q/run/AppsRun.lean" 8).lean"
+core="core.$(h "$Q/lane/core.js" 8).js"; worker="qed64.worker.$(h "$Q/lane/qed64.worker.js" 8).js"
 put "$C/rt/lean.js" "$js"
 put "$C/rt/lean.wasm" "$wasm"; put "$B/wasm/lean.wasm.br" "$wasm.br"; put "$B/wasm/lean.wasm.gz" "$wasm.gz"
 put "$B/snap/apps.snap.gz" "$snap.gz"; put "$B/snap/apps.snap.deps" "$snap.deps"
-cp "$Q/run/AppsRun.lean" "$D/rt/$run"; cp "$Q/lane/core.js" "$D/rt/$core"
+cp "$Q/run/AppsRun.lean" "$D/rt/$run"; cp "$Q/lane/core.js" "$D/rt/$core"; cp "$Q/lane/qed64.worker.js" "$D/rt/$worker"
 cp "$C/rt/LICENSE-lean4" "$C/rt/LICENSE-qed64" "$D/rt/"
+cp "$ROOT/bench/bench.css" "$ROOT/bench/race/life.css" "$D/"
 for app in bench life; do
+  cp "$Q/pages/$app.html" "$D/$app/index.html"; cp "$ROOT/runtime/leanui.js" "$Q/lane/leanui-qed64.js" "$D/$app/"
   cat > "$D/$app/qed64.json" <<JSON
-{"rt": "../rt/", "leanJs": "$js", "leanWasm": "$wasm", "snapshot": "$snap.gz", "snapshotBytes": $(cat "$B/snap/apps.snap.bytes"),
+{"rt": "../rt/", "worker": "$worker", "leanJs": "$js", "leanWasm": "$wasm", "snapshot": "$snap.gz", "snapshotBytes": $(cat "$B/snap/apps.snap.bytes"),
  "snapshotDeps": "$snap.deps", "runFile": "$run", "core": "$core", "app": "$app", "pool": 2}
 JSON
 done
