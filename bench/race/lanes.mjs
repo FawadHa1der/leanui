@@ -11,6 +11,7 @@
 //   needs()        true if this browser can run it, or why not (the panel shows it)
 //   optional       runs only when ?lanes= names it (or its box is ticked: the page offers a box
 //                  for each optional lane built for the scenario, dist/race/lanes.json)
+//   offer          the label of that box ("Add <name>" if not given), e.g. with what it downloads
 //   async          its app answers after the click returns (from a Worker): see below
 //   bootTimeoutMs  how long its page may take to be ready (60 s if not given)
 //   quietMs        how long the referee waits, once every page is ready, before the first click

@@ -34,7 +34,8 @@ const frame = () => new Promise((r) => requestAnimationFrame(r));
 const settle = (w) => new Promise((r) => w.requestAnimationFrame(() => w.requestAnimationFrame(() => setTimeout(r, 20))));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const median = (a) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
-const fmt = (ms) => (!isFinite(ms) ? "–" : (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2)) + " ms");
+const num = (ms) => (!isFinite(ms) ? "–" : ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2));
+const fmt = (ms) => (isFinite(ms) ? num(ms) + " ms" : "–");
 const ratio = (a, b) => (a > 0 && b > 0 ? (a / b).toFixed(a / b >= 10 ? 0 : 1) + "×" : "–");
 const fnv = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0; return h.toString(16).padStart(8, "0"); };
 const words = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -85,7 +86,10 @@ const tally = () => ({ ms: 0, leanMs: 0, workerMs: 0, applyMs: 0 });
 const add = (acc, ms, s0, s1) => { acc.ms += ms; for (const k of ["leanMs", "workerMs", "applyMs"]) acc[k] += (s1[k] || 0) - (s0[k] || 0); };
 const per = (acc, n) => ({ totalMs: acc.ms / n, leanMs: acc.leanMs / n, workerMs: acc.workerMs / n, applyMs: acc.applyMs / n,
   hopsMs: (acc.ms - acc.workerMs - acc.applyMs) / n });
-const split = (s) => `of which Lean ${fmt(s.leanMs)} · transport ${fmt(s.totalMs - s.leanMs - s.applyMs)} · DOM ${fmt(s.applyMs)}`;
+const parts = (s) => [s.leanMs, s.totalMs - s.leanMs - s.applyMs, s.applyMs];
+const split = (s) => { const [lean, transport, dom] = parts(s).map(fmt); return `of which Lean ${lean} · transport ${transport} · DOM ${dom}`; };
+// the same under a time in the results (the note under them says what the three are)
+const brief = (s) => `<br><small>${parts(s).map(num).join(" + ")}</small>`;
 const stalls = (p) => { const n = p.lane ? stats(p).stalls || 0 : 0; return n ? ` ⚠ ${n} stall${n > 1 ? "s" : ""} (times include them)` : ""; };
 // the line under a panel: how the lane started, then its split of the last figures shown
 const laneLine = (p, ...lines) => { const e = p.el.querySelector(".lane"); e.textContent = lines.filter(Boolean).join("\n"); e.hidden = !e.textContent; };
@@ -151,15 +155,15 @@ async function runLife(steps) {
     const until = Math.min(...live.filter((p) => !p.dead && p.done < steps).map((p) => p.ms)) + SLICE_MS;
     for (const p of live) {
       if (p.dead || p.done >= steps || p.ms >= until) continue;
-      // an asynchronous lane waits for its answers, and the frame would draw the clicks before it
-      // meanwhile: let the frame's style, layout and paint happen first, outside its time
+      // An asynchronous lane waits for its app's answers, and the browser would meanwhile draw the
+      // frame (the clicks before it): it starts once that is done, so that it is not in its time.
+      // Then each click until its app has answered (usually longer than a slice: one per turn), and
+      // nothing else meanwhile.
       if (p.async) await sleep(0);
       const step = p.win.document.getElementById("step");
       const s0 = p.acc && stats(p);
       const t0 = performance.now();
       let k = 0;
-      // an asynchronous lane: each click until its app has answered (a click takes longer than a
-      // slice, so it gets one per turn), and nothing else meanwhile
       if (p.async) do { step.click(); if (!(await idle(p))) break; k++; } while (p.done + k < steps && p.ms + performance.now() - t0 < until);
       else do { step.click(); k++; } while (p.done + k < steps && p.ms + performance.now() - t0 < until);
       const t = performance.now() - t0;
@@ -192,8 +196,8 @@ async function runLife(steps) {
   const bases = [...new Set(IMPLS.map((l) => l.ratio).filter((k) => k && live.some((p) => p.key === k)))];
   const lane = (k) => panels.find((p) => p.key === k);
   $("#results").innerHTML = `<table><thead><tr><th></th><th>Script time</th><th>Per click</th>${bases.map((k) => `<th>÷ ${lane(k).short}</th>`).join("")}<th>Generation</th><th>Alive</th><th>Board</th></tr></thead><tbody>${
-    rows.map((r) => `<tr><th>${r.name}${stalls(lane(r.key))}</th><td>${fmt(r.ms)}</td><td>${fmt(r.ms / r.clicks)}${lane(r.key).perOp ? `<br><small>${split(lane(r.key).perOp.step)}</small>` : ""}</td>${bases.map((k) => `<td>${ratio(r.ms, base(k))}</td>`).join("")}<td>${r.gen.toLocaleString()}</td><td>${r.pop}</td><td><code>${r.board}</code></td></tr>`).join("")
-  }</tbody></table><p class="${same ? "ok" : "bad"}">${same ? `✓ All ${rows.length} reached generation ${steps.toLocaleString()} and show the same board.` : verdict("✗ The boards differ (or an app stopped early, or shows a board other than its own): see the console.")}</p>${floors(live)}`;
+    rows.map((r) => `<tr><th>${r.name}${stalls(lane(r.key))}</th><td>${fmt(r.ms)}</td><td>${fmt(r.ms / r.clicks)}${lane(r.key).perOp ? brief(lane(r.key).perOp.step) : ""}</td>${bases.map((k) => `<td>${ratio(r.ms, base(k))}</td>`).join("")}<td>${r.gen.toLocaleString()}</td><td>${r.pop}</td><td><code>${r.board}</code></td></tr>`).join("")
+  }</tbody></table><p class="${same ? "ok" : "bad"}">${same ? `✓ All ${rows.length} reached generation ${steps.toLocaleString()} and show the same board.` : verdict("✗ The boards differ (or an app stopped early, or shows a board other than its own): see the console.")}</p>${notes(live)}`;
   return { scenario: "life", steps, same, rows };
 }
 
@@ -235,23 +239,25 @@ async function runTable(runs) {
     }
     row.same = !missing().length && !dropped().length && live.every((p) => row.sig[p.key] === row.sig[live[0].key]);
     rows.push(row);
-    tbl.tBodies[0].insertAdjacentHTML("beforeend", `<tr><th>${op.desc}</th>${live.map((p) => `<td>${fmt(row.ms[p.key])}${p.perOp?.[op.name] ? `<br><small>${split(p.perOp[op.name])}</small>` : ""}</td>`).join("")}${ratios.map((p) => `<td>${ratio(row.ms[p.key], row.ms[p.ratio])}</td>`).join("")}<td>${row.same ? "✓" : "✗"}</td></tr>`);
+    tbl.tBodies[0].insertAdjacentHTML("beforeend", `<tr><th>${op.desc}</th>${live.map((p) => `<td>${fmt(row.ms[p.key])}${p.perOp?.[op.name] ? brief(p.perOp[op.name]) : ""}</td>`).join("")}${ratios.map((p) => `<td>${ratio(row.ms[p.key], row.ms[p.ratio])}</td>`).join("")}<td>${row.same ? "✓" : "✗"}</td></tr>`);
   }
   for (const p of live) bar(p, 1);
   for (const [j, p] of live.entries()) if (stalls(p)) tbl.tHead.rows[0].cells[j + 1].textContent += stalls(p);
   const same = rows.length === OPS.length && rows.every((r) => r.same);
-  $("#results").insertAdjacentHTML("beforeend", `<p class="${same ? "ok" : "bad"}">${same ? `✓ After every operation, all ${live.length} showed the same rows.` : verdict("✗ The tables differ: see the console.")}</p>${floors(live)}`);
+  $("#results").insertAdjacentHTML("beforeend", `<p class="${same ? "ok" : "bad"}">${same ? `✓ After every operation, all ${live.length} showed the same rows.` : verdict("✗ The tables differ: see the console.")}</p>${notes(live)}`);
   return { scenario: "table", runs, same, rows };
 }
 
 const verdict = (differ) => (stopped ? "Stopped." : missing().length ? `✗ Did not start: ${missing().join(", ")}.`
   : dropped().length ? `✗ Stopped during the run: ${dropped().join(", ")}.` : differ);
-// how an asynchronous lane is timed, under the results of a run it was in
-const floors = (live) => live.filter((p) => p.async).map((p) => {
+// under the results of a run: how an asynchronous lane is timed, and what the figures under a lane's
+// times are (its own, window.__lane)
+const notes = (live) => live.filter((p) => p.async || p.perOp).map((p) => {
   const f = p.lane && stats(p).floorMs;
-  return `<p class="note">${p.name} answers from a Worker: each of its clicks is timed until its app has applied the
-    answer, so it also pays for the messages between the page and the Worker${f ? ` (an empty round trip takes ${fmt(f)})` : ""};
-    the other lanes run on the page's own thread.</p>`;
+  return `<p class="note">${p.async ? `${p.name} answers from a Worker: each of its clicks is timed until its app has
+    applied the answer, so it also pays for the messages between the page and the Worker${f ? ` (an empty round trip takes ${fmt(f)})` : ""};
+    the other lanes run on the page's own thread.` : p.name + ":"}${p.perOp ? ` Under its times, in ms: Lean + transport + DOM, that is
+    its app's own time, then the Worker's input and output and the messages, then applying the answers to the page.` : ""}</p>`;
 }).join("");
 
 // The boxes that add an optional lane (lanes.mjs), for each one built for the scenario: ticking one
