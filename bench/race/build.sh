@@ -10,15 +10,15 @@
 #   lanes.json                    the lanes built, for each scenario: the page offers an optional
 #                                 lane only where its page is here
 # Needs `tools/build-app.sh LifeApp life`, `tools/build-app.sh BenchApp bench` and `vir/build.sh`
-# first; without dist/qed64 it says so and goes on, unless QED64=require. `leanui serve dist` then
-# serves it at /race/; the site serves it at /race/ too.
+# first; without dist/qed64 it says so and goes on, unless QED64=require (QED64=0 leaves it out).
+# `leanui serve dist` then serves it at /race/; the site serves it at /race/ too.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; OUT="$ROOT/dist/race"
 for d in dist/life dist/bench dist/vir/life dist/vir/bench; do
   [ -f "$ROOT/$d/index.html" ] || { echo "missing $d (see the comment at the top of this script)" >&2; exit 2; }
 done
 Q="$ROOT/dist/qed64" qed=
-if [ -f "$Q/life/qed64.json" ] && [ -f "$Q/bench/qed64.json" ]; then qed=1
+if [ "${QED64:-}" != 0 ] && [ -f "$Q/life/qed64.json" ] && [ -f "$Q/bench/qed64.json" ]; then qed=1
 elif [ "${QED64:-}" = require ]; then echo "missing dist/qed64 (qed64/build.sh)" >&2; exit 2; fi
 rm -rf "$OUT" && mkdir -p "$OUT/life/vanilla" "$OUT/table/vanilla"
 cp "$ROOT"/bench/race/{index.html,race.js,race.css,lanes.mjs} "$ROOT/bench/ops.mjs" "$OUT/"

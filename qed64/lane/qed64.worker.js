@@ -87,7 +87,7 @@ function boot(c) {
   parser = new QedCore.Replies(onReply, log);
   // the downloads start now, while lean.wasm compiles (it streams: same-origin URLs, no Blob)
   let snapAt = 0;
-  const files = Promise.all([fetchSnapshot(cfg.snapshot, cfg.snapshotBytes).then((s) => { snapAt = now(); return s; }),
+  let files = Promise.all([fetchSnapshot(cfg.snapshot, cfg.snapshotBytes).then((s) => { snapAt = now(); return s; }),
     bytesOf(cfg.snapshotDeps), bytesOf(cfg.runFile)]);
   files.catch((e) => stop(String(e && e.message || e)));
   const memory = QedCore.memory();
@@ -114,6 +114,9 @@ function boot(c) {
         FS.writeFile(QedCore.SNAP, snap, { canOwn: true });
         FS.writeFile(QedCore.SNAP + ".deps", deps);       // --incr-load opens it
         FS.writeFile(QedCore.RUN_FILE, run);
+        // the closures here outlive the boot: without this the promise would keep the snapshot's
+        // bytes alive after MEMFS lets go of them (the unlink after the mount)
+        files = null;
         removeRunDependency("qed64-files");
       }, () => {});
     }],

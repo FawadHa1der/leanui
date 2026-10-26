@@ -3,5 +3,5 @@
 <body><div id="app"></div><script src="leanui.js"></script><script src="leanui-qed64.js"></script><script>
 LeanUIQed64.start({ selector: "#app" }).then((rt) => {
   window.__leanui = rt; window.__lane = rt.transport.lane; window.__idle = () => rt.transport.idle(); window.__ready = performance.now();
-}, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+}, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; window.__failed = String(e && e.message || e); });
 </script></body></html>

@@ -20,6 +20,7 @@
 //                  moment after it): before loading the page again, the referee empties the panel
 //                  and waits this long, so that the old threads and the new ones do not overlap
 //
+// A page that cannot start may set window.__failed (why), so the referee need not wait out its boot.
 // An asynchronous lane's page also sets window.__idle(): a promise that resolves once everything the
 // clicks so far caused is on the page, and rejects if the app has stopped. The referee awaits it after
 // each click on the lane and clicks nothing else meanwhile, so the lane's time runs from the click to

@@ -48,6 +48,8 @@ const IMPLS = LANES.filter((l) => (asked.length ? asked.includes(l.key) : !l.opt
 // lanes built for each scenario (fetched only if there is an optional lane to look up).
 const BUILT = LANES.some((l) => l.optional) ? await fetch("lanes.json").then((r) => r.json()).catch(() => ({})) : {};
 const built = (l, scenario) => !l.optional || (BUILT[scenario] || []).includes(l.key);
+// what the page says about an optional lane (its credits) shows only if the lane was built
+for (const e of document.querySelectorAll("[data-lane]")) e.hidden = !Object.values(BUILT).some((keys) => keys.includes(e.dataset.lane));
 const needs = (l) => (l.needs ? l.needs() : true);
 const runnable = (scenario) => IMPLS.filter((l) => built(l, scenario) && needs(l) === true);
 // the lanes a run on the current scenario needs (load() sets it): their absence must not count as agreement
@@ -136,6 +138,7 @@ async function load(scenario) {
             set(p, "boot", `${fmt(w.__ready)} · ${kb.toFixed(0)} KB`); laneLine(p, phases(p));
             return ok();
           }
+          if (w.__failed) { set(p, "boot", "did not start: " + w.__failed); return ok(); }
           if (performance.now() - t0 > (p.bootTimeoutMs ?? 60000)) { set(p, "boot", "did not start (see the console)"); return ok(); }
           setTimeout(wait, 10);
         };

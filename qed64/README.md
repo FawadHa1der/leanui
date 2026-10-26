@@ -4,7 +4,8 @@ A fourth way to run a LeanUI program, kept for the race (`bench/race/`). The sit
 the wasm64 build (Lean → C → wasm64, `tools/build-app.sh`), and `vir/` runs the same source in
 lean-vir. This directory runs it in Lean itself: [QED64](https://github.com/FawadHa1der/qed64)'s
 build of Lean 4.35 for the browser (`lean.wasm`, wasm64 with threads) runs `lean --run` on a
-three-line file, and Lean's IR interpreter runs the program, LeanUI's diff and the buffer writers.
+short run file (`run/AppsRun.lean`: three imports and a `main`), and Lean's IR interpreter runs
+the program, LeanUI's diff and the buffer writers.
 Only `Init` and `Std` run as compiled code, inside `lean.wasm`.
 
 The library and the apps do not depend on this directory, and it changes nothing in them: it
@@ -206,7 +207,7 @@ In a browser, by hand: `.lake/build/bin/leanui serve dist --coop`, then `/qed64/
 
 ## Limits
 
-* It is Lean's interpreter: about 150× slower than compiled code in Life, and 65-130× in the keyed
+* It is Lean's interpreter: about 150× slower than compiled code in Life, and 64-130× in the keyed
   operations on 1,000 rows (Numbers, below).
 * A visitor downloads about 42 MB (`lean.wasm` 11.0 MB with brotli, the snapshot 30.9 MB gzipped),
   and a session holds `lean.wasm`'s 256 MiB memory and more. That is why it is an optional lane.

@@ -4,5 +4,5 @@
 LeanUIQed64.start({ selector: "#app" }).then((rt) => {
   window.__leanui = rt; window.__lane = rt.transport.lane; window.__idle = () => rt.transport.idle(); window.__ready = performance.now();
   console.log("LeanUI (QED64) ready in", rt.bootMs.toFixed(1), "ms");
-}, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+}, (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; window.__failed = String(e && e.message || e); });
 </script></body></html>
