@@ -100,6 +100,25 @@ race cross-origin isolated, as the site does, and runs the race with the lane wh
 table, in Firefox Life. `tests/browser/race.mjs` also checks that the lane had no stalls and that
 its Worker downloaded more than 30 MB itself.
 
+The race page's footer links the two licences `rt/` carries: `LICENSE-lean4.txt`, the Apache
+License 2.0 of Lean, from which `lean.wasm` and `lean.js` are built, and `LICENSE-qed64.txt`,
+QED64's MIT License.
+
+### In CI and on the site
+
+CI (`.github/workflows/ci.yml`, [docs/DEPLOY.md](../docs/DEPLOY.md)) builds the lane, runs
+`test/node.mjs` with the Node `tools/node.sh` prints, and races it, on every push and pull request
+(`LEANUI_QED64=require`); a pull request labelled `bench` also races it with `--perf`. It caches
+`qed64/.cache` in two parts: per lock (`qed64.lock.json` and `lean-toolchain`), the downloads and
+what is made from them alone (Std, `lean.wasm`'s `.br` and `.gz`), about 620 MB; per source, the
+rest of the bake and `qed64/.lake`, about 70 MB.
+
+The site serves the race's copy of `rt/`, `dist/race/qed64-rt/`, at `/race/qed64-rt/`, cross-origin
+isolated like `/race/` and with year-long `immutable` caching (`examples/SiteServer.lean`).
+`deploy/cloudflare/stage.sh`, which deletes the `.br` and `.gz` files it stages and writes new
+siblings at brotli 11, leaves `lean.wasm`, its siblings and the snapshot (itself a `.gz`) as
+`build.sh` made them. The lane adds 165 MB to the container.
+
 ### What breaks under the interpreter, and the shim
 
 `tools/shim.py` writes `qed64/.shim/`, LeanUI's core as `lean.wasm` compiles it, with four edits. It

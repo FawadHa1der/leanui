@@ -88,7 +88,8 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     -- cross-origin isolated: the race times clicks with performance.now(), precise only then, and
     -- the QED64 lane's threads share memory. Its runtime's names change with their content
     -- (qed64/build.sh; the two licences change only with QED64's release).
-    Route.under "/race/qed64-rt" (Static.route { root := o.dist / "race" / "qed64-rt", isolate := true, cache := .immutable }),
+    Route.under "/race/qed64-rt"
+      (Static.route { root := o.dist / "race" / "qed64-rt", isolate := true, cache := .immutable }),
     Route.under "/race" (Static.route { root := o.dist / "race", isolate := true }),
     Route.under "/roster" (Route.first [rosterNotary o, Static.route { root := o.dist / "roster" }]),
     sessions.route "/leanui",

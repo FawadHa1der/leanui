@@ -67,4 +67,8 @@ toolchain is `vir/`'s (`vir/lean-toolchain`, Lean 4.35.0): a separate project th
 benchmarked apps on lean-vir instead of wasm64 ([vir/README.md](../vir/README.md)); `vir/build.sh`
 calls it by path the same way, and so do the Roster demo's notary and its verify page's build
 (`roster/notary/`, `roster/verify/build.sh`, on the same release), and its Mathlib project
-(`roster/hall/`, on the main build's release) ([roster/README.md](../roster/README.md)).
+(`roster/hall/`, on the main build's release) ([roster/README.md](../roster/README.md)). The race's
+QED64 lane (`qed64/lean-toolchain`, the same release; [qed64/README.md](../qed64/README.md)) calls
+it by path too, for its native reference; everything else there runs in QED64's own build of that
+release, `lean.wasm`, under the Node 24 that `qed64/tools/node.sh` downloads, both pinned in
+`qed64/qed64.lock.json`.

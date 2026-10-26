@@ -1200,8 +1200,8 @@ node tests/browser/selfbench.mjs <firefox-binary> firefox --runs 5 --impls leanu
 node tools/bench-tables.mjs keyed-chromium.json keyed-firefox.json      # the keyed tables above
 ```
 
-CI runs the keyed suite with lean-vir and the race (`--perf`), in Chromium only, on a pull request
-with the `bench` label, next to the editor's benchmarks.
+CI runs the keyed suite with lean-vir and the race (`--perf`, with the QED64 lane), in Chromium
+only, on a pull request with the `bench` label, next to the editor's benchmarks.
 
 ## Method
 
