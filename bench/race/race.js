@@ -62,7 +62,7 @@ const panels = IMPLS.map((impl) => {
     <div><dt>Per click</dt><dd class="per">–</dd></div><div><dt>Started in</dt><dd class="boot">–</dd></div></dl>
     <p class="lane" hidden></p>`;
   $("#panels").appendChild(el);
-  return { ...impl, el, frame: el.querySelector("iframe"), win: null, ok: false, lane: null, dead: null };
+  return { ...impl, el, frame: el.querySelector("iframe"), win: null, ok: false, lane: null, dead: null, gone: -Infinity };
 });
 const status = (s) => { $("#status").textContent = s; };
 const set = (p, cls, text) => { p.el.querySelector("." + cls).textContent = text; };
@@ -95,6 +95,13 @@ const stalls = (p) => { const n = p.lane ? stats(p).stalls || 0 : 0; return n ? 
 const laneLine = (p, ...lines) => { const e = p.el.querySelector(".lane"); e.textContent = lines.filter(Boolean).join("\n"); e.hidden = !e.textContent; };
 const phases = (p) => (p.lane?.phases ? "started: " + Object.entries(p.lane.phases).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") : "");
 
+// Empty a panel whose page's threads outlive it (lanes.mjs: unloadMs), noting when: its next page
+// waits until they are gone.
+const unload = (p) => {
+  if (!p.unloadMs || !p.frame.src || p.frame.src === "about:blank") return;
+  p.frame.onload = null; p.frame.src = "about:blank"; p.gone = performance.now();
+};
+
 // Load the scenario's page in each panel, one after another (so that each start is timed alone),
 // and wait until each says it is ready. A newer load (the scenario changed) makes an older one stop.
 let loads = 0;
@@ -105,11 +112,14 @@ async function load(scenario) {
   for (const p of panels) {
     p.ok = false; p.win = null; p.lane = null; p.dead = null; p.acc = p.perOp = null; p.el.hidden = !built(p, scenario);
     set(p, "done", "–"); set(p, "ms", "–"); set(p, "per", "–"); set(p, "boot", "–"); bar(p, 0); laneLine(p);
+    unload(p);
   }
   for (const p of panels) {
     if (n !== loads) return;
     if (!built(p, scenario)) { p.frame.removeAttribute("src"); continue; }
     if (needs(p) !== true) { p.frame.removeAttribute("src"); set(p, "boot", needs(p)); continue; }
+    const wait = p.gone + (p.unloadMs || 0) - performance.now();
+    if (wait > 0) { await sleep(wait); if (n !== loads) return; }
     await new Promise((ok) => {
       p.frame.onload = () => {
         const w = p.frame.contentWindow, t0 = performance.now();

@@ -16,6 +16,9 @@
 //   bootTimeoutMs  how long its page may take to be ready (60 s if not given)
 //   quietMs        how long the referee waits, once every page is ready, before the first click
 //                  (the browser may still be compiling the lane's code in the background)
+//   unloadMs       how long its page's threads may outlive the page (a Worker's own Workers end a
+//                  moment after it): before loading the page again, the referee empties the panel
+//                  and waits this long, so that the old threads and the new ones do not overlap
 //
 // An asynchronous lane's page also sets window.__idle(): a promise that resolves once everything the
 // clicks so far caused is on the page, and rejects if the app has stopped. The referee awaits it after
@@ -41,4 +44,10 @@ export const LANES = [
     needs: () => memory64 || "needs WebAssembly Memory64", ratio: "vanilla" },
   { key: "vir", name: "LeanUI · lean-vir", short: "lean-vir", note: "the same Lean program, interpreted by lean-vir (wasm32)",
     ratio: "wasm64" },
+  // qed64/README.md: lean.wasm (wasm64, with threads) and a snapshot, about 42 MB, in a Worker
+  { key: "qed64", name: "LeanUI · Lean interpreter on QED64", short: "QED64", optional: true, async: true,
+    offer: "Add Lean's interpreter on QED64 (about 42 MB)",
+    note: "the same Lean program, run by Lean's own interpreter (lean --run) in QED64's wasm64 build of Lean, in a Worker",
+    needs: () => (!memory64 ? "needs WebAssembly Memory64" : !globalThis.crossOriginIsolated ? "needs a cross-origin isolated page" : true),
+    bootTimeoutMs: 300000, quietMs: 3000, unloadMs: 2500, ratio: "wasm64" },
 ];
