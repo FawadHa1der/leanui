@@ -12,9 +12,11 @@ header p, footer p { max-width: 80ch; }
 .bar { height: 6px; background: #eef0f3; border-radius: 3px; margin: 8px 0; overflow: hidden; } .bar > div { height: 100%; width: 0; background: var(--accent); }
 .panel dl { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 0; }
 .panel dt { color: var(--muted); font-size: 12px; } .panel dd { margin: 0; font-variant-numeric: tabular-nums; }
+.panel .lane { margin: 6px 0 0; color: var(--muted); font-size: 12px; white-space: pre-line; font-variant-numeric: tabular-nums; }
 #results { margin: 20px 0; overflow-x: auto; }
 #results table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
 #results th, #results td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 #results th:first-child { text-align: left; }
+#results small { color: var(--muted); } #results .note { color: var(--muted); max-width: 80ch; }
 .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); margin-top: 24px; }

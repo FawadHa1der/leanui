@@ -996,11 +996,13 @@ stays on the compiled wasm64 build.
 
 ### The race (`/race/`)
 
-[`bench/race/`](../bench/race/) runs one app three ways side by side, each in its own iframe:
-hand-written JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. The page is the referee, in plain
-JavaScript: it clicks each app's own buttons, times the clicks (the app's update and its DOM calls,
-not the layout and paint that follow once per frame), and then reads what each app shows to check
-that all three agree.
+[`bench/race/`](../bench/race/) runs one app several ways side by side, each in its own iframe. The
+ways are the race's lanes, listed in [`bench/race/lanes.mjs`](../bench/race/lanes.mjs): by default
+hand-written JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. `?lanes=` picks them; an optional
+lane runs only when asked for, and the page offers one only where `bench/race/build.sh` built its
+pages. The page is the referee, in plain JavaScript: it clicks each app's own buttons, times the
+clicks (the app's update and its DOM calls, not the layout and paint that follow once per frame),
+and then reads what each app shows to check that all of them agree.
 
 - **Life**: Conway's Game of Life on 1,000 cells (40 × 25, wrapping), one generation per click on
   Step ([`examples/Life.lean`](../examples/Life.lean), and
@@ -1008,19 +1010,26 @@ that all three agree.
   generation, the live cells and a hash of its board; the referee also hashes the cells each page
   draws, the same way, so a board drawn wrong cannot pass. The panels share the time: in each
   animation frame, the ones that have used the least so far click until they have used 8 ms more,
-  so all three get the same time and the faster ones get further: what you see moving is each
-  one's speed.
+  so all get the same time and the faster ones get further: what you see moving is each one's
+  speed.
 - **Table**: the keyed operations below, in the three Bench apps, one panel at a time with each
   operation's warm-ups and the runner's 30 ms busy-wait before the timed click; the median of the
   runs counts. After each operation the referee compares the rows each app shows (ids, labels, the
   selected row).
+- **An asynchronous lane** (`async` in `lanes.mjs`: its app answers from a Worker, after the click
+  returns) is timed from the click until its app has applied everything the click caused, the same
+  span as a synchronous lane's click plus the messages between the threads, and the referee clicks
+  nothing else meanwhile. Such a lane may report its own figures (`window.__lane`): the page splits
+  its time into the app's own, the transport's and the DOM's, and `window.__race.lanes` keeps them.
+  None of the three default lanes is asynchronous.
 
 The site serves `/race/` cross-origin isolated, so the page's timer is precise to microseconds
 (without isolation Chrome rounds it to 0.1 ms, which only the table's smallest clicks feel).
 
 `tests/browser/race.mjs` runs it in CI (Life to generation 100, against the native reference;
-the table once, in Chromium) and fails if the three ever disagree; `--perf` gives the Chromium
-numbers below, `tests/browser/selfbench.mjs --race` the Firefox ones.
+the table once, in Chromium) and fails if the lanes ever disagree (`--lanes a,b,…` picks them; by
+default the three); `--perf` gives the Chromium numbers below, `tests/browser/selfbench.mjs --race`
+the Firefox ones.
 
 Life, 1,000 clicks, script time:
 
