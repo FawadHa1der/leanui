@@ -47,7 +47,7 @@ for (const [m, facets] of Object.entries(JSON.parse(fs.readFileSync(lock)).std.m
   }
 process.exit(bad ? 1 : 0);' "$Q/qed64.lock.json" "$B/std.tmp"
   rm -rf "$B/std" && mv "$B/std.tmp" "$B/std" && echo "$LOCK" > "$B/std/.lock"
-  echo "bake: Std: $(echo $mods | wc -w | tr -d ' ') modules, each facet QED64's, $(ms $t)"
+  echo "bake: Std: $(echo $mods | wc -w | tr -d ' ') modules, as QED64 built them, $(ms $t)"
 fi
 [ "$(cat "$B/init-olean/.lock" 2>/dev/null)" = "$LOCK" ] || oleans "$C/init" "$B/init-olean"
 [ "$(cat "$B/std-olean/.lock" 2>/dev/null)" = "$LOCK" ] || oleans "$B/std" "$B/std-olean"
