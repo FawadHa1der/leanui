@@ -95,7 +95,12 @@
 <script>
   LeanUI.start({ glue: "app.js", selector: "#app" })
     .then((rt) => { window.__leanui = rt; window.__ready = performance.now(); },
-          (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+          (e) => {
+            console.error("LeanUI failed to start:", e);
+            document.getElementById("app").textContent = LeanUI.supported()
+              ? "LeanUI failed to start: " + e.message
+              : "This demo runs Lean compiled to WebAssembly with 64-bit memory (Memory64), which this browser does not support yet. Chrome, Edge 133+ and Firefox 134+ do.";
+          });
 </script>
 </body>
 </html>
