@@ -33,7 +33,10 @@
   live cells and the board (it hashes the cells on the page the way the apps hash theirs), in
   <i>Table</i> the rows after every operation. “Started in” is the time from loading the panel to the
   app being ready (the panels load one after another), with the size of what it downloaded,
-  compressed where the server compresses (as the site does). Each run loads the pages afresh. These
+  compressed where the server compresses (as the site does). Each run loads the pages afresh. A lane
+  whose app answers from a Worker (Lean's interpreter on QED64, if you add it) is timed from the
+  click until its app's answer is on the page, so its times also include the messages between the
+  page and the Worker, and nothing else is clicked meanwhile. These
   times come from your browser on your machine; docs/BENCHMARKS.md in the repository has the
   automated benchmarks and how they differ (fresh page loads, traced rendering).</p>
 </footer>

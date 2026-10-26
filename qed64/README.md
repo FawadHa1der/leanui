@@ -13,7 +13,8 @@ compiles `../LeanUI` (through a shim, below) and the benchmarked programs (`exam
 by size and sha256, and downloads and builds go to `qed64/.cache` (ignored by git) and `dist/qed64`.
 
 It has the Lean side, the build, a Node test and the browser side: a Worker and a page for each
-app, in `dist/qed64/{bench,life}/`. The race does not run it yet.
+app, in `dist/qed64/{bench,life}/`. The race runs it as an optional lane, `qed64` ("In the race",
+below).
 
 ## How it runs
 
@@ -76,6 +77,28 @@ For the race (`bench/race/lanes.mjs`), the page sets `window.__idle` and `window
 * `stats()`: since the mount, the replies and the totals of Lean's time, the Worker's and applying,
   the stalls (replies whose time in the Worker exceeds Lean's own by more than 500 ms: a lost wakeup
   that the kick caught), and `floorMs`, the median of 20 empty round trips taken before `__ready`.
+
+### In the race
+
+`bench/race/build.sh` copies the lane into `dist/race` when `dist/qed64` is built: `rt/` once, as
+`qed64-rt/` (hard links, with the `.br` and `.gz` siblings), and the pages as `life/qed64/` and
+`table/qed64/`, their `qed64.json` pointing at `../../qed64-rt/`. Without `dist/qed64` it prints a
+notice and builds the race without the lane; `QED64=require` makes that an error.
+
+The race page offers the lane with a box under its controls ("Add Lean's interpreter on QED64
+(about 42 MB)"), or runs it with `?lanes=vanilla,wasm64,vir,qed64`. Its panel loads last, and the
+referee waits 3 s once every panel is ready before the first click, so that the browser can finish
+compiling `lean.wasm` in the background. Each click waits until the answer is on the page, and
+nothing else is clicked meanwhile; the results split its times into Lean, transport and DOM
+(docs/BENCHMARKS.md, "The QED64 lane"). Before loading the lane's page again (Run, another
+scenario), the referee empties the panel and waits 2.5 s, because the pthreads of a page outlive
+it by about 2 s and two starts' threads would overlap.
+
+`tests/browser/run-all.sh` builds the lane with `--build` (`LEANUI_QED64=0` skips it), serves the
+race cross-origin isolated, as the site does, and runs the race with the lane whenever
+`dist/race` has it (`LEANUI_QED64=require` makes its absence a failure): in Chromium Life and the
+table, in Firefox Life. `tests/browser/race.mjs` also checks that the lane had no stalls and that
+its Worker downloaded more than 30 MB itself.
 
 ### What breaks under the interpreter, and the shim
 
@@ -231,3 +254,8 @@ race takes medians). Playwright's Firefox runs wasm about 8× slower than a rele
 | create 1,000 rows | 301 ms (276) | 1,397 ms (1,372) |
 | create 10,000 rows | 2,363 ms (2,230) | 12,936 ms (12,784) |
 | an empty round trip | 0.37 ms | 0.48 ms |
+
+In the race, next to the other lanes (docs/BENCHMARKS.md, "The QED64 lane"; Chromium 141, the same
+machine), the lane is about as fast as lean-vir: it takes 1.11× lean-vir's time in Life and 1.00×
+on the table (the geometric mean of the operations), and 12.3× wasm64's on the table. Lean's own
+time is 80-97% of a click.

@@ -20,7 +20,8 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
    `toolchain/fork.lock`, the patch or the script changes). `tests/browser/run-all.sh
    --build-only` builds the apps the browser suites load: the wasm64 builds, then the lean-vir
    builds of the benchmarked apps (`vir/build.sh`, its `vir/.lake` cached like `.lake/build`), the
-   race page (`bench/race/build.sh`, into `dist/race`) and the Roster demo's verify page
+   QED64 lane (`qed64/build.sh`, its downloads and builds in `qed64/.cache`), the race page
+   (`bench/race/build.sh`, into `dist/race`) and the Roster demo's verify page
    (`roster/verify/build.sh`, with Rust's `wasm32-wasip1` target and Lean 4.35).
 4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`

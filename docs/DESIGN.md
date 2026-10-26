@@ -166,8 +166,9 @@ built against. It was first written on 2026-10-18 from the research in
 | `examples/Editor.lean`, `examples/Editor/*.lean` | LeanUI Photo: image operations, PNG, layers, jobs, the editor | `leanui-editor-tests`, `tests/browser/editor.mjs` |
 | `examples/Video.lean` | the video lab: the editor's filters on every frame of a video | `leanui-editor-tests`, `tests/browser/video.mjs` |
 | `examples/Bench.lean`, `bench/*` | the benchmark app, the vanilla reference, the runner | `leanui-perf`, `tests/browser/{bench,selfbench,bench-smoke}.mjs` |
-| `examples/Life.lean`, `bench/race/*` | Game of Life on 1,000 cells; the race page (its lanes in `bench/race/lanes.mjs`: vanilla, wasm64, lean-vir side by side) | `leanui-kit-tests`, `tests/browser/race.mjs` |
+| `examples/Life.lean`, `bench/race/*` | Game of Life on 1,000 cells; the race page (its lanes in `bench/race/lanes.mjs`: vanilla, wasm64, lean-vir side by side, and QED64 when asked for) | `leanui-kit-tests`, `tests/browser/race.mjs` |
 | `vir/*` | the benchmarked apps on lean-vir (Lean 4.35, apart from the main build; `vir/README.md`) | `tests/browser/race.mjs` |
+| `qed64/*` | the benchmarked apps on Lean's own interpreter in QED64's wasm64 Lean (Lean 4.35, apart from the main build; `qed64/README.md`) | `qed64/test/node.mjs`, `tests/browser/race.mjs` |
 | `toolchain/*`, `tools/*` | wasm64 archives, app builds, site data | |
 
 ## 5. Limits
