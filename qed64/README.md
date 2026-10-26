@@ -145,7 +145,7 @@ The steps, each skipped when its inputs have not changed:
    * `lean.wasm.br` (brotli 9) and `lean.wasm.gz`, for servers that send precompressed files.
 5. `dist/qed64/`: `rt/`, shared by both apps under content-hashed names (`lean.<h>.js`,
    `lean.<h>.wasm` with its `.br` and `.gz`, `apps.<h>.snap.gz` with its `.deps`,
-   `AppsRun.<h>.lean`, `qed64.worker.<h>.js`, `core.<h>.js`, `LICENSE-lean4`, `LICENSE-qed64`);
+   `AppsRun.<h>.lean`, `qed64.worker.<h>.js`, `core.<h>.js`, `LICENSE-lean4.txt`, `LICENSE-qed64.txt`);
    `bench/` and `life/`, each the app's page (`index.html`), `leanui.js`, `leanui-qed64.js` and
    `qed64.json`, what a session loads; and the pages' stylesheets one level up, where the race has
    them. The large files are hard links into the cache. A server must send `lean.wasm`'s `.br` or

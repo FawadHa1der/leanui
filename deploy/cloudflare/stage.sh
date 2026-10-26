@@ -2,14 +2,17 @@
 # Stages what the site container needs into deploy/cloudflare/site/ (gitignored):
 #   leanui-site (the native server), dist/site/ (the wasm build), dist/editor/ (the photo editor,
 #   its own page at /editor/, with the video lab in dist/editor/video/), dist/race/ (the race page
-#   at /race/: vanilla JavaScript, wasm64 and lean-vir side by side), dist/roster/ (the Roster demo
+#   at /race/: vanilla JavaScript, wasm64 and lean-vir side by side, and the optional QED64 lane where
+#   qed64/build.sh built it, its runtime in dist/race/qed64-rt/), dist/roster/ (the Roster demo
 #   at /roster/: the app and its verify page, with the Feasible preset's receipt, notarized here;
 #   the site has no notary), and the files it serves from the repository:
 #   examples/site/{site.css,benchmarks.json} and runtime/leanui.js.
 # Every .wasm, .js, .mjs, .irpkg (lean-vir's IR packages, which shrink about 8:1) and .ndjson file
 # gets brotli (quality 11) and gzip siblings, which the server sends to clients that accept them (as
 # `leanui build --compress` does); the Worker keeps those bytes as they are (src/worker.js,
-# SiteServer.fetch; docs/DEPLOY.md, "Compression").
+# SiteServer.fetch; docs/DEPLOY.md, "Compression"). The exception is dist/race/qed64-rt, staged as
+# qed64/build.sh made it: its apps.<h>.snap.gz is the snapshot itself, not a sibling, and lean.wasm's
+# siblings are already there (brotli 9: quality 11 would take 4 more minutes for 1.6 MB less).
 # Needs `lake build leanui-site leanui-roster`, `tools/build-app.sh SiteApp site`,
 # `tools/build-app.sh EditorApp editor`, `tools/build-app.sh VideoApp editor/video`,
 # `tools/build-app.sh RosterApp roster`, `bench/race/build.sh` and `roster/verify/build.sh` (which
@@ -32,9 +35,10 @@ mkdir -p "$OUT/dist/roster/receipts"
 (cd "$ROOT" && .lake/build/bin/leanui-roster --notarize-sample "$OUT/dist/roster/receipts/feasible.ndjson")
 cp "$ROOT/examples/site/site.css" "$ROOT/examples/site/benchmarks.json" "$OUT/examples/site/"
 cp "$ROOT/runtime/leanui.js" "$OUT/runtime/"
-find "$OUT/dist" \( -name '*.br' -o -name '*.gz' \) -delete
+find "$OUT/dist" \( -name '*.br' -o -name '*.gz' \) -not -path '*/race/qed64-rt/*' -delete
 # prints one line per directory of dist/: files, bytes, and the siblings' bytes
-find "$OUT/dist" \( -name '*.wasm' -o -name '*.js' -o -name '*.mjs' -o -name '*.irpkg' -o -name '*.ndjson' \) -exec node -e '
+find "$OUT/dist" \( -name '*.wasm' -o -name '*.js' -o -name '*.mjs' -o -name '*.irpkg' -o -name '*.ndjson' \) \
+  -not -path '*/race/qed64-rt/*.wasm' -exec node -e '
 const fs=require("fs"),z=require("zlib"),sum=new Map();
 for (const f of process.argv.slice(1)) {
   const b=fs.readFileSync(f), br=z.brotliCompressSync(b,{params:{[z.constants.BROTLI_PARAM_QUALITY]:11}}), gz=z.gzipSync(b,{level:9});

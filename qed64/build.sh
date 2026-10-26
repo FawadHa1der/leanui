@@ -4,7 +4,7 @@
 #   dist/qed64/rt/             what a session loads, for both apps, under content-hashed names:
 #                              lean.<h>.js, lean.<h>.wasm (and its .br, .gz), apps.<h>.snap.gz and
 #                              its .deps, AppsRun.<h>.lean, qed64.worker.<h>.js, core.<h>.js, the
-#                              licences
+#                              licences (LICENSE-lean4.txt, LICENSE-qed64.txt; the race links them)
 #   dist/qed64/{bench,life}/   index.html (pages/<app>.html), runtime/leanui.js, lane/leanui-qed64.js
 #                              and qed64.json: the session's files and settings
 #   dist/qed64/{bench,life}.css   the pages' stylesheets, one level up as in the race (dist/race)
@@ -38,7 +38,7 @@ put "$C/rt/lean.js" "$js"
 put "$C/rt/lean.wasm" "$wasm"; put "$B/wasm/lean.wasm.br" "$wasm.br"; put "$B/wasm/lean.wasm.gz" "$wasm.gz"
 put "$B/snap/apps.snap.gz" "$snap.gz"; put "$B/snap/apps.snap.deps" "$snap.deps"
 cp "$Q/run/AppsRun.lean" "$D/rt/$run"; cp "$Q/lane/core.js" "$D/rt/$core"; cp "$Q/lane/qed64.worker.js" "$D/rt/$worker"
-cp "$C/rt/LICENSE-lean4" "$C/rt/LICENSE-qed64" "$D/rt/"
+for l in lean4 qed64; do cp "$C/rt/LICENSE-$l" "$D/rt/LICENSE-$l.txt"; done   # .txt: text/plain, which a browser shows
 cp "$ROOT/bench/bench.css" "$ROOT/bench/race/life.css" "$D/"
 for app in bench life; do
   cp "$Q/pages/$app.html" "$D/$app/index.html"; cp "$ROOT/runtime/leanui.js" "$Q/lane/leanui-qed64.js" "$D/$app/"
