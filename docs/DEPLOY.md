@@ -9,7 +9,8 @@ server in a Cloudflare container.
 One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it:
 
 1. **Lean**: elan installs the toolchains named in `lean-toolchain` and `vir/lean-toolchain`
-   (lean-vir's release, for the benchmark builds in `vir/`; cached).
+   (lean-vir's release, for the benchmark builds in `vir/`, which `qed64/lean-toolchain` also
+   names; cached).
 2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
    change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,
@@ -20,22 +21,37 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
    `toolchain/fork.lock`, the patch or the script changes). `tests/browser/run-all.sh
    --build-only` builds the apps the browser suites load: the wasm64 builds, then the lean-vir
    builds of the benchmarked apps (`vir/build.sh`, its `vir/.lake` cached like `.lake/build`), the
-   race page (`bench/race/build.sh`, into `dist/race`) and the Roster demo's verify page
-   (`roster/verify/build.sh`, with Rust's `wasm32-wasip1` target and Lean 4.35).
-4. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
+   QED64 lane (`qed64/build.sh`), the race page (`bench/race/build.sh`, into `dist/race`) and the
+   Roster demo's verify page (`roster/verify/build.sh`, with Rust's `wasm32-wasip1` target and
+   Lean 4.35). The QED64 lane's downloads and builds are cached in two parts: per lock
+   (`qed64/qed64.lock.json` and `qed64/lean-toolchain`), the downloads (about 260 MB: QED64's
+   runtime and `Init`, Node 24) and what is made from them alone (Std compiled by `lean.wasm`,
+   `lean.wasm`'s `.br` and `.gz`), about 620 MB unpacked; per source, the rest of
+   `qed64/tools/bake.sh`'s work (LeanUI and the apps compiled by `lean.wasm`, the snapshot) and
+   `qed64/.lake`, about 70 MB. A cold build of the lane takes a few minutes (`qed64/README.md`,
+   "Building"); with both caches and no change, seconds. The job sets `LEANUI_QED64=require`, so a
+   race without the lane fails.
+4. **QED64 under Node**: `qed64/test/node.mjs`, on the Node 24 that `qed64/tools/node.sh` pins
+   (`lean.wasm` needs Memory64; the rest of the job runs Node 22): the lane's sessions, booted as
+   the page boots them, must send updates byte-identical to the compiled reference's (about 30 s).
+5. **Browsers**: Playwright 1.62.1 is installed outside the checkout (`LEANUI_PLAYWRIGHT_FROM`
    points the tests at it; see `tests/browser/playwright.mjs`), then `tests/browser/run-all.sh`
    runs every suite in Chromium and Firefox: todomvc, site, counter, keyed-dom, fuzz, templates,
-   apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth, race, and the
-   Roster demo's (the app against `leanui-roster`, which notarizes, and the receipt it makes on the
-   verify page).
-5. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files (`dist/site`,
+   apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth, race (with the
+   QED64 lane, on a cross-origin isolated server), and the Roster demo's (the app against
+   `leanui-roster`, which notarizes, and the receipt it makes on the verify page).
+6. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files (`dist/site`,
    `dist/editor`, `dist/race`, `dist/roster` with the Roster demo's one receipt, notarized then),
    and writes brotli (quality 11) and gzip siblings of every `.wasm`, `.js`, `.mjs`, `.irpkg` and
-   `.ndjson` file. The image is built for `linux/amd64` and started, and `/`, the wasm, the
-   stylesheet, the editor, the video lab, the race page (with a wasm64 and a lean-vir file of it)
-   and the Roster demo must answer, the wasm and the receipt brotli-encoded to a client that
-   accepts it; the Roster demo's app and verify page are tested in Chromium against it. On `main`
-   the staged files are uploaded for the deploy job.
+   `.ndjson` file. The exception is the QED64 lane's `dist/race/qed64-rt` (`qed64/build.sh`): its
+   `apps.<h>.snap.gz` is the snapshot itself, not a sibling, and `lean.wasm` keeps the brotli 9
+   siblings it came with (quality 11 would take 4 more minutes for 1.6 MB less).
+   The image is built for `linux/amd64` and started, and `/`, the wasm, the stylesheet, the
+   editor, the video lab, the race page (with a wasm64 and a lean-vir file of it, and the QED64
+   lane's `lean.wasm` and snapshot) and the Roster demo must answer, the wasm, the lane's
+   `lean.wasm` (immutable) and the receipt brotli-encoded to a client that accepts it; the Roster
+   demo's app and verify page are tested in Chromium against it. On `main` the staged files are
+   uploaded for the deploy job.
 
 `tests/browser/run-all.sh` is also the local entry point (`--build` builds the apps first). On a
 shared machine, run it under the host browser lock.
@@ -53,10 +69,12 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   serves the photo editor as its own page, `/editor/` (`dist/editor`, a client-side wasm app with
   no server rendering: browsers without Memory64 get a message instead), its video lab,
   `/editor/video/` (`dist/editor/video`), and the race page, `/race/` (`dist/race`, static files:
-  the same apps in vanilla JavaScript, wasm64 and lean-vir side by side; `bench/race/`). lean-vir
-  runs only there: the site and the editor are the wasm64 builds. And the Roster demo, `/roster/`
-  (`dist/roster`: the app and its verify page, with one receipt made when the site was staged;
-  no notary, which needs Lean 4.35; `roster/README.md`).
+  the same apps in vanilla JavaScript, wasm64 and lean-vir side by side, and Lean's interpreter on
+  QED64 for a visitor who adds it; `bench/race/`). lean-vir and QED64 run only there: the site and
+  the editor are the wasm64 builds. `/race/qed64-rt/`, the QED64 lane's runtime and snapshot, is
+  served with year-long `immutable` caching, because its file names change with their content.
+  And the Roster demo, `/roster/` (`dist/roster`: the app and its verify page, with one receipt
+  made when the site was staged; no notary, which needs Lean 4.35; `roster/README.md`).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
   accept them (`Content-Encoding`, `Vary: Accept-Encoding`). Brotli at quality 11 is smaller than
   compression on the fly: the site's wasm is 194 KB. The container's response does not reach the
@@ -69,6 +87,26 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   the container, so the server always picks the `.br` sibling, and a client without brotli gets
   the edge's transcode of it. After each deploy the deploy job checks that the served wasm is the
   file the server sent: its size, which the server puts in the ETag, and that it decodes.
+- **What the container holds** (`deploy/cloudflare/site`, when the QED64 lane was added):
+
+  | | Size |
+  |---|---|
+  | `leanui-site`, `dist/site`, `dist/editor`, `dist/roster`, `dist/race` without the lane, with their siblings | 28 MB |
+  | `dist/race/qed64-rt/lean.<h>.wasm` | 106.2 MB |
+  | its `.br` and `.gz` | 11.0 MB, 16.7 MB |
+  | the snapshot, `apps.<h>.snap.gz` | 30.9 MB |
+  | `lean.<h>.js`, the Worker, the licences, with siblings | 0.2 MB |
+
+  The lane is 165 MB of the 193 MB, and `site-container.tgz` grows from 11 MB to 86 MB. It is
+  there because the race page offers it (the box "Add Lean's interpreter on QED64 (about 42 MB)"),
+  and nothing of it is fetched unless a visitor ticks that box. The unpacked `lean.wasm` never
+  reaches a visitor (Cloudflare always asks the container for br), but it must be there: the
+  server sends a sibling only in place of a file that exists.
+  `Static` reads a whole file into memory for each response, so a visitor who adds the lane makes
+  the container hold the 11 MB `.br` and the 31 MB snapshot while they are sent: with the image
+  run locally, eight such downloads at once took it from 128 MiB to 363 MiB. A returning visitor
+  fetches nothing (the files are immutable). Neither the Worker (no edge cache for
+  `/race/qed64-rt/`) nor `Static` (no streaming) takes that load off the container yet.
 - **One instance** (`max_instances: 1`, one Durable Object name): a server-driven session lives in
   that process's memory, so every request must reach the same process. The site's traffic fits
   one `basic` instance (1/4 vCPU, 1 GiB). The more sessions are live at once, the more memory it
@@ -104,9 +142,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
 
 Until both secrets exist, the deploy job prints a notice and skips the deploy. Everything else
 still runs. To redeploy without a new commit, run the workflow on `main` by hand (Actions → CI →
-Run workflow). After the deploy it fetches the site's and the editor's wasm with brotli and fails
-if a body is not the precompressed file the server sent (see "Compression" above). When
-`wrangler deploy` fails, the job prints wrangler's own log
+Run workflow). After the deploy it fetches the site's, the editor's and the QED64 lane's wasm with
+brotli and fails if a body is not the precompressed file the server sent (see "Compression"
+above). When `wrangler deploy` fails, the job prints wrangler's own log
 (`~/.config/.wrangler/logs`). The site appears at `https://leanui-site.<your-subdomain>.workers.dev`. `wrangler.jsonc` sets `workers_dev: true` (that URL) and `preview_urls: false` (no extra
 preview URL per uploaded version). A custom domain is a `routes` entry in `deploy/cloudflare/wrangler.jsonc` (or the dashboard's Domains &
 Routes).
@@ -119,9 +157,12 @@ wasm64 archives built once (`toolchain/build-archives.sh`, needs Docker):
 ```bash
 lake build leanui-site leanui-roster && tools/build-app.sh SiteApp site && tools/build-app.sh EditorApp editor &&
   tools/build-app.sh VideoApp editor/video && tools/build-app.sh LifeApp life &&
-  tools/build-app.sh BenchApp bench && vir/build.sh && bench/race/build.sh &&
+  tools/build-app.sh BenchApp bench && vir/build.sh && qed64/build.sh && bench/race/build.sh &&
   tools/build-app.sh RosterApp roster && roster/verify/build.sh && deploy/cloudflare/stage.sh
 ```
+
+`qed64/build.sh` (the race's optional QED64 lane, `qed64/README.md`) downloads about 260 MB the
+first time; without it the race page has no QED64 lane.
 
 ```bash
 cd deploy/cloudflare && npm install && npx wrangler deploy

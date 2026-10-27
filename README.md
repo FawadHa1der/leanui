@@ -241,7 +241,8 @@ tools/build-app.sh TodoMVCApp todomvc       # an app: dist/todomvc/{index.html,l
 tests/browser/run-all.sh --build          # every browser suite in Chromium and Firefox (Playwright):
                                           # todomvc, site, counter, keyed-dom, fuzz, templates,
                                           # apply-semantics, server, effects, bench-smoke, pixels, editor, video, depth,
-                                          # race (vanilla, wasm64 and lean-vir must agree),
+                                          # race (vanilla, wasm64 and lean-vir must agree, and
+                                          # Lean's interpreter on QED64 where qed64/build.sh built it),
                                           # roster and its verify page (with leanui-roster's notary)
 node tests/browser/bench.mjs              # the benchmark (Chromium traces); selfbench.mjs for release browsers,
                                           # apply-bench.mjs for the JS runtime alone
@@ -253,8 +254,8 @@ node tests/browser/bench.mjs              # the benchmark (Chromium traces); sel
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the native build and every test above on each push
 and pull request, then the browser suites against the wasm64 builds (and, for the race, the
-lean-vir builds), and checks the Roster demo's completeness proof against Mathlib in a job of its
-own. On `main` it deploys the LeanUI site to Cloudflare: a Worker in front of a
+lean-vir builds and the QED64 lane), and checks the Roster demo's completeness proof against
+Mathlib in a job of its own. On `main` it deploys the LeanUI site to Cloudflare: a Worker in front of a
 container that runs the native `leanui-site`, so pages are server-rendered and Safari gets
 server-driven sessions. Setup and secrets:
 [docs/DEPLOY.md](docs/DEPLOY.md).

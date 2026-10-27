@@ -1,0 +1,117 @@
+{
+ "engine": "firefox",
+ "browserVersion": "142.0.1",
+ "date": "2026-10-26T20:33:56.192Z",
+ "commit": "0185c40",
+ "life": {
+  "scenario": "life",
+  "steps": 100,
+  "same": true,
+  "rows": [
+   {
+    "key": "vanilla",
+    "name": "Vanilla JavaScript",
+    "clicks": 100,
+    "ms": 11.260000000000218,
+    "gen": 100,
+    "pop": 53,
+    "board": "bdbe4aa6",
+    "shown": "bdbe4aa6"
+   },
+   {
+    "key": "wasm64",
+    "name": "LeanUI · wasm64",
+    "clicks": 100,
+    "ms": 308.52000000000044,
+    "gen": 100,
+    "pop": 53,
+    "board": "bdbe4aa6",
+    "shown": "bdbe4aa6"
+   },
+   {
+    "key": "vir",
+    "name": "LeanUI · lean-vir",
+    "clicks": 100,
+    "ms": 17388.099999999977,
+    "gen": 100,
+    "pop": 53,
+    "board": "bdbe4aa6",
+    "shown": "bdbe4aa6"
+   },
+   {
+    "key": "qed64",
+    "name": "LeanUI · Lean interpreter on QED64",
+    "clicks": 100,
+    "ms": 13838.940000000015,
+    "gen": 100,
+    "pop": 53,
+    "board": "bdbe4aa6",
+    "shown": "bdbe4aa6"
+   }
+  ],
+  "missing": [],
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0",
+  "memory64": true,
+  "crossOriginIsolated": true,
+  "lanes": {
+   "qed64": {
+    "boot": 5905,
+    "phases": {
+     "download": 1661.12005859375,
+     "runtime": 2952.31982421875,
+     "Lean": 1219.580078125,
+     "DOM": 6.960039062500073,
+     "pings": 26
+    },
+    "bytes": 42032032,
+    "stalls": 0,
+    "floorMs": 0.5600000000004002,
+    "perOp": {
+     "step": {
+      "totalMs": 138.38940000000014,
+      "leanMs": 135.29620992,
+      "workerMs": 137.00200000000027,
+      "applyMs": 0.42559999999957654,
+      "hopsMs": 0.9618000000003122
+     }
+    }
+   }
+  },
+  "seconds": 43.881
+ },
+ "checks": [
+  {
+   "name": "life 100: every lane ran (vanilla,wasm64,vir,qed64)",
+   "ok": true
+  },
+  {
+   "name": "life 100: same board",
+   "ok": true
+  },
+  {
+   "name": "life 100: vanilla = native",
+   "ok": true
+  },
+  {
+   "name": "life 100: wasm64 = native",
+   "ok": true
+  },
+  {
+   "name": "life 100: vir = native",
+   "ok": true
+  },
+  {
+   "name": "life 100: qed64 = native",
+   "ok": true
+  },
+  {
+   "name": "life 100: qed64's Worker fetched lean.wasm and the snapshot",
+   "ok": true
+  },
+  {
+   "name": "life 100: qed64 had no stalls",
+   "ok": true
+  }
+ ],
+ "errors": []
+}

@@ -1,0 +1,30 @@
+# The QED64 lane's native reference (qed64/README.md): the stdin/stdout host compiled by Lean 4.35.0
+# (qed64/lean-toolchain, QED64's Lean release) against LeanUI as it is, inline C and all, so the
+# lane's updates, which Lean's interpreter computes in lean.wasm, can be compared with compiled
+# code byte for byte. A project of its own, like vir/: its build lives in qed64/.lake.
+name = "leanui-qed64"
+defaultTargets = ["bench-host", "life-host"]
+
+# LeanUI's core and the benchmarked programs, from the main tree
+[[lean_lib]]
+name = "LeanUI"
+srcDir = ".."
+roots = ["LeanUI"]
+
+[[lean_lib]]
+name = "Examples"
+srcDir = "../examples"
+roots = ["Bench", "Life"]
+
+# The host, and `main` for each app
+[[lean_lib]]
+name = "LeanUIQed"
+roots = ["LeanUIQed.Host", "LeanUIQed.BenchMain", "LeanUIQed.LifeMain"]
+
+[[lean_exe]]
+name = "bench-host"
+root = "LeanUIQed.BenchMain"
+
+[[lean_exe]]
+name = "life-host"
+root = "LeanUIQed.LifeMain"

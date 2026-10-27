@@ -18,7 +18,10 @@ from `dist/editor` (`tools/build-app.sh EditorApp editor`), so the site's pages 
 
 `/race/` is the race page, static files from `dist/race` (`bench/race/build.sh`): the same apps in
 vanilla JavaScript, in LeanUI compiled to wasm64 and in LeanUI interpreted by lean-vir (`vir/`),
-side by side. lean-vir runs only there; the site itself is the wasm64 build.
+side by side. lean-vir runs only there; the site itself is the wasm64 build. When the race was
+built with its optional QED64 lane (`qed64/`), `/race/qed64-rt/` holds the lane's runtime and
+snapshot (about 42 MB to a visitor who adds it), under content-hashed names, so browsers may keep
+them for a year.
 
 `/roster/` is the Roster demo (`roster/README.md`), static files from `dist/roster`: the app and
 its verify page, with one receipt, the Feasible preset's roster notarized when the site was staged
@@ -82,7 +85,11 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Static.file "/data/benchmarks.json" "examples/site/benchmarks.json",
     Route.under "/assets/site" (Static.route { root := dist }),
     Route.under "/editor" (Static.route { root := o.dist / "editor" }),
-    -- cross-origin isolated: the race times clicks with performance.now(), precise only then
+    -- cross-origin isolated: the race times clicks with performance.now(), precise only then, and
+    -- the QED64 lane's threads share memory. Its runtime's names change with their content
+    -- (qed64/build.sh; the two licences change only with QED64's release).
+    Route.under "/race/qed64-rt"
+      (Static.route { root := o.dist / "race" / "qed64-rt", isolate := true, cache := .immutable }),
     Route.under "/race" (Static.route { root := o.dist / "race", isolate := true }),
     Route.under "/roster" (Route.first [rosterNotary o, Static.route { root := o.dist / "roster" }]),
     sessions.route "/leanui",

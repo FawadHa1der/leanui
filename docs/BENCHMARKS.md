@@ -996,11 +996,14 @@ stays on the compiled wasm64 build.
 
 ### The race (`/race/`)
 
-[`bench/race/`](../bench/race/) runs one app three ways side by side, each in its own iframe:
-hand-written JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. The page is the referee, in plain
-JavaScript: it clicks each app's own buttons, times the clicks (the app's update and its DOM calls,
-not the layout and paint that follow once per frame), and then reads what each app shows to check
-that all three agree.
+[`bench/race/`](../bench/race/) runs one app several ways side by side, each in its own iframe. The
+ways are the race's lanes, listed in [`bench/race/lanes.mjs`](../bench/race/lanes.mjs): by default
+hand-written JavaScript, LeanUI on wasm64 and LeanUI on lean-vir. `?lanes=` picks them; an optional
+lane runs only when asked for, and the page offers one only where `bench/race/build.sh` built its
+pages. The one optional lane is LeanUI on Lean's own interpreter in QED64
+([below](#the-qed64-lane)). The page is the referee, in plain JavaScript: it clicks each app's own buttons, times the
+clicks (the app's update and its DOM calls, not the layout and paint that follow once per frame),
+and then reads what each app shows to check that all of them agree.
 
 - **Life**: Conway's Game of Life on 1,000 cells (40 × 25, wrapping), one generation per click on
   Step ([`examples/Life.lean`](../examples/Life.lean), and
@@ -1008,19 +1011,26 @@ that all three agree.
   generation, the live cells and a hash of its board; the referee also hashes the cells each page
   draws, the same way, so a board drawn wrong cannot pass. The panels share the time: in each
   animation frame, the ones that have used the least so far click until they have used 8 ms more,
-  so all three get the same time and the faster ones get further: what you see moving is each
-  one's speed.
+  so all get the same time and the faster ones get further: what you see moving is each one's
+  speed.
 - **Table**: the keyed operations below, in the three Bench apps, one panel at a time with each
   operation's warm-ups and the runner's 30 ms busy-wait before the timed click; the median of the
   runs counts. After each operation the referee compares the rows each app shows (ids, labels, the
   selected row).
+- **An asynchronous lane** (`async` in `lanes.mjs`: its app answers from a Worker, after the click
+  returns) is timed from the click until its app has applied everything the click caused, the same
+  span as a synchronous lane's click plus the messages between the threads, and the referee clicks
+  nothing else meanwhile. Such a lane may report its own figures (`window.__lane`): the page splits
+  its time into the app's own, the transport's and the DOM's, and `window.__race.lanes` keeps them.
+  None of the three default lanes is asynchronous; the QED64 lane is.
 
 The site serves `/race/` cross-origin isolated, so the page's timer is precise to microseconds
 (without isolation Chrome rounds it to 0.1 ms, which only the table's smallest clicks feel).
 
 `tests/browser/race.mjs` runs it in CI (Life to generation 100, against the native reference;
-the table once, in Chromium) and fails if the three ever disagree; `--perf` gives the Chromium
-numbers below, `tests/browser/selfbench.mjs --race` the Firefox ones.
+the table once, in Chromium) and fails if the lanes ever disagree (`--lanes a,b,…` picks them; by
+default the three); `--perf` gives the Chromium numbers below, `tests/browser/selfbench.mjs --race`
+the Firefox ones.
 
 Life, 1,000 clicks, script time:
 
@@ -1055,6 +1065,56 @@ results above):
 
 Script alone, wasm64 is about 4× vanilla (the keyed results add rendering, the same for both, which
 brings it to 1.2–1.5×); lean-vir is 12–13× wasm64 in both browsers, as in the keyed suite.
+
+#### The QED64 lane
+
+The optional lane `qed64` ([`qed64/README.md`](../qed64/README.md)) runs the same Lean program with
+Lean's own IR interpreter: `lean --run` in QED64's wasm64 build of Lean 4.35 (`lean.wasm`, with
+threads), in a Worker. Init and Std run as compiled code inside `lean.wasm`; LeanUI, the app, the
+diff and the buffer writers run interpreted. The lane is asynchronous, so each click is timed until
+the page shows the answer, and the time includes the messages between the page and the Worker. It
+needs Memory64 and a cross-origin isolated page. Its Worker downloads 42.0 MB (`lean.wasm` with
+brotli and the snapshot gzipped), and from localhost it is ready in 2.5 s: 1.0–1.2 s of downloads,
+then 1.3–1.4 s for Lean to load the snapshot and mount the app.
+
+`tests/browser/race.mjs --perf --lanes vanilla,wasm64,vir,qed64` in Playwright's Chromium 141, the
+lane at `0185c40`
+([`bench/race/ci/race-qed64-chromium.json`](../bench/race/ci/race-qed64-chromium.json)). These are
+**CI-machine numbers, to be re-measured on the reference Mac**: read them as ratios. Life is per
+click over 1,000 clicks; the table is the median of 3 runs. The last three columns split QED64's time:
+Lean's own time (the host's clock, in the Worker), the transport (the rest: the Worker's input and
+output, then the two messages), and applying the updates to the page.
+
+| | wasm64 | lean-vir | QED64 | QED64 ÷ wasm64 | QED64 ÷ lean-vir | Lean | transport | DOM |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| Life, one step | 0.49 ms | 22.6 | 25.1 | 51× | 1.11× | 92% | 7.0% | 0.8% |
+| create 1,000 rows | 11.0 ms | 246 | 207 | 19× | 0.84× | 96% | 2.3% | 2.0% |
+| replace all 1,000 rows | 30.0 ms | 345 | 337 | 11× | 0.98× | 90% | 4.0% | 6.1% |
+| update every 10th of 1,000 rows | 3.86 ms | 53.6 | 37.7 | 9.8× | 0.70× | 94% | 4.9% | 0.8% |
+| highlight a row (of 1,000) | 1.94 ms | 10.9 | 13.2 | 6.8× | 1.22× | 87% | 12% | 0.7% |
+| swap 2 of 1,000 rows | 3.35 ms | 49.4 | 62.4 | 19× | 1.26× | 97% | 2.7% | 0.3% |
+| remove one of 1,000 rows | 3.84 ms | 27.2 | 36.1 | 9.4× | 1.33× | 95% | 4.6% | 0.3% |
+| create 10,000 rows | 105 ms | 2,344 | 2,289 | 22× | 0.98× | 96% | 1.4% | 2.2% |
+| append 1,000 rows to 1,000 | 12.6 ms | 257 | 242 | 19× | 0.94× | 96% | 1.8% | 2.3% |
+| clear 1,000 rows | 9.57 ms | 66.8 | 60.0 | 6.3× | 0.90× | 80% | 8.4% | 12% |
+| *the table, geometric mean* | | | | **12.3×** | **1.00×** | | | |
+
+- **Two interpreters, about the same speed.** QED64 runs Life 11% slower than lean-vir, and the table
+  as fast as lean-vir on the geometric mean (0.70–1.33× per operation). Both are about 12× wasm64
+  on the table and about 50× on Life.
+- **Lean's own time is 80–97% of a click.** The transport is 1.6–32 ms. Of that, the messages take
+  0.7–1.0 ms (an empty round trip takes 0.24–0.39 ms). The rest is the Worker's input and output,
+  which grows with the reply: 31 ms for the 10,000 rows' update, which the Worker takes from
+  Lean's stdout one byte at a time. Applying the updates is the same DOM code as in the other LeanUI lanes
+  (`Runtime.apply`).
+- **No stalls.** No reply waited for the Worker's one-second mailbox kick (`race.mjs` fails a run
+  that has one).
+
+In Playwright's Firefox 142, Life with 100 clicks
+([`bench/race/ci/race-qed64-life-firefox.json`](../bench/race/ci/race-qed64-life-firefox.json)):
+QED64 takes 138 ms per click (Lean 98% of it), lean-vir 174 ms and wasm64 3.09 ms, so QED64 is
+0.80× lean-vir. Playwright's Firefox runs wasm about 8× slower than a release Firefox
+([Findings](#findings-about-measuring)); only the ratios between the lanes mean anything.
 
 ### The keyed suite with lean-vir
 
@@ -1128,9 +1188,11 @@ fetches it again to check its hash.
 ```bash
 tools/build-app.sh BenchApp bench && tools/build-app.sh LifeApp life   # the wasm64 builds
 vir/build.sh                                                            # dist/vir/{bench,life} (Lean 4.35, vir/README.md)
+qed64/build.sh                                                          # dist/qed64, optional (qed64/README.md: about 260 MB of downloads, once)
 bench/race/build.sh                                                     # dist/race
 ./.lake/build/bin/leanui serve dist --port 5331 --coop &                # the race at http://127.0.0.1:5331/race/ (isolated: a precise timer)
 node tests/browser/race.mjs http://127.0.0.1:5331/ chromium --perf --out race-chromium.json
+node tests/browser/race.mjs http://127.0.0.1:5331/ chromium --perf --lanes vanilla,wasm64,vir,qed64 --out race-qed64-chromium.json
 node tests/browser/selfbench.mjs <firefox-binary> firefox --race life --json race-life-firefox.json
 node tests/browser/selfbench.mjs <firefox-binary> firefox --race table --runs 3 --json race-table-firefox.json
 node tests/browser/bench.mjs --runs 7 --impls leanui,vanilla,leanvir --json keyed-chromium.json
@@ -1138,8 +1200,8 @@ node tests/browser/selfbench.mjs <firefox-binary> firefox --runs 5 --impls leanu
 node tools/bench-tables.mjs keyed-chromium.json keyed-firefox.json      # the keyed tables above
 ```
 
-CI runs the keyed suite with lean-vir and the race (`--perf`), in Chromium only, on a pull request
-with the `bench` label, next to the editor's benchmarks.
+CI runs the keyed suite with lean-vir and the race (`--perf`, with the QED64 lane), in Chromium
+only, on a pull request with the `bench` label, next to the editor's benchmarks.
 
 ## Method
 
