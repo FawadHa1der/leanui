@@ -272,6 +272,74 @@ try {
       await n.ctx.close();
     }
 
+    // Startup cancellation must not become a server fallback or overwrite a newer owner.
+    // The normal failure cases ensure that AbortError is the only quiet rejection.
+    R.startup = [];
+    for (const mode of ["auto", "wasm"]) for (const scenario of ["cancel", "replace", "failure"]) {
+      const ctx = await browser.newContext(), page = await ctx.newPage();
+      const pageErrors = [], messages = [], posts = [];
+      page.on("pageerror", (e) => pageErrors.push(e.message));
+      // Firefox also reports the compiled toolchain's Wasm EH deprecation as a warning.
+      page.on("console", (m) => {
+        if (m.type() === "error" || (m.type() === "warning" && m.text().startsWith("LeanUI:")))
+          messages.push({ type: m.type(), text: m.text() });
+      });
+      page.on("request", (r) => { if (r.method() === "POST") posts.push(r.url()); });
+      try {
+        await page.addInitScript(({ scenario }) => {
+          if (scenario === "failure") window.LeanUIApp = async () => { throw new Error("test startup failure"); };
+          Object.defineProperty(window, "LeanUI", { configurable: true, set(api) {
+            Object.defineProperty(window, "LeanUI", { value: api, writable: true, configurable: true });
+            const start = api.start, enter = api.Runtime.prototype.start;
+            let cancelled = false;
+            api.start = async function (...args) {
+              try { return await start.apply(this, args); }
+              catch (error) {
+                // This task runs after the generated boot script's rejection handlers.
+                setTimeout(() => { window.__bootRejected = { name: error.name, message: error.message }; }, 0);
+                throw error;
+              }
+            };
+            api.Runtime.prototype.start = function (boot) {
+              return enter.call(this, () => {
+                boot();
+                if (scenario !== "failure" && !cancelled) {
+                  cancelled = true; window.__cancelled = this; this.dispose();
+                  if (scenario === "replace") {
+                    window.__replacement = new api.Runtime({}); api.active = window.__leanui = window.__replacement;
+                    document.documentElement.dataset.leanui = "replacement";
+                  }
+                }
+              });
+            };
+          } });
+        }, { scenario });
+        await page.goto(D + (mode === "auto" ? "/counter" : "/counter/wasm"));
+        await page.waitForFunction(() => window.__bootRejected, null, { timeout: 30000 });
+        if (scenario === "failure" && mode === "auto")
+          await page.waitForFunction(() => window.__leanui?.stats.flushes >= 1, null, { timeout: 10000 });
+        const result = await page.evaluate(() => ({ reason: window.__bootRejected.name, message: window.__bootRejected.message,
+          mode: document.documentElement.dataset.leanui ?? null, disposed: window.__cancelled?.disposed ?? null,
+          released: window.__cancelled ? window.__cancelled.transport === null : null,
+          owner: window.__replacement ? LeanUI.active === window.__replacement : !LeanUI.active,
+          published: window.__leanui === window.__replacement }));
+        const label = engine + ": " + mode + " startup " + scenario;
+        if (scenario === "failure") {
+          check(result.reason === "Error" && result.message === "test startup failure" && result.mode === (mode === "auto" ? "server" : "failed") &&
+            posts.length === (mode === "auto" ? 1 : 0), label, { result, posts });
+          check(messages.length === 1 && messages[0].type === (mode === "auto" ? "warning" : "error") &&
+            messages[0].text.startsWith(mode === "auto" ? "LeanUI: wasm did not start" : "LeanUI failed to start:"),
+            label + " reports the failure", messages);
+        } else {
+          check(result.reason === "AbortError" && result.disposed && result.released && result.owner && result.published &&
+            result.mode === (scenario === "replace" ? "replacement" : null) && posts.length === 0 && messages.length === 0,
+            label + " stays quiet and preserves ownership", { result, posts, messages });
+        }
+        check(pageErrors.length === 0, label + " has no uncaught errors", pageErrors);
+        R.startup.push({ bootMode: mode, scenario, ...result, posts: posts.length });
+      } finally { await ctx.close(); }
+    }
+
     // ---- 4. a server-driven ticker: subscriptions, fetch, title ----
     {
       const { ctx, page } = await newPage();

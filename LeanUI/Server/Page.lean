@@ -62,15 +62,17 @@ def Boot.mode : Boot → String
 
 /-- The boot script: reads the JSON parameters and starts the runtime. Exposes the runtime as
 `window.__leanui` and the chosen transport as `<html data-leanui="wasm|server">`, and falls back
-to the server when an `auto` page cannot start its wasm. -/
+to the server when an `auto` page cannot start its wasm. Intentional startup cancellation is
+quiet: it neither falls back nor changes the current page's boot state. -/
 def bootScript : String :=
   "(function(){var c=JSON.parse(document.getElementById('leanui-boot').textContent);" ++
   "function done(rt){window.__leanui=rt;document.documentElement.dataset.leanui=rt.transport&&rt.transport.session?'server':'wasm';return rt;}" ++
-  "function fail(e){console.error('LeanUI failed to start:',e);document.documentElement.dataset.leanui='failed';}" ++
+  "function cancelled(e){return e&&e.name==='AbortError';}" ++
+  "function fail(e){if(cancelled(e))return;console.error('LeanUI failed to start:',e);document.documentElement.dataset.leanui='failed';}" ++
   "var o={glue:c.glue,flags:c.flags,selector:c.selector,hydrate:true,endpoint:c.endpoint,session:c.session};" ++
   "if(c.mode==='server'){done(LeanUI.connect(o));}" ++
   "else if(c.mode==='wasm'){LeanUI.start(o).then(done,fail);}" ++
-  "else{LeanUI.boot(o).then(done,function(e){if(!LeanUI.supported())throw e;" ++
+  "else{LeanUI.boot(o).then(done,function(e){if(cancelled(e))return;if(!LeanUI.supported())throw e;" ++
   "console.warn('LeanUI: wasm did not start, using the server instead',e);return done(LeanUI.connect(o));}).catch(fail);}" ++
   "})();"
 

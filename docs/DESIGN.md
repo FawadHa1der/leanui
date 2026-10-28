@@ -124,6 +124,9 @@ server's normal timeout. Intentional disposal is quiet. A synchronously cancelle
 with `AbortError`; a terminal failure preserves its original error. Initial script/module loading
 has no general cancellation handle; callers must still account for a pending load when replacing
 a page. Backend adapters must opt into the transport hooks to release their own resources.
+The server-generated boot script treats `AbortError` as intentional cancellation: it neither
+starts a fallback app nor changes the current boot state. Other Wasm startup failures in `auto`
+mode still fall back to the server.
 
 `tests/browser/runtime-lifecycle.mjs` checks shared startup, disposal and async lifetime races
 without compiled apps in Chromium and Firefox. `tests/browser/counter.mjs` and

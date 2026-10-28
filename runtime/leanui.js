@@ -431,14 +431,16 @@
         if (!f) throw new Error("no file " + id);
         if (!decode) return this.callbackBytes(cb, true, "", new Uint8Array(await f.arrayBuffer()));
         const bmp = await createImageBitmap(f, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+        let payload, pixels;
         try {
           if (this.disposed) return;
           const iw = bmp.width, ih = bmp.height;
           const c = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(iw, ih) : Object.assign(document.createElement("canvas"), { width: iw, height: ih });
           const ctx = c.getContext("2d", { willReadFrequently: true });
           ctx.drawImage(bmp, 0, 0);
-          this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
+          payload = iw + " " + ih; pixels = ctx.getImageData(0, 0, iw, ih).data;
         } finally { bmp.close(); }
+        this.callbackBytes(cb, true, payload, pixels);
       } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
     }
     // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". While the

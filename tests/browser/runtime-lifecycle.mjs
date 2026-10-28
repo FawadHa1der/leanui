@@ -9,7 +9,15 @@ const engines = process.argv.slice(2);
 if (!engines.length) engines.push("chromium", "firefox");
 const tests = [
   ["disposal cancels scheduled effects and removes browser listeners", async () => {
-    const pending = new Map(), revoked = [], calls = [];
+    const pending = new Map(), revoked = [], calls = [], listenerEntries = [];
+    const targets = new Map([[document.querySelector("#app"), "container"], [document, "document"], [window, "window"]]);
+    const add = EventTarget.prototype.addEventListener;
+    // Count entry before Runtime's closed-entry/subscription guards can hide a retained listener.
+    EventTarget.prototype.addEventListener = function (type, listener, options) {
+      if (!targets.has(this)) return add.call(this, type, listener, options);
+      const label = targets.get(this) + ":" + type;
+      return add.call(this, type, function (event) { listenerEntries.push(label); listener.call(this, event); }, options);
+    };
     let next = 0, navigations = 0, aborted = false;
     const schedule = (kind) => () => { const id = ++next; pending.set(id, kind); return id; };
     globalThis.setTimeout = schedule("timeout"); globalThis.setInterval = schedule("interval");
@@ -26,6 +34,10 @@ const tests = [
     rt.container.append(button); rt.delegate("click");
     const words = new Uint32Array([33, 1, 100, 34, 2, 100, 45, 3, 41, 4, 52, 5]);
     rt.apply(new Uint8Array(words.buffer), 0, words.byteLength, words.byteLength, 0);
+    EventTarget.prototype.addEventListener = add;
+    button.click(); document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    dispatchEvent(new PopStateEvent("popstate"));
+    const liveListeners = listenerEntries.splice(0); calls.length = 0;
     rt.objectUrl(new Blob(["owned"])); rt.fetch(6, "GET", "/pending", "", "");
     const scheduled = [...pending.values()].sort();
     rt.dispose(); rt.dispose();
@@ -37,9 +49,23 @@ const tests = [
     link.dispatchEvent(click);
     // The fetch rejection and its callback attempt settle after closure.
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    return { scheduled, pending: pending.size, revoked, aborted, calls, navigations, prevented: click.defaultPrevented };
+    return { scheduled, pending: pending.size, revoked, aborted, calls, navigations, prevented: click.defaultPrevented,
+      liveListeners, listenerEntries };
   }, { scheduled: ["frame", "interval", "timeout"], pending: 0, revoked: ["blob:lifetime"], aborted: true,
-    calls: [], navigations: 0, prevented: false }],
+    calls: [], navigations: 0, prevented: false,
+    liveListeners: ["container:click", "document:click", "document:keydown", "window:popstate"], listenerEntries: [] }],
+  ["changing the mount removes delegation from the old container", () => {
+    document.querySelector("#app").innerHTML = '<button id="old">old</button>';
+    const other = document.createElement("div"); other.id = "other";
+    other.innerHTML = '<button id="new">new</button>'; document.body.append(other);
+    const calls = [], rt = new LeanUI.Runtime({ event(slot) { calls.push(slot); } });
+    document.querySelector("#old").__lui = { click: [1, 0, 0] };
+    document.querySelector("#new").__lui = { click: [2, 0, 0] };
+    rt.setContainer("#app"); rt.delegate("click"); rt.setContainer("#other");
+    document.querySelector("#old").click(); document.querySelector("#new").click();
+    rt.dispose(); document.querySelector("#new").click();
+    return calls;
+  }, [2]],
   ["in-flight delegation stops before ancestor payload extraction", () => {
     document.querySelector("#app").innerHTML = '<div id="parent"><button id="child">drop</button></div>';
     let calls = 0;
@@ -149,8 +175,8 @@ const tests = [
   ["bitmap closes on every decode exit", async () => {
     const rows = [];
     for (const fail of ["context", "draw", "read", "none"]) {
-      let closes = 0, result;
-      const rt = new LeanUI.Runtime({ callbackBytes(...args) { result = args; } });
+      let closes = 0, result, closedAtCallback;
+      const rt = new LeanUI.Runtime({ callbackBytes(...args) { result = args; closedAtCallback = closes === 1; } });
       rt.files.set(1, new File(["x"], "x"));
       globalThis.createImageBitmap = async () => ({ width: 1, height: 1, close() { closes++; } });
       globalThis.OffscreenCanvas = class {
@@ -163,12 +189,12 @@ const tests = [
         }
       };
       await rt.readFile(1, 1, true);
-      rows.push({ closes, ok: result[1], bytes: result[3].length });
+      rows.push({ closes, closedAtCallback, ok: result[1], bytes: result[3].length });
       rt.dispose();
     }
     return rows;
-  }, [{ closes: 1, ok: false, bytes: 0 }, { closes: 1, ok: false, bytes: 0 },
-      { closes: 1, ok: false, bytes: 0 }, { closes: 1, ok: true, bytes: 4 }]],
+  }, [{ closes: 1, closedAtCallback: true, ok: false, bytes: 0 }, { closes: 1, closedAtCallback: true, ok: false, bytes: 0 },
+      { closes: 1, closedAtCallback: true, ok: false, bytes: 0 }, { closes: 1, closedAtCallback: true, ok: true, bytes: 4 }]],
   ["late bitmap closes without drawing", async () => {
     let resolve, closes = 0, canvases = 0, callbacks = 0;
     const rt = new LeanUI.Runtime({ callbackBytes() { callbacks++; } });
