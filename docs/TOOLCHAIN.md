@@ -62,13 +62,13 @@ tools/build-app.sh CounterApp counter  # an app: dist/counter/{index.html,leanui
 ```
 
 Never run a bare `lean` or `lake` in this repository's tooling: `lean-toolchain` pins
-`leanprover/lean4:v4.34.0`, and the scripts call that toolchain's binaries by path. The one other
-toolchain is `vir/`'s (`vir/lean-toolchain`, Lean 4.35.0): a separate project that runs the
-benchmarked apps on lean-vir instead of wasm64 ([vir/README.md](../vir/README.md)); `vir/build.sh`
-calls it by path the same way, and so do the Roster demo's notary and its verify page's build
-(`roster/notary/`, `roster/verify/build.sh`, on the same release), and its Mathlib project
-(`roster/hall/`, on the main build's release) ([roster/README.md](../roster/README.md)). The race's
-QED64 lane (`qed64/lean-toolchain`, the same release; [qed64/README.md](../qed64/README.md)) calls
-it by path too, for its native reference; everything else there runs in QED64's own build of that
-release, `lean.wasm`, under the Node 24 that `qed64/tools/node.sh` downloads, both pinned in
+`leanprover/lean4:v4.34.0`, and the scripts call that toolchain's binaries by path. The separate
+`vir/` project pins Lean 4.36.0-rc1 (`vir/lean-toolchain`) to run the benchmarked apps on lean-vir
+instead of wasm64 ([vir/README.md](../vir/README.md)); `vir/build.sh` calls it by path too.
+The Roster demo's notary and verify page retain their own Lean 4.35.0 toolchain
+(`roster/notary/lean-toolchain`, `roster/verify/build.sh`), while its Mathlib project
+(`roster/hall/`) uses the main build's release ([roster/README.md](../roster/README.md)).
+The race's QED64 lane also uses Lean 4.35.0 for its native reference (`qed64/lean-toolchain`,
+[qed64/README.md](../qed64/README.md)). Everything else in that lane runs in QED64's own build of
+that release, `lean.wasm`, under the Node 24 that `qed64/tools/node.sh` downloads, both pinned in
 `qed64/qed64.lock.json`.

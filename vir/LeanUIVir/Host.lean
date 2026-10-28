@@ -43,22 +43,21 @@ def take (s : Session) : IO (Array ByteArray) := s.out.modifyGet fun a => (a, #[
 /-! JavaScript holds the session as an opaque handle (`JSL`); every call returns the updates it
 made. -/
 
-/-- lean-vir's `RuntimeM` is `IO` behind an irreducible definition, with no lift from `IO`. -/
-def io (x : IO α) : RuntimeM α := by unfold RuntimeM; exact x
+def startJs {Model Msg : Type} (p : LeanUI.Program Model Msg) (flags selector : String) : IO (JSL Session) := do
+  RuntimeM.run (LeanRef.toJSL (← start p flags selector))
 
-def startJs {Model Msg : Type} (p : LeanUI.Program Model Msg) (flags selector : String) : RuntimeM (JSL Session) := do
-  LeanRef.toJSL (← io (start p flags selector))
+def eventJs (h : JSL Session) (slot : UInt32) (payload : String) : IO (Array ByteArray) := do
+  let s ← RuntimeM.run (LeanRef.fromJSL h)
+  s.inst.event slot payload
+  take s
 
-def eventJs (h : JSL Session) (slot : UInt32) (payload : String) : RuntimeM (Array ByteArray) := do
-  let s ← LeanRef.fromJSL h
-  io do s.inst.event slot payload; take s
+def callbackJs (h : JSL Session) (cb : UInt32) (ok : Bool) (payload : String) : IO (Array ByteArray) := do
+  let s ← RuntimeM.run (LeanRef.fromJSL h)
+  s.inst.callback cb ok payload
+  take s
 
-def callbackJs (h : JSL Session) (cb : UInt32) (ok : Bool) (payload : String) : RuntimeM (Array ByteArray) := do
-  let s ← LeanRef.fromJSL h
-  io do s.inst.callback cb ok payload; take s
-
-def takeJs (h : JSL Session) : RuntimeM (Array ByteArray) := do
-  io (take (← LeanRef.fromJSL h))
+def takeJs (h : JSL Session) : IO (Array ByteArray) := do
+  take (← RuntimeM.run (LeanRef.fromJSL h))
 
 end LeanUIVir
 
@@ -70,11 +69,11 @@ module, so it is said here rather than once in this file). -/
 macro "leanui_vir_app " p:term : command => do
   let (start, event, callback, take) := (Lean.mkIdent `start, Lean.mkIdent `event, Lean.mkIdent `callback, Lean.mkIdent `take)
   `(vir_extern_fallback LeanUI.pushU32, LeanUI.appendUtf8
-    @[vir_export] def $start (flags selector : String) : Lean.Vir.RuntimeM (Lean.Vir.JSL LeanUIVir.Session) :=
+    @[vir_export] def $start (flags selector : String) : IO (Lean.Vir.JSL LeanUIVir.Session) :=
       LeanUIVir.startJs $p flags selector
     @[vir_export] def $event (h : Lean.Vir.JSL LeanUIVir.Session) (slot : UInt32) (payload : String) :
-      Lean.Vir.RuntimeM (Array ByteArray) := LeanUIVir.eventJs h slot payload
+      IO (Array ByteArray) := LeanUIVir.eventJs h slot payload
     @[vir_export] def $callback (h : Lean.Vir.JSL LeanUIVir.Session) (cb : UInt32) (ok : Bool) (payload : String) :
-      Lean.Vir.RuntimeM (Array ByteArray) := LeanUIVir.callbackJs h cb ok payload
-    @[vir_export] def $take (h : Lean.Vir.JSL LeanUIVir.Session) : Lean.Vir.RuntimeM (Array ByteArray) :=
+      IO (Array ByteArray) := LeanUIVir.callbackJs h cb ok payload
+    @[vir_export] def $take (h : Lean.Vir.JSL LeanUIVir.Session) : IO (Array ByteArray) :=
       LeanUIVir.takeJs h)
