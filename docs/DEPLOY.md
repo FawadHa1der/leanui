@@ -8,9 +8,9 @@ server in a Cloudflare container.
 
 One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it:
 
-1. **Lean**: elan installs the toolchains named in `lean-toolchain` and `vir/lean-toolchain`
-   (lean-vir's release, for the benchmark builds in `vir/`, which `qed64/lean-toolchain` also
-   names; cached).
+1. **Lean**: elan installs the toolchains named by each project: `lean-toolchain` (4.34.0),
+   `vir/lean-toolchain` (4.36.0-rc1), and `roster/notary/lean-toolchain` and
+   `qed64/lean-toolchain` (both 4.35.0). The installations are cached.
 2. **Native**: `lake build` (the `.lake/build` cache makes it incremental; after a `lakefile.toml`
    change it starts from the newest build of the same toolchain), then every test
    executable: `leanui-tests`, `leanui-props`, `leanui-syntax-tests`, `leanui-kit-tests`,

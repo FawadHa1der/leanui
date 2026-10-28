@@ -39,7 +39,8 @@ Lean, and updates retain the flat array of command packets used by the JavaScrip
 Lake runs on the toolchain in `vir/lean-toolchain` (elan installs it). The first build needs the
 network: Lake fetches lean-vir at the commit `vir/lakefile.toml` pins and downloads the matching
 prebuilt interpreter. `vir/.lake` holds that build, apart from the main `.lake`.
-The dependency is pinned to `bf8b6a80a5d4011ffd6804fb7a395b9cd2d0d668` (PR270),
+The dependency is pinned to `bf8b6a80a5d4011ffd6804fb7a395b9cd2d0d668`
+([lean-vir PR #270](https://github.com/ejgallego/lean-vir/pull/270)),
 whose runtime lock selects public runtime content `0d7d7edd`. No local override is needed.
 
 `vir/lakefile.toml` compiles LeanUI's core from `../LeanUI` and the benchmarked programs from
@@ -65,8 +66,9 @@ arrays, …), and it has no C compiler. So:
   them).
 * The photo editor's inline-C helpers (`Editor.get32`, `set32`, `histAdd`) need explicit Lean
   fallbacks before packaging that app. Editor/video integration is outside this benchmark setup.
-* Effects that answer with bytes (`Cmd.readFile`, `Cmd.decodeImage`) are refused: lean-vir copies
-  byte arrays across the boundary, and the benchmarked apps need none.
+* This adapter does not yet forward effects that answer with bytes (`Cmd.readFile`,
+  `Cmd.decodeImage`). VIR supports copying byte arrays across the boundary; the benchmarked
+  apps need no byte callbacks.
 * Historical Lean 4.35 benchmarks measured script time at about 13× the wasm64 build's in keyed
   operations and 48× in Life. Those ratios have not been remeasured for this pin.
 
