@@ -83,6 +83,53 @@ built against. It was first written on 2026-10-18 from the research in
   wasm64 `libleanrt`, `libInit`, `libStd`, `libuv` from the fork pinned in `toolchain/fork.lock`
   plus `lean-wasm-threads.patch`; `tools/build-app.sh` links an app (`dist/<name>/`).
 
+### Browser lifetime
+
+The in-page Wasm callbacks use the single `LeanUI.active` slot; one active app per page is
+supported. Starting another app does not dispose the previous one. Call `dispose()` before
+replacing a running app. The Wasm host uses the synchronous `Runtime.start(boot)` boundary
+once its module is loaded; `boot` must finish synchronously. It holds input until the initial
+output is applied, then drains queued input. Failed startup disposes the new runtime and
+restores the previous live owner. If an error handler has installed a newer runtime,
+cleanup preserves that owner. This restores runtime ownership, not DOM changes already applied
+to a mount; failed startup is not a DOM transaction.
+
+`Runtime.dispose()` is an idempotent close request. It sets `disposed`, aborts cancellable
+browser work and relinquishes the active slot immediately. New input, output and callbacks
+cannot enter the runtime after closure.
+
+A synchronous operation already running may finish its current DOM opcode or event handler;
+that includes a coalesced removal batch. It starts no following opcode or ancestor handler.
+The runtime keeps its handle tables and transport valid until the outermost synchronous entry
+unwinds. Its `finally` boundary then cancels owned timers and frames, revokes object URLs,
+clears the tables and releases the backend exactly once. With no entry in progress, `dispose()`
+releases immediately. Callers inside a DOM callback therefore observe a closed runtime whose
+resources are still valid until the callback and enclosing runtime call return.
+
+All synchronous entries balance entry/exit in `try/finally`; internal opcode helpers run within
+that boundary. This avoids checks between a DOM call and the state writes that complete its
+opcode. Entries never span `await`. Async completions independently check closure before
+resuming runtime work; temporary `ImageBitmap` and `VideoFrame` handles close in `finally`.
+Disposal retains the last DOM, including completion of the in-flight opcode. The caller owns
+removing the mount. No DOM rollback is promised.
+
+A transport's `isTerminalError(error)` query classifies a thrown update error; an absent query
+means recoverable. Wasm update errors are terminal; a recoverable transport error is logged
+and allows later input. Terminal errors close the runtime, release it on unwind, then emit
+one `leanui:error` on its former container. Transport cleanup exceptions are logged and do not
+replace the application's primary error. An optional transport
+`dispose()` releases backend resources after browser work has stopped. Wasm drops its module
+reference (memory is reclaimed by JS garbage collection); a remote session expires on the
+server's normal timeout. Intentional disposal is quiet. A synchronously cancelled startup rejects
+with `AbortError`; a terminal failure preserves its original error. Initial script/module loading
+has no general cancellation handle; callers must still account for a pending load when replacing
+a page. Backend adapters must opt into the transport hooks to release their own resources.
+
+`tests/browser/runtime-lifecycle.mjs` checks shared startup, disposal and async lifetime races
+without compiled apps in Chromium and Firefox. `tests/browser/counter.mjs` and
+`tests/browser/depth.mjs --lifecycle-only` check startup failure and terminal overflow through
+compiled Wasm apps.
+
 ## 2. Frozen interfaces (change only with a note in this file)
 
 - `LeanUI.Html` types and smart constructors; `LeanUI.Attr.*` helpers (additions allowed).

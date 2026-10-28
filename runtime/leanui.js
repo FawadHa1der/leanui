@@ -20,6 +20,9 @@
   class Runtime {
     constructor(transport) {
       this.transport = transport;
+      this.disposed = false;
+      this._depth = 0;
+      this._failure = null;
       this.nodes = [null];
       // per handle: 0 an HTML element, 1/2 an SVG/MathML element, 3 a text node or a freed
       // handle (SET_ATTR uses `className` for "class" on HTML elements only: SVGElement's
@@ -33,6 +36,11 @@
       this.delegated = new Set();
       this.wanted = new Set();
       this.timers = new Map();
+      this.timeouts = new Set();
+      this.frames = new Set();
+      this.objectUrls = new Set();
+      this.effects = new AbortController();
+      this.onDelegatedEvent = (e) => this.onEvent(e);
       this.urlSub = 0;
       this.busy = false;
       this.queue = [];
@@ -40,7 +48,7 @@
       // commands that run at the end of the buffer that carries them (PUT_IMAGE: after the DOM
       // changes, while the pixels it reads are still valid)
       this.late = [];
-      // per blob index of the next buffer: [address, length] in wasm memory (LeanUI.__blob)
+      // per blob index: [address, length] in wasm memory
       this.blobs = [];
       // files the app was given (Payload.files), by id; the 64 most recent are kept
       this.files = new Map();
@@ -50,29 +58,90 @@
       this.stats = { flushes: 0, ops: 0, bytes: 0 };
     }
 
+    // Synchronous entrypoints keep their state alive until their outermost call unwinds.
+    // Never hold an entry across await: async continuations must check disposal on resumption.
+    _enter() {
+      if (this.disposed) return false;
+      this._depth++;
+      return true;
+    }
+    _leave() { if (--this._depth === 0 && this.disposed) this._release(); }
+
     // ---- input: events and effect results go to Lean one at a time ----
     send(kind, a, b, c, d) {
-      if (this.crashed) return;
-      if (this.busy) { this.queue.push([kind, a, b, c, d]); return; }
+      if (!this._enter()) return;
+      try {
+        if (this.busy) { this.queue.push([kind, a, b, c, d]); return; }
+        this.busy = true;
+        try {
+          if (kind === 0) this.transport.event(a, b);
+          else if (kind === 1) this.transport.callback(a, b, c);
+          else this.transport.callbackBytes(a, b, c, d);
+        } catch (e) { this.crash(e); }
+        finally { this.busy = false; }
+        if (this.queue.length) { const [k, x, y, z, u] = this.queue.shift(); this.send(k, x, y, z, u); }
+      } finally { this._leave(); }
+    }
+    // Terminal failure closes input now; release and the error notification wait for unwind.
+    crash(e) {
+      if (this.disposed) return;
+      if (this.transport?.isTerminalError?.(e)) {
+        this.crashed = e;
+        this._failure = { container: this.container, error: e };
+        this.dispose();
+      } else console.error("LeanUI:", e);
+    }
+    // Startup owns the active slot until it succeeds or rolls back.
+    start(boot) {
+      if (!this._enter()) throw new DOMException("The app was disposed", "AbortError");
+      this.starting = true;
+      this.previousActive = LeanUI.active;
+      LeanUI.active = this;
       this.busy = true;
       try {
-        if (kind === 0) this.transport.event(a, b);
-        else if (kind === 1) this.transport.callback(a, b, c);
-        else this.transport.callbackBytes(a, b, c, d);
-      } catch (e) { this.crash(e); }
-      finally { this.busy = false; }
-      if (this.queue.length) { const [k, x, y, z, u] = this.queue.shift(); this.send(k, x, y, z, u); }
+        boot();
+        this.busy = false;
+        if (this.queue.length) { const [k, a, b, c, d] = this.queue.shift(); this.send(k, a, b, c, d); }
+        if (this.crashed) throw this.crashed;
+        if (this.disposed) throw new DOMException("The app was disposed", "AbortError");
+        return this;
+      } catch (e) {
+        if (LeanUI.active === this) LeanUI.active = this.previousActive?.disposed ? null : this.previousActive;
+        this.dispose();
+        throw e;
+      } finally {
+        this.busy = this.starting = false;
+        delete this.previousActive;
+        this._leave();
+      }
     }
-    // An update that throws (in wasm: the native stack overflowed on a view nested about a
-    // thousand levels deep, or memory ran out) leaves the app without its state: say so once,
-    // stop calling it, and tell the page (a "leanui:error" event on the container).
-    crash(e) {
-      if (this.transport instanceof WasmTransport) {
-        this.crashed = e;
-        this.queue.length = 0;
-        console.error("LeanUI: the app stopped after an error in an update; reload the page to restart it.", e);
-        if (this.container) this.container.dispatchEvent(new CustomEvent("leanui:error", { bubbles: true, detail: e }));
-      } else console.error("LeanUI:", e);
+    // Close immediately. A running opcode may finish with valid state; it cannot start more work.
+    dispose() {
+      if (this.disposed) return;
+      this.disposed = true;
+      this.effects.abort();
+      if (LeanUI.active === this) LeanUI.active = this.starting && !this.previousActive?.disposed ? this.previousActive : null;
+      if (this._depth === 0) this._release();
+    }
+    _release() {
+      for (const t of this.timers.values()) clearInterval(t);
+      for (const t of this.timeouts) clearTimeout(t);
+      for (const f of this.frames) cancelAnimationFrame(f);
+      for (const url of this.objectUrls) URL.revokeObjectURL(url);
+      this.timers.clear(); this.timeouts.clear(); this.frames.clear(); this.objectUrls.clear();
+      this.queue.length = this.after.length = this.late.length = this.blobs.length = 0;
+      this.nodes.length = this.kinds.length = this.names.length = this.isClass.length = this.tpl.length = 0;
+      this.files.clear(); this.delegated.clear(); this.wanted.clear();
+      this.urlSub = this.keysSub = 0;
+      this.container = this.grabCanvas = null;
+      const transport = this.transport, failure = this._failure;
+      this.transport = this._failure = null;
+      // Cleanup failure is reported without replacing the application's primary exception.
+      try { transport?.dispose?.(); } catch (e) { console.error("LeanUI: cleanup failed", e); }
+      if (failure) {
+        console.error("LeanUI: the app stopped after an error in an update; reload the page to restart it.", failure.error);
+        failure.container?.dispatchEvent(new CustomEvent("leanui:error", { bubbles: true, detail: failure.error }));
+      }
     }
     callback(cb, ok, payload) { this.send(1, cb, ok, payload); }
     // an effect's result with bytes (a Uint8Array or Uint8ClampedArray; null for none)
@@ -84,15 +153,19 @@
       this.wanted.add(type);
       if (!this.container || this.delegated.has(type)) return;
       this.delegated.add(type);
-      const opts = { capture: CAPTURE.has(type) };
+      const opts = { capture: CAPTURE.has(type), signal: this.effects.signal };
       if (ACTIVE.has(type)) opts.passive = false;
-      this.container.addEventListener(type, (e) => this.onEvent(e), opts);
+      this.container.addEventListener(type, this.onDelegatedEvent, opts);
     }
     onEvent(e) {
+      if (!this._enter()) return;
+      try { this._handleEvent(e); } finally { this._leave(); }
+    }
+    _handleEvent(e) {
       const type = e.type;
       // events that do not bubble (delegated in the capture phase) reach only their target
       const bubbles = !CAPTURE.has(type);
-      for (let n = e.target; n; n = n.parentNode) {
+      for (let n = e.target; n && !this.disposed; n = n.parentNode) {
         const hs = n.__lui;
         const h = hs && hs[type];
         if (h) {
@@ -109,6 +182,10 @@
 
     // ---- output: one command buffer per Lean update ----
     apply(bytes, opsOff, opsLen, strsOff, strsLen) {
+      if (!this._enter()) return;
+      try { this._apply(bytes, opsOff, opsLen, strsOff, strsLen); } finally { this._leave(); }
+    }
+    _apply(bytes, opsOff, opsLen, strsOff, strsLen) {
       const w = (opsOff & 3) === 0
         ? new Uint32Array(bytes.buffer, bytes.byteOffset + opsOff, opsLen >>> 2)
         : new Uint32Array(bytes.slice(opsOff, opsOff + opsLen).buffer);
@@ -119,7 +196,7 @@
       this.stats.flushes++; this.stats.ops += w.length; this.stats.bytes += opsLen + strsLen;
       let i = 0;
       const n = w.length;
-      while (i < n) {
+      while (i < n && !this.disposed) {
         switch (w[i]) {
           case 1: { const h = w[i + 1], ns = w[i + 2]; N[h] = ns ? document.createElementNS(NS[ns], names[w[i + 3]]) : document.createElement(names[w[i + 3]]); K[h] = ns; i += 4; break; }
           case 2: { const h = w[i + 1]; N[h] = document.createTextNode(S(i + 2)); K[h] = 3; i += 4; break; }
@@ -175,7 +252,7 @@
           case 20: i = this.template(w, i); break;
           case 21: i = this.clone(w, i); break;
           case 32: this.fetch(w[i + 1], S(i + 2), S(i + 4), S(i + 6), S(i + 8)); i += 10; break;
-          case 33: { const cb = w[i + 1]; setTimeout(() => this.callback(cb, true, ""), w[i + 2]); i += 3; break; }
+          case 33: { const cb = w[i + 1], t = setTimeout(() => { this.timeouts.delete(t); this.callback(cb, true, ""); }, w[i + 2]); this.timeouts.add(t); i += 3; break; }
           case 34: { const sub = w[i + 1]; this.timers.set(sub, setInterval(() => this.callback(sub, true, ""), w[i + 2])); i += 3; break; }
           case 35: { const sub = w[i + 1]; clearInterval(this.timers.get(sub)); this.timers.delete(sub); if (this.urlSub === sub) this.urlSub = 0; if (this.keysSub === sub) this.keysSub = 0; i += 2; break; }
           case 36: try { localStorage.setItem(S(i + 1), S(i + 3)); } catch (e) {} i += 5; break;
@@ -187,7 +264,7 @@
           case 42: { const sel = S(i + 1); this.after.push(() => { const el = document.querySelector(sel); if (el) el.focus(); }); i += 3; break; }
           case 43: console.log(S(i + 1)); i += 3; break;
           case 44: document.title = S(i + 1); i += 3; break;
-          case 45: { const cb = w[i + 1]; requestAnimationFrame((t) => this.callback(cb, true, String(Math.round(t)))); i += 2; break; }
+          case 45: { const cb = w[i + 1], f = requestAnimationFrame((t) => { this.frames.delete(f); this.callback(cb, true, String(Math.round(t))); }); this.frames.add(f); i += 2; break; }
           case 46: { const sel = S(i + 1); this.after.push(() => { const el = document.querySelector(sel); if (el) el.blur(); }); i += 3; break; }
           case 47: { const sel = S(i + 1); this.after.push(() => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: "nearest" }); }); i += 3; break; }
           case 48: {
@@ -199,19 +276,29 @@
           case 51: this.download(S(i + 1), S(i + 3), this.blob(bytes, w[i + 5])); i += 6; break;
           case 52: this.listenKeys(w[i + 1]); i += 2; break;
           case 53: this.grabFrame(w[i + 1], S(i + 2)); i += 4; break;
-          case 54: { const cb = w[i + 1], f = this.files.get(w[i + 2]); const u = f ? URL.createObjectURL(f) : ""; queueMicrotask(() => this.callback(cb, !!f, u)); i += 3; break; }
+          case 54: { const cb = w[i + 1], f = this.files.get(w[i + 2]); const u = f ? this.objectUrl(f) : ""; queueMicrotask(() => this.callback(cb, !!f, u)); i += 3; break; }
           default: throw new Error("LeanUI: unknown opcode " + w[i] + " at word " + i);
         }
       }
-      if (this.late.length) { const a = this.late; this.late = []; a.forEach((f) => f()); }
+      if (this.disposed) return;
+      if (this.late.length) { const a = this.late; this.late = []; a.forEach((f) => { if (!this.disposed) f(); }); }
       this.blobs.length = 0;
-      if (this.after.length) { const a = this.after; this.after = []; queueMicrotask(() => a.forEach((f) => f())); }
+      if (this.after.length) {
+        const a = this.after; this.after = [];
+        queueMicrotask(() => {
+          if (!this._enter()) return;
+          try { for (const f of a) { if (this.disposed) break; f(); } } finally { this._leave(); }
+        });
+      }
     }
 
     setContainer(sel) {
       const c = document.querySelector(sel);
       if (!c) throw new Error("LeanUI: no element matches " + sel);
-      if (c !== this.container) { this.container = c; this.delegated.clear(); for (const t of this.wanted) this.delegate(t); }
+      if (c !== this.container) {
+        if (this.container) for (const t of this.delegated) this.container.removeEventListener(t, this.onDelegatedEvent, CAPTURE.has(t));
+        this.container = c; this.delegated.clear(); for (const t of this.wanted) this.delegate(t);
+      }
     }
 
     // Adopt server-rendered nodes: handles first .. first+count-1 in pre-order, skipping the
@@ -273,7 +360,7 @@
     fetch(cb, method, url, body, headerLines) {
       const headers = {};
       for (const line of headerLines.split("\n")) { const k = line.indexOf(": "); if (k > 0) headers[line.slice(0, k)] = line.slice(k + 2); }
-      const init = { method, headers };
+      const init = { method, headers, signal: this.effects.signal };
       if (method !== "GET" && method !== "HEAD") init.body = body;
       fetch(url, init)
         .then((r) => r.text().then((t) => this.callback(cb, r.ok, r.status + "\n" + t)))
@@ -307,14 +394,26 @@
       } catch (e) { console.error("LeanUI: PUT_IMAGE " + sel + ":", e); }
     }
     download(name, type, b) {
-      if (!b) return this.noBytes("DOWNLOAD");
-      const url = URL.createObjectURL(new Blob([b], { type }));   // Blob copies the bytes now
-      const a = document.createElement("a");
-      a.href = url; a.download = name; a.style.display = "none";
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      if (!this._enter()) return;
+      try {
+        if (!b) return this.noBytes("DOWNLOAD");
+        const url = this.objectUrl(new Blob([b], { type }));   // Blob copies the bytes now
+        const a = document.createElement("a");
+        a.href = url; a.download = name; a.style.display = "none";
+        document.body.appendChild(a);
+        try { a.click(); } finally { a.remove(); }
+        const t = setTimeout(() => { this.timeouts.delete(t); this.objectUrls.delete(url); URL.revokeObjectURL(url); }, 30000);
+        this.timeouts.add(t);
+      } finally { this._leave(); }
+    }
+    objectUrl(blob) {
+      if (this.disposed) return "";
+      const url = URL.createObjectURL(blob);
+      this.objectUrls.add(url);
+      return url;
     }
     keepFiles(list) {
+      if (this.disposed) return "";
       const out = [];
       for (const f of list) {
         const id = this.fileSeq++;
@@ -332,12 +431,14 @@
         if (!f) throw new Error("no file " + id);
         if (!decode) return this.callbackBytes(cb, true, "", new Uint8Array(await f.arrayBuffer()));
         const bmp = await createImageBitmap(f, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-        const iw = bmp.width, ih = bmp.height;
-        const c = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(iw, ih) : Object.assign(document.createElement("canvas"), { width: iw, height: ih });
-        const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(bmp, 0, 0);
-        bmp.close();
-        this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
+        try {
+          if (this.disposed) return;
+          const iw = bmp.width, ih = bmp.height;
+          const c = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(iw, ih) : Object.assign(document.createElement("canvas"), { width: iw, height: ih });
+          const ctx = c.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(bmp, 0, 0);
+          this.callbackBytes(cb, true, iw + " " + ih, ctx.getImageData(0, 0, iw, ih).data);
+        } finally { bmp.close(); }
       } catch (e) { this.callbackBytes(cb, false, String((e && e.message) || e), null); }
     }
     // FRAME_GRAB: the frame a <video> shows now, as RGBA, payload "width height timeMs". While the
@@ -354,8 +455,10 @@
         if (!v || !(v.readyState >= 2) || !v.videoWidth) throw new Error("no video frame");
         if (v.requestVideoFrameCallback && v.__leanuiFrameMs === undefined) {
           v.__leanuiFrameMs = -1;
-          const seen = (now, md) => { v.__leanuiFrameMs = Math.round(md.mediaTime * 1000); v.requestVideoFrameCallback(seen); };
-          v.requestVideoFrameCallback(seen);
+          let frame;
+          const seen = (now, md) => { if (this.disposed) return; v.__leanuiFrameMs = Math.round(md.mediaTime * 1000); frame = v.requestVideoFrameCallback(seen); };
+          frame = v.requestVideoFrameCallback(seen);
+          this.effects.signal.addEventListener("abort", () => { v.cancelVideoFrameCallback(frame); delete v.__leanuiFrameMs; }, { once: true });
         }
         const t = !v.paused && v.__leanuiFrameMs >= 0 ? v.__leanuiFrameMs : Math.round(v.currentTime * 1000);
         if (typeof VideoFrame === "function") { try { f = new VideoFrame(v); } catch (e) { f = null; } }
@@ -364,6 +467,7 @@
         if (f && !f.rotation && !f.flip && f.visibleRect.width === w && f.visibleRect.height === h) {
           try { const buf = new Uint8Array(4 * w * h); await f.copyTo(buf, { format: "RGBA" }); px = buf; } catch (e) { px = null; }
         }
+        if (this.disposed) return;   // copyTo may complete after disposal, including rejection
         if (!px) {
           const c = this.grabCanvas || (this.grabCanvas = new OffscreenCanvas(w, h));
           if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
@@ -384,21 +488,21 @@
         if (!this.keysSub || e.isComposing || MODIFIER_KEYS.has(k)) return;
         if (t && (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t.tagName === "INPUT" && !NOT_TEXT.has(t.type)))) return;
         this.callback(this.keysSub, true, (e.ctrlKey ? "Ctrl+" : "") + (e.altKey ? "Alt+" : "") + (e.shiftKey ? "Shift+" : "") + (e.metaKey ? "Meta+" : "") + k);
-      });
+      }, { signal: this.effects.signal });
     }
 
     listenUrl(sub) {
       this.urlSub = sub;
       if (this.urlListening) return;
       this.urlListening = true;
-      addEventListener("popstate", () => { if (this.urlSub) this.callback(this.urlSub, true, location.pathname + location.search + location.hash); });
+      addEventListener("popstate", () => { if (this.urlSub) this.callback(this.urlSub, true, location.pathname + location.search + location.hash); }, { signal: this.effects.signal });
       document.addEventListener("click", (e) => {
         const a = e.target.closest && e.target.closest("a[data-link]");
         if (!a || !this.urlSub || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();
         history.pushState(null, "", a.getAttribute("href"));
         this.callback(this.urlSub, true, location.pathname + location.search + location.hash);
-      });
+      }, { signal: this.effects.signal });
     }
   }
 
@@ -445,6 +549,8 @@
 
   class WasmTransport {
     constructor(mod) { this.mod = mod; }
+    isTerminalError() { return true; }   // any thrown wasm update may have lost its Lean state
+    dispose() { this.mod = null; }
     event(slot, payload) { this.mod._leanui_event(slot, ...utf8(this.mod, payload)); }
     callback(cb, ok, payload) { this.mod._leanui_callback(cb, ok ? 1 : 0, ...utf8(this.mod, payload)); }
     // the bytes are written straight into a Lean ByteArray, which Lean then owns
@@ -461,15 +567,19 @@
   class RemoteTransport {
     constructor(endpoint, session, runtime) { this.endpoint = endpoint; this.session = session; this.rt = runtime; this.chain = Promise.resolve(); }
     post(body) {
-      this.chain = this.chain.then(() => fetch(this.endpoint + "/" + this.session, { method: "POST", body, headers: { "content-type": "text/plain" } }))
+      this.chain = this.chain.then(() => {
+        if (!this.rt.disposed) return fetch(this.endpoint + "/" + this.session, { method: "POST", body, headers: { "content-type": "text/plain" }, signal: this.rt.effects.signal });
+      })
         .then(async (r) => {
+          if (!r || this.rt.disposed) return;
           const buf = await r.arrayBuffer();
+          if (this.rt.disposed) return;
           if (r.status === 410) { this.expired(); return; }
           // a LeanUI server answers errors with a buffer that logs the reason: apply it either way
           if (!r.ok) console.error("LeanUI remote: HTTP " + r.status);
           if (buf.byteLength) applyEncoded(this.rt, new Uint8Array(buf));
         })
-        .catch((e) => console.error("LeanUI remote:", e));
+        .catch((e) => { if (!this.rt.disposed) console.error("LeanUI remote:", e); });
     }
     // The server forgot this session (it expired): reload once for a fresh one, never in a loop.
     expired() {
@@ -516,13 +626,10 @@
       const base = new URL(glue, document.baseURI).href.replace(/[^/]*$/, "");
       const mod = await global[factory]({ locateFile: (p) => base + p });
       const rt = new Runtime(new WasmTransport(mod));
-      LeanUI.active = rt;
-      rt.busy = true;
-      let ok;
-      try { ok = mod._leanui_boot(...utf8(mod, flags), ...utf8(mod, selector), hydrate ? 1 : 0); }
-      finally { rt.busy = false; }
-      if (!ok) throw new Error("LeanUI: the app failed to start (see the console)");
-      if (rt.queue.length) { const [k, a, b, c, d] = rt.queue.shift(); rt.send(k, a, b, c, d); }
+      rt.start(() => {
+        if (!mod._leanui_boot(...utf8(mod, flags), ...utf8(mod, selector), hydrate ? 1 : 0))
+          throw new Error("LeanUI: the app failed to start (see the console)");
+      });
       rt.bootMs = performance.now() - t0;
       return rt;
     },
@@ -530,10 +637,10 @@
     connect({ endpoint = "/leanui", session, selector = "#app" } = {}) {
       const rt = new Runtime(null);
       rt.transport = new RemoteTransport(endpoint, session, rt);
-      LeanUI.active = rt;
-      rt.setContainer(selector);
-      rt.transport.post("h");   // hydrate: the server answers with the claim + listener commands
-      return rt;
+      return rt.start(() => {
+        rt.setContainer(selector);
+        rt.transport.post("h");   // hydrate: the server answers with the claim + listener commands
+      });
     },
     /** In-page wasm when the browser supports it, the server otherwise. */
     boot(opts) { return supported() || !opts.session ? LeanUI.start(opts) : Promise.resolve(LeanUI.connect(opts)); },

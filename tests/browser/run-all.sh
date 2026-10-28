@@ -60,6 +60,7 @@ run keyed-dom node tests/browser/keyed-dom.mjs
 run fuzz node tests/browser/fuzz.mjs "$CORPUS/corpus.jsonl" both
 run templates node tests/browser/templates.mjs "$CORPUS/templates.jsonl" both
 run apply-semantics node tests/browser/apply-semantics.mjs
+run runtime-lifecycle node tests/browser/runtime-lifecycle.mjs
 run server node tests/browser/server.mjs all
 run effects node tests/browser/effects.mjs --no-build
 run bench-smoke-chromium node tests/browser/bench-smoke.mjs chromium
