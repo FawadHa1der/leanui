@@ -4,10 +4,15 @@
 // the engine). For each depth a fresh page jumps from depth 1 to d in one update (one recursive
 // mount d levels deep) and changes the innermost text (one patch d levels deep); a binary search
 // finds the largest depth that works. Then it checks what an overflow does to the app.
-//   node tests/browser/depth.mjs [baseUrl] [chromium|firefox|both]   (run under the host browser lock)
+//   node tests/browser/depth.mjs [baseUrl] [chromium|firefox|both] [--lifecycle-only]
+// --lifecycle-only checks a shallow view and disposal after overflow, without the depth search.
+// Run under the host browser lock.
 import { pw } from "./playwright.mjs";
-const base = process.argv[2] || "http://127.0.0.1:5391/plain/depth-probe/index.html";
-const engines = (process.argv[3] || "both") === "both" ? ["chromium", "firefox"] : [process.argv[3]];
+const argv = process.argv.slice(2), positional = argv.filter((arg) => !arg.startsWith("--"));
+const base = positional[0] || "http://127.0.0.1:5391/plain/depth-probe/index.html";
+const lifecycleOnly = argv.includes("--lifecycle-only");
+const engine = positional[1] || "both";
+const engines = engine === "both" ? ["chromium", "firefox"] : [engine];
 
 async function attempt(browser, d) {
   const page = await browser.newPage();
@@ -38,12 +43,45 @@ async function attempt(browser, d) {
   return { ...r, ok: r.ok && errors.length === 0, errors };
 }
 
+// A deep view in the compiled probe must fail. Verify the terminal-error contract through
+// the actual app, including listener and module release.
+async function stoppedByOverflow(browser) {
+  const page = await browser.newPage();
+  try {
+    await page.goto(base);
+    await page.waitForFunction(() => window.__leanui, null, { timeout: 30000 });
+    return await page.evaluate(() => {
+      const rt = window.__leanui, transport = rt.transport;
+      let notifications = 0, detail;
+      rt.container.addEventListener("leanui:error", (e) => { notifications++; detail = e.detail; });
+      const setDepth = (n) => {
+        const input = document.querySelector("#depth");
+        input.value = String(n); input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      setDepth(10000);
+      const stopped = document.querySelector("#shown").textContent;
+      setDepth(3); rt.callback(1, true, "late");
+      const result = { crashed: !!rt.crashed, disposed: !!rt.disposed, notifications, sameError: detail === rt.crashed,
+        aborted: rt.effects.signal.aborted, released: transport.mod === null, inactive: LeanUI.active === null,
+        unchanged: document.querySelector("#shown").textContent === stopped, pending: rt.queue.length,
+        error: String(rt.crashed) };
+      rt.dispose(); return result;
+    });
+  } finally { await page.close(); }
+}
+
 let allOk = true;
 for (const engine of engines) {
   const browser = await pw[engine].launch({ headless: true });
   let lo = 100, hi = 200000, failure = null;
   const okAt = await attempt(browser, lo);
   if (!okAt.ok) { console.log(`${engine}: fails at ${lo}`, okAt); allOk = false; await browser.close(); continue; }
+  const stopped = await stoppedByOverflow(browser);
+  const stoppedOk = stopped.crashed && stopped.disposed && stopped.notifications === 1 && stopped.sameError &&
+    stopped.aborted && stopped.released && stopped.inactive && stopped.unchanged && stopped.pending === 0;
+  console.log(`${engine}: ${stoppedOk ? "PASS" : "FAIL"} overflow lifecycle ${JSON.stringify(stopped)}`);
+  if (!stoppedOk) allOk = false;
+  if (lifecycleOnly) { await browser.close(); continue; }
   let timing = okAt;
   // grow geometrically, then bisect
   while (lo * 2 < hi) {
