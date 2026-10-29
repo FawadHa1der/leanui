@@ -16,7 +16,7 @@ read it), and it changes nothing in them: the benchmarked programs (`examples/Be
 
 | | wasm64 (production) | lean-vir (this directory) |
 |---|---|---|
-| Lean | 4.34.0 (`lean-toolchain`) | 4.35.0 (`vir/lean-toolchain`): lean-vir pins one Lean release |
+| Lean | 4.34.0 (`lean-toolchain`) | 4.36.0-rc1 (`vir/lean-toolchain`): lean-vir pins one Lean release |
 | What the browser runs | the app compiled to C, then to wasm64 | lean-vir's interpreter (`runtime.wasm`, one for every app) and the app's IR (`.irpkg` files) |
 | Entry module | `examples/BenchApp.lean`: `leanui_app Bench.program` | `vir/LeanUIVir/BenchApp.lean`: `leanui_vir_app Bench.program` |
 | Host | `LeanUI/Host/Wasm.lean` + `runtime/leanui_wasm.c`: each update read in place from wasm memory | `vir/LeanUIVir/Host.lean`: each update returned to JavaScript as bytes (`[u32 opsBytes][ops][strs]`, the server's format) |
@@ -28,6 +28,10 @@ Both hosts feed the same DOM code: `vir/leanui-vir.js` builds a `LeanUI.Runtime`
 transport, which calls the app's exported `event` and `callback` and applies the updates they
 return.
 
+The four exports (`start`, `event`, `callback`, `take`) use `IO`. The host uses the public
+`RuntimeM.run` boundary to create and recover the session's `JSL` carrier; the session stays in
+Lean, and updates retain the flat array of command packets used by the JavaScript adapter.
+
 ## Building
 
     vir/build.sh            # both apps; or vir/build.sh bench, vir/build.sh life
@@ -35,6 +39,9 @@ return.
 Lake runs on the toolchain in `vir/lean-toolchain` (elan installs it). The first build needs the
 network: Lake fetches lean-vir at the commit `vir/lakefile.toml` pins and downloads the matching
 prebuilt interpreter. `vir/.lake` holds that build, apart from the main `.lake`.
+The dependency is pinned to `bf8b6a80a5d4011ffd6804fb7a395b9cd2d0d668`
+([lean-vir PR #270](https://github.com/ejgallego/lean-vir/pull/270)),
+whose runtime lock selects public runtime content `0d7d7edd`. No local override is needed.
 
 `vir/lakefile.toml` compiles LeanUI's core from `../LeanUI` and the benchmarked programs from
 `../examples`. Adding an app `X` (its program in `examples/X.lean`):
@@ -57,13 +64,13 @@ arrays, …), and it has no C compiler. So:
 * LeanUI's two inline-C buffer helpers (`LeanUI.pushU32`, `LeanUI.appendUtf8`) run as their Lean
   definitions (`vir_extern_fallback` in `leanui_vir_app`; that is why `LeanUI/Patch.lean` exposes
   them).
-* The photo editor and the video lab cannot run: their pixel code uses inline C (`Editor.get32`,
-  `set32`, `histAdd`) and functions outside the catalog (`ByteArray.uset`, `ByteArray.usize`,
-  `Float.toUInt8`, `Float.toInt64`).
-* Effects that answer with bytes (`Cmd.readFile`, `Cmd.decodeImage`) are refused: lean-vir copies
-  byte arrays across the boundary, and the benchmarked apps need none.
-* It is an interpreter: the benchmarks measure its script time at about 13× the wasm64 build's in
-  the keyed operations and 48× in Life.
+* The photo editor's inline-C helpers (`Editor.get32`, `set32`, `histAdd`) need explicit Lean
+  fallbacks before packaging that app. Editor/video integration is outside this benchmark setup.
+* This adapter does not yet forward effects that answer with bytes (`Cmd.readFile`,
+  `Cmd.decodeImage`). VIR supports copying byte arrays across the boundary; the benchmarked
+  apps need no byte callbacks.
+* Historical Lean 4.35 benchmarks measured script time at about 13× the wasm64 build's in keyed
+  operations and 48× in Life. Those ratios have not been remeasured for this pin.
 
 ## Updating lean-vir
 

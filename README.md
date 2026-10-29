@@ -145,9 +145,10 @@ and encoding). The benchmark app is ready about 25 ms after navigation in Chromi
 Game of Life three ways side by side, timed live in your browser and checked against each other:
 hand-written JavaScript, LeanUI compiled to wasm64, and the same Lean interpreted by
 [lean-vir](https://github.com/ejgallego/lean-vir) (Lean's IR interpreter in WebAssembly; built
-apart, in [`vir/`](vir/README.md), for the benchmarks only). Interpreted, the Lean side of a click
-takes about 13× as long in the keyed operations and 48× in Life (a cloud VM; see
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md#lean-vir-the-same-lean-interpreted)).
+apart, in [`vir/`](vir/README.md), for the benchmarks only). Historical Lean 4.35 measurements
+on a cloud VM put the interpreted Lean side of a click at about 13× the compiled time in keyed
+operations and 48× in Life (see [docs/BENCHMARKS.md](docs/BENCHMARKS.md#lean-vir-the-same-lean-interpreted)).
+Those ratios have not been remeasured for the current VIR pin.
 
 ## Writing apps
 
