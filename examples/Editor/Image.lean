@@ -159,7 +159,7 @@ and reference count; after a `uint32_t` store it can keep the sizes (`size_t`) i
 /-- The pixel at byte `i` as a little-endian word (one unaligned 32-bit load: a `memcpy` of 4
 bytes). -/
 @[extern c inline "({ uint32_t v_; __builtin_memcpy(&v_, lean_sarray_cptr(#1) + #2, 4); \
-  __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); })"]
+  __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); })", expose]
 def get32 (a : @& ByteArray) (i : USize) (h : InPx a i) : UInt32 :=
   px32 a i h 0 ||| (px32 a i h 1 <<< 8) ||| (px32 a i h 2 <<< 16) ||| (px32 a i h 3 <<< 24)
 
@@ -168,7 +168,7 @@ def get32 (a : @& ByteArray) (i : USize) (h : InPx a i) : UInt32 :=
   if (LEAN_UNLIKELY(!lean_is_exclusive(a_))) a_ = lean_copy_byte_array(a_); \
   typedef uint32_t __attribute__((aligned(1))) u32u_; \
   *(u32u_ *)(lean_sarray_cptr(a_) + i_) = \
-    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); a_; })"]
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? v_ : __builtin_bswap32(v_); a_; })", expose]
 def set32 (a : ByteArray) (i : USize) (v : UInt32) (h : InPx a i) : ByteArray :=
   put4w a i h v (v >>> 8) (v >>> 16) (v >>> 24)
 
