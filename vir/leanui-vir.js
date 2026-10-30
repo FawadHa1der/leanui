@@ -13,15 +13,25 @@
     constructor(program, app, session, rt) { this.program = program; this.app = app; this.session = session; this.rt = rt; }
     call(fn, ...args) { this.apply(this.program.call(this.app + "." + fn, this.session, ...args)); }
     apply(updates) {
-      for (const u of updates) {
-        const opsLen = (u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24)) >>> 0;
-        this.rt.apply(u, 4, opsLen, 4 + opsLen, u.length - 4 - opsLen);
-      }
+      try {
+        for (const u of updates) {
+          if (this.rt.disposed) return;
+          const opsLen = (u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24)) >>> 0;
+          this.rt.apply(u, 4, opsLen, 4 + opsLen, u.length - 4 - opsLen);
+        }
+      } catch (e) { this.broken = true; throw e; }
     }
     event(slot, payload) { this.call("event", slot, payload); }
     callback(cb, ok, payload) { this.call("callback", cb, ok, payload); }
     // effects that answer with bytes (files, images) need the wasm64 host
     callbackBytes(cb) { this.callback(cb, false, "bytes need the wasm64 host"); }
+    // A failed DOM update may leave the screen and Lean state out of sync.
+    isTerminalError() { return this.broken || this.program?.status === "failed"; }
+    dispose() {
+      const program = this.program;
+      this.program = this.session = null;
+      program?.dispose();
+    }
   }
 
   const LeanUIVir = {
@@ -39,14 +49,13 @@
         programManifestUrl: new URL(cfg.programManifest, url),
       });
       const rt = new LeanUI.Runtime(null);
-      LeanUI.active = rt;
-      rt.busy = true;
-      try {
+      rt.transport = new VirTransport(program, app, null, rt);
+      rt.start(() => {
         const session = program.call(app + ".start", flags, selector);
-        rt.transport = new VirTransport(program, app, session, rt);
+        if (rt.disposed) return;
+        rt.transport.session = session;
         rt.transport.apply(program.call(app + ".take", session));
-      } finally { rt.busy = false; }
-      if (rt.queue.length) { const [k, a, b, c, d] = rt.queue.shift(); rt.send(k, a, b, c, d); }
+      });
       rt.bootMs = performance.now() - t0;
       return rt;
     },

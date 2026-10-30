@@ -2,7 +2,7 @@
 # Build the benchmarked apps for lean-vir (vir/README.md) into dist/vir/<app>/: the app's page,
 # runtime/leanui.js, vir/leanui-vir.js, and what `lake exe publish` writes: app.json and lib/vir/
 # (lean-vir's interpreter, its JavaScript, and the app's IR package).
-#   vir/build.sh [bench] [life]        (default: both)
+#   vir/build.sh [bench] [life] [test] (default: bench and life; test is the browser test app)
 # Lake is the toolchain's that vir/lean-toolchain names (elan installs it), called by path like the
 # main build's (docs/TOOLCHAIN.md); LEAN_BIN overrides it. The first build needs the network: Lake
 # fetches lean-vir and downloads its prebuilt interpreter.

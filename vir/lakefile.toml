@@ -26,7 +26,7 @@ roots = ["Bench", "Life"]
 # The lean-vir host and one entry module per app (the counterpart of examples/*App.lean)
 [[lean_lib]]
 name = "LeanUIVir"
-roots = ["LeanUIVir.Host", "LeanUIVir.BenchApp", "LeanUIVir.LifeApp"]
+roots = ["LeanUIVir.Host", "LeanUIVir.BenchApp", "LeanUIVir.LifeApp", "LeanUIVir.TestApp"]
 
 # Each app's packaged IR and the matching interpreter (lean-vir's resource workflow)
 [[lean_lib]]
@@ -38,6 +38,11 @@ needs = ["+LeanUIVir.BenchApp:virResourcePack"]
 name = "LifeResources"
 roots = ["LeanUIVir.LifeResources"]
 needs = ["+LeanUIVir.LifeApp:virResourcePack"]
+
+[[lean_lib]]
+name = "TestResources"
+roots = ["LeanUIVir.TestResources"]
+needs = ["+LeanUIVir.TestApp:virResourcePack"]
 
 # Writes an app's files for the browser: `lake exe publish bench ../dist/vir/bench`
 [[lean_exe]]
