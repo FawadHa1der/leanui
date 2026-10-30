@@ -37,10 +37,13 @@ releases the VIR program, and prevents later callbacks from calling Lean. Callin
 safe. The last DOM stays in place; the page owns removing it.
 
 If startup fails, the new program is released and the previous live runtime is restored.
-This does not undo DOM changes already made during startup. Cancelling startup rejects with
-`AbortError`; the demo pages treat that as a quiet stop. After startup, a failed interpreter
-or DOM update closes the app and emits one `leanui:error` event on its mounted container.
-A recoverable call error is logged and allows later input.
+This does not undo DOM changes already made during startup. Disposing the runtime during its
+synchronous startup rejects `LeanUIVir.start` with `AbortError`; the demo pages treat that as a
+quiet stop. The initial downloads and VIR program creation happen before the runtime exists;
+`LeanUIVir.start` does not currently expose a way to cancel that loading phase.
+
+After startup, a failed interpreter or DOM update closes the app and emits one `leanui:error`
+event on its mounted container. A recoverable call error is logged and allows later input.
 
 ## Building
 

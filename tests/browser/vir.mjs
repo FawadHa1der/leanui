@@ -56,8 +56,9 @@ const server = http.createServer((req, res) => {
   }
   if (["/bench.css", "/life.css"].includes(pathname)) { res.writeHead(200, { "content-type": "text/css" }); res.end(); return; }
   if (pathname === "/slow") {
-    const timer = setTimeout(() => res.end("finished"), 1000);
-    res.on("close", () => clearTimeout(timer));
+    // Start the response, but leave the body incomplete until the client aborts it.
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.write("pending");
     return;
   }
   if (pathname === "/instrumented-runtime.js") {
@@ -131,7 +132,10 @@ async function effects(browser) {
     await page.waitForFunction(() => document.querySelector("#order").textContent === "event;focus;event;focus;");
     await page.click("#toggle");
     await page.click("#delay");
+    const response = page.waitForResponse((r) => r.url() === base + "slow");
     await page.click("#fetch");
+    await response;
+    const aborted = page.waitForEvent("requestfailed", { predicate: (r) => r.url() === base + "slow" });
     const disposal = await page.evaluate(() => {
       document.querySelector("#frame").click();
       const record = virRecords[0], calls = record.calls.length;
@@ -158,6 +162,7 @@ async function effects(browser) {
     assert.deepEqual(disposal.remaining, [0, 0, 0, 0, 0, 0]);
     assert.equal(disposal.transport, null); assert.equal(disposal.active, null);
     assert.equal(disposal.calls, 0); assert.equal(disposal.events, 0);
+    assert.match((await aborted).failure().errorText, /abort|cancel/i);
     await page.waitForTimeout(100);
     assert.equal(await page.evaluate(() => virRecords[0].calls.length), disposal.callsAtDisposal);
     assert.deepEqual(errors, []);
