@@ -21,7 +21,7 @@ if [ "${1:-}" = --build ] || [ "${1:-}" = --build-only ]; then
     read -r mod name <<< "$app"
     tools/build-app.sh "$mod" "$name" || { echo "build of $name failed"; exit 1; }
   done
-  vir/build.sh || { echo "lean-vir build failed"; exit 1; }
+  vir/build.sh bench life test || { echo "lean-vir build failed"; exit 1; }
   if [ "$QED64" != 0 ]; then qed64/build.sh || { echo "QED64 lane build failed"; exit 1; }; fi
   QED64="$QED64" bench/race/build.sh || { echo "race page build failed"; exit 1; }   # QED64=require: it must be there
   roster/verify/build.sh || { echo "Roster verify page build failed"; exit 1; }
@@ -61,6 +61,7 @@ run fuzz node tests/browser/fuzz.mjs "$CORPUS/corpus.jsonl" both
 run templates node tests/browser/templates.mjs "$CORPUS/templates.jsonl" both
 run apply-semantics node tests/browser/apply-semantics.mjs
 run runtime-lifecycle node tests/browser/runtime-lifecycle.mjs
+run vir-lifecycle node tests/browser/vir.mjs
 run server node tests/browser/server.mjs all
 run effects node tests/browser/effects.mjs --no-build
 run bench-smoke-chromium node tests/browser/bench-smoke.mjs chromium

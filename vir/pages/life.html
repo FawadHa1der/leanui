@@ -2,5 +2,5 @@
 <link rel="stylesheet" href="../life.css"></head>
 <body><div id="app"></div><script src="leanui.js"></script><script src="leanui-vir.js"></script><script>
 LeanUIVir.start({ app: "LeanUIVir.LifeApp", selector: "#app" }).then((rt) => { window.__leanui = rt; window.__ready = performance.now(); },
-  (e) => { console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
+  (e) => { if (e.name === "AbortError") return; console.error("LeanUI failed to start:", e); document.getElementById("app").textContent = "LeanUI failed to start: " + e.message; });
 </script></body></html>

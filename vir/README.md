@@ -32,9 +32,24 @@ The four exports (`start`, `event`, `callback`, `take`) use `IO`. The host uses 
 `RuntimeM.run` boundary to create and recover the session's `JSL` carrier; the session stays in
 Lean, and updates retain the flat array of command packets used by the JavaScript adapter.
 
+Call `dispose()` on the returned runtime when removing an app. This stops its browser work,
+releases the VIR program, and prevents later callbacks from calling Lean. Calling it again is
+safe. The last DOM stays in place; the page owns removing it.
+
+If startup fails, the new program is released and the previous live runtime is restored.
+This does not undo DOM changes already made during startup. Disposing the runtime during its
+synchronous startup rejects `LeanUIVir.start` with `AbortError`; the demo pages treat that as a
+quiet stop. The initial downloads and VIR program creation happen before the runtime exists;
+`LeanUIVir.start` does not currently expose a way to cancel that loading phase.
+
+After startup, a failed interpreter or DOM update closes the app and emits one `leanui:error`
+event on its mounted container. A recoverable call error is logged and allows later input.
+
 ## Building
 
     vir/build.sh            # both apps; or vir/build.sh bench, vir/build.sh life
+    vir/build.sh test       # build the small browser test app
+    node tests/browser/vir.mjs  # check startup and shutdown in Chromium and Firefox
 
 Lake runs on the toolchain in `vir/lean-toolchain` (elan installs it). The first build needs the
 network: Lake fetches lean-vir at the commit `vir/lakefile.toml` pins and downloads the matching
