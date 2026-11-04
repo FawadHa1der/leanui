@@ -301,7 +301,7 @@ theorem incWord_size (t : ByteArray) (k : Nat) : (incWord t k).size = t.size := 
   for (int j_ = 0; j_ < 4; j_++) { \
     if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) w_[k_[j_]] += 1; \
     else w_[k_[j_]] = __builtin_bswap32(__builtin_bswap32(w_[k_[j_]]) + 1); } \
-  t_; })"]
+  t_; })", expose]
 def histAdd (t : ByteArray) (v : UInt32) (_ht : 4096 ≤ t.size) : ByteArray :=
   let r := v &&& 255
   let g := (v >>> 8) &&& 255
