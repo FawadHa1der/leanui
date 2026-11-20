@@ -1,5 +1,6 @@
 /-
-What is proved about each kernel, and which programs the generator translates. `Gen.lean` turns
+What is proved about each kernel, which programs the generator translates, and which kernels it
+exports as libraries for the harness (`libs`). `Gen.lean` turns
 this into `manifest.json`: for every program, the kernels found in it (by comparing its values with
 the proved constants), their theorems, and the closed theorem when the whole program has one.
 
@@ -115,8 +116,63 @@ def kernels : List Kernel := [
     theorems := [``LeanUIIris.FutexMutex.newlock_spec, ``LeanUIIris.FutexMutex.slow_spec,
       ``LeanUIIris.FutexMutex.acquire_spec, ``LeanUIIris.FutexMutex.release_spec]
     says := "the same Lock spec as SpinLock (an instance of the interface); the lock word \
-      stays in {0, 1, 2}" }
+      stays in {0, 1, 2}" },
+  { name := "Critical", source := ours "Critical"
+    consts := vals% [LeanUIIris.Critical.criticalSpin, LeanUIIris.Critical.criticalTicket,
+      LeanUIIris.Critical.criticalFutex]
+    theorems := [``LeanUIIris.Critical.critical_spec, ``LeanUIIris.Critical.criticalSpin_spec,
+      ``LeanUIIris.Critical.criticalTicket_spec, ``LeanUIIris.Critical.criticalFutex_spec]
+    says := "one critical section proved once for every Lock instance: under the lock the two \
+      cells are always equal, so the section returns true" },
+  { name := "FutexNoWake", source := ours "FutexNoWake"
+    consts := vals% [LeanUIIris.FutexNoWake.releaseNoWake, LeanUIIris.FutexNoWake.criticalNoWake]
+    theorems := [``LeanUIIris.FutexNoWake.releaseNoWake_spec, ``LeanUIIris.FutexNoWake.instLock,
+      ``LeanUIIris.FutexNoWake.criticalNoWake_spec]
+    says := "FutexMutex with its futexWake removed (a lost-wakeup bug) satisfies the very same \
+      Lock spec: the proof cannot see a liveness bug" },
+  { name := "Shards", source := ours "Shards"
+    consts := vals% [LeanUIIris.Shards.bump, LeanUIIris.Shards.shardCount]
+    theorems := [``LeanUIIris.Shards.bump_spec, ``LeanUIIris.Shards.shardCount_spec]
+    says := "n threads each count k in memory they own and add it to their own shard: every \
+      shard ends k higher; ParMap-style ownership, no invariant, no atomics" },
+  { name := "ParMapG", source := ours "ParMapG"
+    consts := vals% [LeanUIIris.ParMapG.seqMap, LeanUIIris.ParMapG.pmapG]
+    theorems := [``LeanUIIris.ParMapG.seqMap_spec, ``LeanUIIris.ParMapG.pmapG_spec]
+    says := "ParMap with a grain size: disjoint parts mapped in parallel, each sequentially; \
+      the array ends as map g; no invariant, no atomics" },
+  { name := "Mandel", source := ours "Mandel"
+    consts := vals% [LeanUIIris.Mandel.iter, LeanUIIris.Mandel.mandel]
+    theorems := [``LeanUIIris.Mandel.iter_spec, ``LeanUIIris.Mandel.mandel_spec]
+    says := "mandel computes the Lean function Mandel.g (the iteration count of a pixel): the \
+      fSpec that pmapG_spec needs" }
 ]
+
+/-! ## Libraries: kernels the harness calls from JavaScript (`rt/embed.mjs`) -/
+
+structure Lib where
+  name : String
+  /-- What the harness calls, by the Lean name of the constant. -/
+  exports : List (Name × Val)
+
+open LeanUIIris in
+def libs : List Lib := [
+  { name := "lib_counters"
+    exports := vals% [AtomicCounter.faaIncr, AtomicCounter.casIncr, Counter.newcounter,
+      Counter.incr, Counter.read] },
+  { name := "lib_locks"
+    exports := vals% [Critical.criticalSpin, Critical.criticalTicket, Critical.criticalFutex,
+      FutexNoWake.criticalNoWake, Critical.racy,
+      SpinLock.newlock, SpinLock.acquire, SpinLock.release,
+      TicketLock.newlock, TicketLock.acquire, TicketLock.release,
+      FutexMutex.newlock, FutexMutex.acquire, FutexMutex.release] },
+  { name := "lib_ring"
+    exports := vals% [SpscRing.tryPush, SpscRing.tryPop, Programs.tryPushEarly] } ]
+
+/-- The name the JavaScript side uses: the constant's name without the namespace prefix. -/
+def exportName (n : Name) : String :=
+  let s := n.toString
+  let strip (p : String) (s : String) := if s.startsWith p then (s.drop p.length).toString else s
+  strip "Iris.HeapLang." (strip "LeanUIIris." s)
 
 /-! ## Programs -/
 
@@ -127,6 +183,8 @@ inductive Kind
   | small
   /-- Thousands of operations under real contention: too big for the interpreter. -/
   | large
+  /-- A whole program the harness (`iris/bench/`) runs at each thread count. -/
+  | bench
 deriving BEq, Repr
 
 structure Program where
@@ -192,6 +250,33 @@ def fib : Nat → Nat
 /-- Forty pseudo-random ints for the quicksort program. -/
 def sortInput : List Int := (List.range 40).map fun i => ((i * 7919 + 13) % 101 : Nat) - 50
 
+/-- The harness's thread counts and sizes. -/
+def benchThreads : List Nat := [1, 2, 4, 8]
+def shardIncrs : Nat := 1000000
+def faaIncrs : Nat := 200000
+def critIncrs : Nat := 50000
+def mandelRows : Nat := 256
+
+/-- Σ over the image of the iteration counts: what `mandelProg` must return. -/
+def mandelSum (rows : Nat) : Int :=
+  ((List.range (256 * rows)).map fun (p : Nat) => Mandel.g (p : Int)).sum
+
+def bench : List Program := benchThreads.flatMap fun t => [
+  { name := s!"bench_s1_faa_w{t}", exp := counterFaa t faaIncrs, kind := .bench,
+    expect := toString (t * faaIncrs) },
+  { name := s!"bench_s1_shards_w{t}", exp := shardsProg t shardIncrs, kind := .bench,
+    expect := toString (t * shardIncrs) },
+  { name := s!"bench_s2_futex_w{t}", kind := .bench,
+    exp := criticalProg FutexMutex.newlock Critical.criticalFutex t critIncrs,
+    expect := s!"(0, {t * critIncrs})" },
+  { name := s!"bench_s2_spin_w{t}", kind := .bench,
+    exp := criticalProg SpinLock.newlock Critical.criticalSpin t critIncrs,
+    expect := s!"(0, {t * critIncrs})" },
+  { name := s!"bench_s5_mandel_w{t}", kind := .bench,
+    exp := mandelProg mandelRows (256 * mandelRows / t),
+    expect := toString (mandelSum mandelRows) } ]
+
+
 def programs : List Program :=
   edgeCases.map (fun (n, e, r) => { name := s!"edge_{n}", exp := e, kind := .edge, expect := r }) ++
   drivers "small" .small small ++
@@ -204,7 +289,9 @@ def programs : List Program :=
       expect := "(10, 20)", closed := ``SpscClient.spscClient_adequate },
     { name := "closed_sort_and_check", exp := Quicksort.sortAndCheck sortInput, kind := .small,
       expect := "true", closed := ``Quicksort.sortAndCheckAdequate } ] ++
-  drivers "large" .large large
+  drivers "large" .large large ++
+  [ { name := "small_spsc_early", exp := spscStreamEarly 1 20, kind := .small, expect := none } ] ++
+  bench
 
 mutual
 /-- The closures in a value, its own included: the candidates for a kernel constant. -/

@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verified threads, side by side</title><link rel="stylesheet" href="iris.css"></head>
+<body>
+<header>
+  <h1>Verified threads, side by side <small>JavaScript next to iris-lean-proved kernels</small></h1>
+  <p>Each scenario runs the same work on the same shared resource in several lanes: plain
+  JavaScript (broken on purpose, idiomatic, or the same algorithm by hand) and kernels proved in
+  <a href="https://github.com/leanprover-community/iris-lean">iris-lean</a>, translated from the
+  very Lean constants the theorems are about into JavaScript over one <code>SharedArrayBuffer</code>.
+  Every lane runs in Web Workers on this page. Each verified lane carries a proof chip that says
+  what is proved, what is trusted, and what is not proved; the chips are built from the
+  generator's manifest. The proofs cover safety under sequentially consistent interleavings:
+  nothing about speed, progress or fairness, and nothing about the JavaScript around a kernel.</p>
+  <div id="gate" hidden></div>
+  <form id="controls" onsubmit="return false" hidden>
+    <fieldset id="scenarios"><legend>Scenarios</legend></fieldset>
+    <fieldset id="ws"><legend>Threads W</legend></fieldset>
+    <label><input type="checkbox" id="fuzz"> fuzz mode too</label>
+    <label><input type="checkbox" id="quick" checked> short runs</label>
+    <button type="button" id="run">Run</button>
+    <button type="button" id="download" disabled>Download JSON</button>
+    <span id="status" role="status"></span>
+  </form>
+</header>
+<main id="results" aria-live="polite"></main>
+<section id="legend"></section>
+<section id="theorems"></section>
+<footer>
+  <p>Throughput is operations per microsecond, all threads together, measured in this browser on
+  this machine: read it as a ratio between lanes of one run. A page cannot see CPU time; the Node
+  harness (<code>node iris/bench/harness.mjs</code>) reports CPU time per operation and also runs
+  the native and wasm32 lanes. Broken lanes show correctness counts only. Fuzz mode adds random
+  delays before shared-memory operations: more interleavings, not a fair speed comparison.
+  <code>iris/README.md</code> in the repository has the details, the coverage of every JavaScript
+  threading mechanism, and the trusted base.</p>
+</footer>
+<script type="module" src="iris.mjs"></script>
+</body></html>

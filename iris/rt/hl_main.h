@@ -2,6 +2,19 @@
 //   ./prog [pool=4] [runs=3] [heapMB=256]   prints one JSON line, like run.mjs --json
 // The pool is fixed (the JS launcher grows its own): a program needing more simultaneously live
 // HeapLang threads than the pool can hang, which is liveness; it cannot compute a wrong value.
+#ifndef __EMSCRIPTEN__
+#include <sys/resource.h>
+#endif
+// CPU time of the whole process (every thread), for the harness's CPU time per operation; not
+// measured under Emscripten, where it would be the JS engine's.
+static double cpu_ms(void) {
+#ifdef __EMSCRIPTEN__
+  return -1;
+#else
+  struct rusage ru; getrusage(RUSAGE_SELF, &ru);
+  return (ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * 1e3 + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1e3;
+#endif
+}
 static double now_ms(void) {
 #ifdef __EMSCRIPTEN__
   return emscripten_get_now();
@@ -69,19 +82,24 @@ int main(int argc, char **argv) {
   pthread_attr_setstacksize(&attr, (size_t)8 << 20);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for (int i = 0; i < pool; i++) { pthread_t t; if (pthread_create(&t, &attr, pool_thread, 0)) { fprintf(stderr, "pthread_create failed\n"); return 3; } }
-  double times[64]; int nt = 0;
+  double times[64], cpus[64]; int nt = 0;
   for (int r = 0; r < runs && r < 64; r++) {
     __atomic_store_n(&H[C_DONE], 0, SEQ);
-    double t0 = now_ms();
+    double t0 = now_ms(), c0 = cpu_ms();
     hl_fork(hl_MAIN);
     while (__atomic_load_n(&H[C_DONE], SEQ) == 0) fwait(&H[C_DONE], 0, 100.0);
-    times[nt++] = now_ms() - t0;
+    times[nt] = now_ms() - t0; cpus[nt++] = cpu_ms() - c0;
   }
-  for (int i = 1; i < nt; i++) for (int k = i; k > 0 && times[k] < times[k - 1]; k--) { double x = times[k]; times[k] = times[k - 1]; times[k - 1] = x; }
+  for (int i = 1; i < nt; i++) for (int k = i; k > 0 && times[k] < times[k - 1]; k--) {
+    double x = times[k]; times[k] = times[k - 1]; times[k - 1] = x;
+    x = cpus[k]; cpus[k] = cpus[k - 1]; cpus[k - 1] = x;
+  }
   static char res[4096];
   decode(res, sizeof res, __atomic_load_n(&H[C_RESULT], SEQ), 0);
-  printf("{\"program\":\"%s\",\"result\":\"%s\",\"median_ms\":%.3f,\"min_ms\":%.3f,\"pool\":%d,\"forks\":%d,\"max_live\":%d,\"heap_cells_used\":%d}\n",
-         hl_NAME, res, times[nt / 2], times[0], pool, H[C_FORKS], H[C_MAXLIVE], H[C_BRK]);
+  char cpu[32];
+  if (cpus[nt / 2] >= 0 && cpu_ms() >= 0) snprintf(cpu, sizeof cpu, "%.3f", cpus[nt / 2]); else snprintf(cpu, sizeof cpu, "null");
+  printf("{\"program\":\"%s\",\"result\":\"%s\",\"median_ms\":%.3f,\"min_ms\":%.3f,\"cpu_ms\":%s,\"pool\":%d,\"forks\":%d,\"max_live\":%d,\"heap_cells_used\":%d}\n",
+         hl_NAME, res, times[nt / 2], times[0], cpu, pool, H[C_FORKS], H[C_MAXLIVE], H[C_BRK]);
   fflush(stdout);
   _Exit(0);
 }

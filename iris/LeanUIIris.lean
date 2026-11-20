@@ -9,6 +9,11 @@ import LeanUIIris.Kernels.TreiberAtomic
 import LeanUIIris.Kernels.SpscRing
 import LeanUIIris.Kernels.SpscClient
 import LeanUIIris.Kernels.FutexMutex
+import LeanUIIris.Kernels.Critical
+import LeanUIIris.Kernels.FutexNoWake
+import LeanUIIris.Kernels.Shards
+import LeanUIIris.Kernels.ParMapG
+import LeanUIIris.Kernels.Mandel
 import LeanUIIris.Translate.Encoding
 import LeanUIIris.Translate
 import LeanUIIris.Interp

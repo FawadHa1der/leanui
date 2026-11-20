@@ -311,6 +311,53 @@ jobs:
       - name: Check the proof
         run: roster/hall/build.sh
 
+  # The verified concurrency kernels (iris/README.md): iris-lean's proofs and ours, the axiom guard,
+  # the translator's tests on JavaScript and native code, and a short run of the side-by-side
+  # harness, which fails if a verified lane shows a violation. A project of its own (Lean 4.36.0,
+  # iris-lean pinned) that the main build never reads; its Lake build is cached (about 700 MB).
+  iris:
+    name: Verified concurrency kernels (iris-lean)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Lean
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat iris/lean-toolchain)"
+      - name: Restore the iris Lake build
+        id: iris-lake
+        uses: actions/cache/restore@v6
+        with:
+          path: iris/.lake
+          key: iris-lake-${{ runner.os }}-${{ hashFiles('iris/lean-toolchain', 'iris/lakefile.toml', 'iris/lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            iris-lake-${{ runner.os }}-${{ hashFiles('iris/lean-toolchain', 'iris/lakefile.toml', 'iris/lake-manifest.json') }}-
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # every proof and the axiom guard, the generator, the native lane (no Emscripten here: the
+      # wasm lane is "not built")
+      - name: Build
+        run: iris/build.sh --no-wasm
+      - name: Save the iris Lake build
+        if: steps.iris-lake.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: iris/.lake
+          key: ${{ steps.iris-lake.outputs.cache-primary-key }}
+      - name: Tests (provenance, translator statistics, interpreter, embedding, every program)
+        run: node iris/test/node.mjs --backends js,native
+      - name: Side-by-side harness (short runs, W = 1 and 4, fuzz off and on)
+        run: node iris/bench/harness.mjs --quick --json "$RUNNER_TEMP/iris-bench.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: iris-bench
+          path: ${{ runner.temp }}/iris-bench.json
+          retention-days: 14
+          if-no-files-found: ignore
+
   deploy:
     name: Deploy the site to Cloudflare
     needs: test

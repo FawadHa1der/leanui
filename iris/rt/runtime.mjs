@@ -19,7 +19,7 @@ export const UNIT = 7, FALSE = 15, TRUE = 23, POISON = 31;
 export const HDR_PAIR = 1, HDR_INJL = 2, HDR_INJR = 3;
 // control cells
 export const C_BRK = 1, C_QHEAD = 2, C_QTAIL = 3, C_DONE = 4, C_RESULT = 5, C_GROW = 6, C_TRAP = 7,
-  C_READY = 8, C_FORKS = 9, C_LIVE = 10, C_MAXLIVE = 11, C_FREED = 12;
+  C_READY = 8, C_FORKS = 9, C_LIVE = 10, C_MAXLIVE = 11, C_FREED = 12, C_WAITS = 13, C_TIMEOUTS = 14;
 export const QBASE = 64, QCAP = 4096;              // fork queue ring (power of two)
 export const STATIC_BASE = QBASE + QCAP;           // 4160, must match Translate.lean
 const CHUNK = 1 << 15;                             // thread-local allocation buffer, in cells
@@ -101,6 +101,10 @@ export function shr(a, b) { return shl(a, -b); }
 export function off(l, i) { const r = l + i; if ((r | 0) !== r) ovf(); return r; }
 export function neg(w) { if (isBool(w)) return w === TRUE ? FALSE : TRUE; return ~(w >> 3) * 8; }
 export function minus(w) { const r = -w; if ((r | 0) !== r) ovf(); return r; }
+// The four other heap operations; the generated code takes them from R, so that fuzz mode can
+// swap in versions that first spin for a random while (more interleavings, same semantics).
+const ald = (l) => Atomics.load(H, l >> 3), ast = (l, v) => Atomics.store(H, l >> 3, v);
+const acas = (l, e, d) => Atomics.compareExchange(H, l >> 3, e, d), axchg = (l, v) => Atomics.exchange(H, l >> 3, v);
 export function faa(l, d) {
   const old = Atomics.add(H, l >> 3, d);
   const r = old + d;
@@ -111,10 +115,34 @@ export function faa(l, d) {
 // Futex hints (no-ops in HeapLang, Kernels/Hints.lean). The wait is timed, so a lost wakeup
 // delays a waiter by at most WAIT_MS per wait; it cannot strand it.
 export const WAIT_MS = 20;
+// C_WAITS and C_TIMEOUTS count the waits, and those that only the timeout ended (S11).
 export function futexWait(l, v) {
-  if ((l & 7) === 1) Atomics.wait(H, l >> 3, v, WAIT_MS);   // returns at once if the cell no longer holds v
+  if ((l & 7) === 1) {
+    const r = Atomics.wait(H, l >> 3, v, WAIT_MS);  // returns at once if the cell no longer holds v
+    if (r !== 'not-equal') {
+      Atomics.add(H, C_WAITS, 1);
+      if (r === 'timed-out') Atomics.add(H, C_TIMEOUTS, 1);
+    }
+  }
   return UNIT;
 }
+
+// Fuzz mode: before roughly one heap operation in 2^FUZZ_BITS, spin up to 1023 iterations. A
+// delay is one more interleaving, so it cannot change a HeapLang result; it can expose a bug in
+// what is trusted (translator, runtime, glue). Per thread: each worker attaches with its own seed.
+const FUZZ_BITS = 5;
+let rng = 1, sink = 0;
+export function fuzzDelay() {
+  rng ^= rng << 13; rng ^= rng >>> 17; rng ^= rng << 5;
+  if ((rng & ((1 << FUZZ_BITS) - 1)) === 0) { for (let n = (rng >>> 20) & 1023; n > 0; n--) sink += n; }
+}
+const fuzzed = {
+  ald: (l) => { fuzzDelay(); return Atomics.load(H, l >> 3); },
+  ast: (l, v) => { fuzzDelay(); return Atomics.store(H, l >> 3, v); },
+  acas: (l, e, d) => { fuzzDelay(); return Atomics.compareExchange(H, l >> 3, e, d); },
+  axchg: (l, v) => { fuzzDelay(); return Atomics.exchange(H, l >> 3, v); },
+  faa: (l, d) => { fuzzDelay(); return faa(l, d); },
+};
 export function futexWake(l) { if ((l & 7) === 1) Atomics.notify(H, l >> 3, 1); return UNIT; }
 
 // Threads: fork enqueues a closure word; idle pool threads take tickets (pool.mjs).
@@ -139,11 +167,15 @@ export function nextTask() {
   return c;
 }
 
-export function attach(sab) {
+// Binds this thread (this module instance) to a heap. Any thread may attach, pool thread or not:
+// the allocation buffer is per module instance, so a harness Worker gets its own.
+export function attach(sab, { fuzz = false, seed = 1 } = {}) {
   H = new Int32Array(sab);
   tlab = tlabEnd = 0;
+  rng = (seed | 0) || 1;
   Object.assign(R, { H, allocBlock, allocN, free, fork, mkPair, mkInjL, mkInjR, isInjL, payload,
-    add, sub, mul, quot, rem, band, bor, bxor, shl, shr, off, neg, minus, faa, stuck, futexWait, futexWake });
+    add, sub, mul, quot, rem, band, bor, bxor, shl, shr, off, neg, minus, faa, stuck, futexWait, futexWake,
+    ald, ast, acas, axchg }, fuzz ? fuzzed : {});
   return R;
 }
 

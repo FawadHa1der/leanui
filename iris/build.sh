@@ -1,7 +1,7 @@
 #!/bin/bash
 # Checks every proof and writes the translated programs (iris/README.md):
 #   dist/iris/gen/{js,c}/<program>, dist/iris/gen/manifest.json   (lake build; lake exe iris-gen)
-#   dist/iris/rt/                                                 the JS runtime and browser launcher
+#   dist/iris/index.html, bench/, rt/                             the page, the harness, the JS runtime
 #   dist/iris/native/<program>                                    when cc is available
 #   dist/iris/wasm/<program>.{js,wasm}                            when emcc is available
 #   iris/build.sh [--no-native] [--no-wasm]
@@ -23,12 +23,16 @@ OUT="$ROOT/dist/iris"
 cd "$ROOT/iris"
 log="$(mktemp)"; trap 'rm -f "$log"' EXIT
 "$L/lake" build > "$log" 2>&1 || { tail -40 "$log"; echo "iris/: lake build failed" >&2; exit 1; }
-rm -rf "$OUT/gen" "$OUT/native" "$OUT/wasm" "$OUT/rt"
+rm -rf "$OUT/gen" "$OUT/native" "$OUT/wasm" "$OUT/rt" "$OUT/bench"
 "$L/lake" -q exe iris-gen "$OUT/gen"
-# the runtime next to the programs, so that dist/ serves the browser launcher (rt/browser/index.html)
-mkdir -p "$OUT/rt/browser"
-cp rt/runtime.mjs rt/pool.mjs rt/launch.mjs "$OUT/rt/"
+# the runtime, the harness and the page next to the programs, so that dist/ serves the page
+# (dist/iris/index.html) and the browser launcher (rt/browser/index.html)
+mkdir -p "$OUT/rt/browser" "$OUT/bench/scenarios"
+cp rt/runtime.mjs rt/pool.mjs rt/launch.mjs rt/embed.mjs "$OUT/rt/"
 cp rt/browser/index.html rt/browser/worker.mjs "$OUT/rt/browser/"
+cp bench/core.mjs bench/chips.mjs bench/kernels.mjs bench/worker.mjs bench/host-web.mjs "$OUT/bench/"
+cp bench/scenarios/*.mjs "$OUT/bench/scenarios/"
+cp page/index.html page/iris.mjs page/iris.css "$OUT/"
 
 # Each translated C program is a whole program: the runtime is two headers it includes.
 CC="${CC:-cc}"

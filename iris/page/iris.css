@@ -1,0 +1,36 @@
+:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fff; --muted: #5f6368; --line: #d9dce1; --soft: #f3f4f6;
+  --accent: #1f6feb; --ok: #137333; --bad: #b3261e; --warn: #8a5a00; --chip: #e7f3ec; --chip-no: #eef0f3; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #e6e6e6; --bg: #16171a; --muted: #a0a4ab; --line: #34373d; --soft: #22242a;
+    --accent: #6ea8ff; --ok: #5cc884; --bad: #ff7b72; --warn: #e3b341; --chip: #1d3326; --chip-no: #2a2d33; }
+}
+body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0 auto; padding: 16px; max-width: 1400px; color: var(--fg); background: var(--bg); }
+a { color: var(--accent); }
+h1 { font-size: 22px; margin: 4px 0 8px; } h1 small { font-weight: normal; color: var(--muted); font-size: 15px; }
+h2 { font-size: 17px; margin: 24px 0 2px; } h3 { font-size: 15px; margin: 16px 0 4px; }
+header p, footer p, .question, #legend p { max-width: 90ch; }
+.question { color: var(--muted); margin: 0 0 8px; }
+#gate { border: 1px solid var(--bad); border-radius: 8px; padding: 10px 14px; margin: 12px 0; max-width: 90ch; }
+#controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 12px 0; }
+#controls fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+#controls legend { color: var(--muted); font-size: 12px; }
+#controls button { font: inherit; padding: 4px 14px; }
+#status { color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+td.l, th.l { text-align: left; }
+td.note { text-align: left; color: var(--muted); max-width: 46ch; }
+tbody.lane tr:first-child td { border-top: 2px solid var(--line); }
+.ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; } .muted { color: var(--muted); }
+.kind { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; background: var(--soft); white-space: nowrap; }
+.kind.L0, .kind.M { color: var(--bad); } .kind.L3, .kind.L3p, .kind.L4n, .kind.L4w { color: var(--ok); }
+details.chip { text-align: left; max-width: 52ch; border-radius: 6px; padding: 2px 8px; background: var(--chip-no); }
+details.chip.proved { background: var(--chip); }
+details.chip summary { cursor: pointer; font-size: 12px; white-space: nowrap; }
+details.chip ul { margin: 4px 0; padding-left: 18px; font-size: 12px; }
+details.chip p { margin: 4px 0; font-size: 12px; }
+details.chip code { font-size: 11px; }
+#theorems td { text-align: left; } #theorems td code { font-size: 12px; }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); margin-top: 24px; }

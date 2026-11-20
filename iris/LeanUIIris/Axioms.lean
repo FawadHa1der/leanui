@@ -128,3 +128,29 @@ import LeanUIIris.Translate
 #guard_msgs in #print axioms LeanUIIris.FutexMutex.isLock_iff
 /-- info: 'LeanUIIris.FutexMutex.instLock' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms LeanUIIris.FutexMutex.instLock
+/-- info: 'LeanUIIris.Critical.critical_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Critical.critical_spec
+/-- info: 'LeanUIIris.Critical.criticalSpin_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Critical.criticalSpin_spec
+/-- info: 'LeanUIIris.Critical.criticalTicket_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Critical.criticalTicket_spec
+/-- info: 'LeanUIIris.Critical.criticalFutex_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Critical.criticalFutex_spec
+/-- info: 'LeanUIIris.FutexNoWake.releaseNoWake_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.FutexNoWake.releaseNoWake_spec
+/-- info: 'LeanUIIris.FutexNoWake.instLock' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.FutexNoWake.instLock
+/-- info: 'LeanUIIris.FutexNoWake.criticalNoWake_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.FutexNoWake.criticalNoWake_spec
+/-- info: 'LeanUIIris.Shards.bump_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Shards.bump_spec
+/-- info: 'LeanUIIris.Shards.shardCount_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Shards.shardCount_spec
+/-- info: 'LeanUIIris.ParMapG.seqMap_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.ParMapG.seqMap_spec
+/-- info: 'LeanUIIris.ParMapG.pmapG_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.ParMapG.pmapG_spec
+/-- info: 'LeanUIIris.Mandel.iter_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Mandel.iter_spec
+/-- info: 'LeanUIIris.Mandel.mandel_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms LeanUIIris.Mandel.mandel_spec

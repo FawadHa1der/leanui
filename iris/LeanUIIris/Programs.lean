@@ -16,6 +16,11 @@ import LeanUIIris.Kernels.ParMap
 import LeanUIIris.Kernels.Treiber
 import LeanUIIris.Kernels.SpscRing
 import LeanUIIris.Kernels.FutexMutex
+import LeanUIIris.Kernels.Critical
+import LeanUIIris.Kernels.FutexNoWake
+import LeanUIIris.Kernels.Shards
+import LeanUIIris.Kernels.ParMapG
+import LeanUIIris.Kernels.Mandel
 
 namespace LeanUIIris.Programs
 open Iris.HeapLang
@@ -179,6 +184,65 @@ def forkMany (n : Nat) : Exp := hl%
   go #n;
   let wait := (rec wait u := if !c = #n then !c else wait u);
   wait #()
+
+/-! ## A mutant (no proof): the ring that publishes before it writes -/
+
+/-- `SpscRing.tryPush` with its last two steps swapped: the index is published before the slot is
+written. No proof of it exists (the invariant cannot be re-established at the publish), and the
+reference interpreter finds a schedule where the consumer reads a stale slot. -/
+def tryPushEarly : Val := hl_val%
+  λ buf hd tl n v,
+    let t := !tl;
+    let h := !hd;
+    if t - h < n then
+      (tl ← t + #(1 : Int);
+       (buf +ₗ (t % n)) ← v;
+       #true)
+    else #false
+
+/-- `spscStream` with the mutant: counts items that are not the next number. -/
+def spscStreamEarly (cap n : Nat) : Exp := hl%
+  let buf := allocn(#cap, #(-1 : Int));
+  let hd := ref(#0);
+  let tl := ref(#0);
+  let push := (rec push v := if &tryPushEarly buf hd tl #cap v then #() else push v);
+  let pop := (rec pop u := match &SpscRing.tryPop buf hd tl #cap with
+    | none() => pop u
+    | some(x) => x);
+  let produce := (rec produce i := if #n ≤ i then #() else (push i; produce (i + #1)));
+  let consume := (rec consume i bad :=
+    if #n ≤ i then bad else consume (i + #1) (if pop #() = i then bad else bad + #1));
+  let r := (produce #0) ‖ (consume #0 #0);
+  snd(r)
+
+/-! ## Whole programs for the harness (`iris/bench/`), one per thread count -/
+
+/-- S1: `t` threads count `k` each in owned shards (`Shards.shardCount`), then the sum. -/
+def shardsProg (t k : Nat) : Exp := hl%
+  let a := allocn(#t, #0);
+  &Shards.shardCount a #t #k;
+  let sum := (rec sum i acc := if #t ≤ i then acc else sum (i + #1) (acc + !(a +ₗ i)));
+  sum #0 #0
+
+/-- S2: `t` threads × `k` critical sections under one lock: (sections that saw two different
+values, final count). -/
+def criticalProg (newlock crit : Val) (t k : Nat) : Exp := hl%
+  let a := ref(#0);
+  let b := ref(#0);
+  let bad := ref(#0);
+  let lk := &newlock #();
+  &onThreads #t (λ _, &rep #k (λ _, if &crit lk a b then #() else (faa(bad, #1); #())));
+  (!bad, !a)
+
+/-- S5: render `rows` rows of the 256-wide Mandelbrot with `ParMapG.pmapG` in parts of at most
+`grain` pixels, then the sum of the iteration counts. -/
+def mandelProg (rows grain : Nat) : Exp := hl%
+  let a := allocn(#((256 * rows : Nat) : Int), #0);
+  let init := (rec init i := if #((256 * rows : Nat) : Int) ≤ i then #() else ((a +ₗ i) ← i; init (i + #1)));
+  init #0;
+  &ParMapG.pmapG &Mandel.mandel a #((256 * rows : Nat) : Int) #grain;
+  let sum := (rec sum i acc := if #((256 * rows : Nat) : Int) ≤ i then acc else sum (i + #1) (acc + !(a +ₗ i)));
+  sum #0 #0
 
 /-! ## Semantic edge cases, with the result HeapLang's semantics gives (worked out by hand) -/
 

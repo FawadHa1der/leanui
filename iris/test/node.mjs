@@ -4,9 +4,10 @@
 //     kernels a program is said to call were found in it (the generator compares terms);
 //  2. translator statistics that no result would reveal (a dropped futex hint changes no value);
 //  3. the reference interpreter, under every schedule, gives the hand-worked result;
-//  4. each translated program, on real threads, gives the result HeapLang's semantics gives, or
+//  4. the library modules' kernels, called from JavaScript through rt/embed.mjs, give their results;
+//  5. each translated program, on real threads, gives the result HeapLang's semantics gives, or
 //     traps where the encoding must (29-bit ints). Concurrent programs run several times. The
-//     racy control's lost updates are recorded, never required: stress results are probabilistic.
+//     racy controls are recorded, never required: stress results are probabilistic.
 // Backends: js always; native and wasm when build.sh built them ("not built" otherwise).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -31,7 +32,9 @@ const fail = (msg) => { failures++; console.log('FAIL  ' + msg); };
 const axioms = fs.readFileSync(path.join(IRIS, 'LeanUIIris/Axioms.lean'), 'utf8');
 const STD = 'depends on axioms: [propext, Classical.choice, Quot.sound]';
 const guarded = (t) => axioms.includes(`/-- info: '${t}' ${STD} -/\n#guard_msgs in #print axioms ${t}\n`);
-const named = new Set([...manifest.kernels.flatMap((k) => k.theorems), ...progs.flatMap((p) => p.theorems)]);
+const libs = manifest.libs;
+const named = new Set([...manifest.kernels.flatMap((k) => k.theorems), ...progs.flatMap((p) => p.theorems),
+  ...libs.flatMap((l) => l.exports.flatMap((e) => [...e.theorems, ...e.calls_theorems]))]);
 for (const t of named) if (!guarded(t)) fail(`provenance: ${t} is not in Axioms.lean's guard`);
 const kernelNames = new Set(manifest.kernels.map((k) => k.name));
 for (const p of progs) {
@@ -43,13 +46,26 @@ const mustCall = {
   small_counter_spin: 'SpinLock', small_counter_ticket: 'TicketLock', small_counter_futex: 'FutexMutex',
   small_rw: 'RwSpinLock', small_treiber: 'Treiber', small_spsc_stream: 'SpscRing', small_pmap: 'ParMap',
   small_pfib: 'Par', closed_two_incr: 'AtomicCounter', closed_spsc_client: 'SpscRing',
-  closed_sort_and_check: 'Quicksort',
+  closed_sort_and_check: 'Quicksort', small_spsc_early: 'SpscRing', bench_s1_shards_w2: 'Shards',
+  bench_s2_futex_w2: 'Critical', bench_s2_spin_w2: 'SpinLock', bench_s5_mandel_w2: 'Mandel',
+  bench_s5_mandel_w4: 'ParMapG',
 };
 for (const [name, k] of Object.entries(mustCall)) {
   const p = progs.find((q) => q.name === name);
   if (!p || !p.kernels.includes(k)) fail(`provenance: ${name} should call ${k}`);
 }
-console.log(`provenance: ${named.size} theorems named, all guarded to ${STD.slice(19)}`);
+// every library export is a proved kernel constant, except the negative controls
+const unproved = new Set(['Critical.racy', 'Programs.tryPushEarly']);
+for (const l of libs) {
+  for (const e of l.exports) {
+    if (!e.kernel && !unproved.has(e.name)) fail(`provenance: ${l.name} exports ${e.name}, which is no kernel's constant`);
+    if (e.kernel && !e.theorems.length) fail(`provenance: ${l.name}'s ${e.name} has no theorem`);
+  }
+}
+const exp = (lib, name) => libs.find((l) => l.name === lib).exports.find((e) => e.name === name);
+if (!exp('lib_locks', 'Critical.criticalSpin').calls.includes('SpinLock')) fail('provenance: criticalSpin should call SpinLock');
+if (!exp('lib_locks', 'FutexNoWake.criticalNoWake').calls.includes('FutexMutex')) fail('provenance: criticalNoWake should call FutexMutex');
+console.log(`provenance: ${named.size} theorems named, all guarded to ${STD.slice(19)}; ${libs.length} libraries`);
 
 // 2. translator statistics
 const stat = (p, k) => (p.stats && p.stats[k]) || 0;
@@ -57,6 +73,10 @@ for (const p of progs) {
   if (p.kernels.includes('FutexMutex') || p.kernels.includes('Hints')) {
     if (stat(p, 'futex-wait') < 1 || stat(p, 'futex-wake') < 1) fail(`stats: ${p.name} lost its futex hints`);
   }
+}
+for (const l of libs) {
+  const futex = l.exports.some((e) => e.kernel === 'FutexMutex' || e.calls.includes('FutexMutex'));
+  if (futex && (stat(l, 'futex-wait') < 1 || stat(l, 'futex-wake') < 1)) fail(`stats: ${l.name} lost its futex hints`);
 }
 const loop = progs.find((p) => p.name === 'edge_loop-1e6');
 if (stat(loop, 'self-tail-call->loop') < 1) fail('stats: edge_loop-1e6 has no self tail call turned into a loop');
@@ -78,7 +98,36 @@ for (const p of progs.filter((p) => p.expect === 'TRAP'))
 for (const p of progs.filter((p) => p.expect === null && p.interp.length))
   console.log(`  ${p.name} (racy control): ${p.interp.map((i) => `${i.result} [${i.schedule}]`).join(', ')}`);
 
-// 4. backends
+// 4. the embedding ABI (rt/embed.mjs): library kernels called from JavaScript, one thread
+{
+  const E = await import(path.join(IRIS, 'rt/embed.mjs'));
+  const lib = async (n) => import(path.join(OUT, 'gen/js', n + '.mjs'));
+  const counters = await lib('lib_counters');
+  let K = E.open(E.newHeap(counters, 8), counters).K;
+  const c = K['Counter.newcounter'](E.UNIT);
+  for (let i = 0; i < 100; i++) { K['Counter.incr'](c); K['AtomicCounter.faaIncr'](c); K['AtomicCounter.casIncr'](c); }
+  if (E.toInt(K['Counter.read'](c)) !== 300) fail('embed: counters');
+  const locks = await lib('lib_locks');
+  K = E.open(E.newHeap(locks, 8), locks).K;
+  for (const [nl, crit] of [['SpinLock.newlock', 'Critical.criticalSpin'], ['TicketLock.newlock', 'Critical.criticalTicket'],
+    ['FutexMutex.newlock', 'Critical.criticalFutex'], ['FutexMutex.newlock', 'FutexNoWake.criticalNoWake']]) {
+    const lk = K[nl](E.UNIT), a = E.alloc(1, E.int(0)), b = E.alloc(1, E.int(0));
+    for (let i = 0; i < 50; i++) if (K[crit](lk, a, b) !== E.TRUE) fail(`embed: ${crit} returned false`);
+  }
+  const ring = await lib('lib_ring');
+  K = E.open(E.newHeap(ring, 8), ring).K;
+  const buf = E.alloc(4, E.int(0)), hd = E.alloc(1, E.int(0)), tl = E.alloc(1, E.int(0)), n = E.int(4);
+  const got = [];
+  for (let i = 0; i < 6; i++) if (K['SpscRing.tryPush'](buf, hd, tl, n, E.int(i)) !== E.TRUE) got.push('full');
+  for (let i = 0; i < 6; i++) { const v = E.option(K['SpscRing.tryPop'](buf, hd, tl, n)); got.push(v === undefined ? 'empty' : E.toInt(v)); }
+  if (got.join() !== 'full,full,0,1,2,3,empty,empty') fail(`embed: ring gave ${got.join()}`);
+  let trapped = false;
+  try { E.int(2 ** 28); } catch { trapped = true; }
+  if (!trapped) fail('embed: 2^28 should not encode');
+  console.log('embed: counters, the four critical sections and the ring, called from JavaScript');
+}
+
+// 5. backends
 function command(backend, name) {
   if (backend === 'native') return [path.join(OUT, 'native', name), ['64', '1', '64']];
   if (backend === 'wasm') return [process.execPath, [path.join(OUT, 'wasm', name + '.js'), '64', '1', '64']];
@@ -104,7 +153,7 @@ for (const backend of wanted) {
   let pass = 0, failed = 0;
   const t0 = performance.now();
   for (const p of progs) {
-    const n = p.kind === 'edge' ? 1 : RUNS;
+    const n = p.kind === 'edge' || p.kind === 'bench' ? 1 : RUNS;
     const got = Array.from({ length: n }, () => runOnce(backend, p.name));
     if (p.expect === null) {
       console.log(`NOTE  ${p.name.padEnd(30)} racy control: ${got.join(', ')}`);

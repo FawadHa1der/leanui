@@ -1,0 +1,6450 @@
+{
+ "generated_by": "iris/bench/harness.mjs",
+ "machine": {
+  "env": "node",
+  "node": "v22.23.5",
+  "cores": 4,
+  "platform": "linux x64"
+ },
+ "note": "CI machine numbers: read them as ratios within one run; re-measure on the reference Mac (S5 re-run after adding a JIT warm-up, same machine and hour)",
+ "started": "2026-11-20T20:25:54.668Z",
+ "quick": false,
+ "Ws": [
+  1,
+  2,
+  4,
+  8
+ ],
+ "scenarios": [
+  {
+   "id": "s1",
+   "title": "S1 · Counters: lost-update roulette",
+   "rows": [
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 264035840,
+     "wall_ms": 300.77,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 341430272,
+     "wall_ms": 300.81,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.666,
+     "violations": {
+      "lost_updates": 276060415
+     },
+     "extra": {
+      "lost_pct": 80.9
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 498240256,
+     "wall_ms": 300.89,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.628,
+     "violations": {
+      "lost_updates": 457040971
+     },
+     "extra": {
+      "lost_pct": 91.7
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 419394304,
+     "wall_ms": 305.8,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.661,
+     "violations": {
+      "lost_updates": 374971307
+     },
+     "extra": {
+      "lost_pct": 89.4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 3079936,
+     "wall_ms": 300.58,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 5777152,
+     "wall_ms": 300.54,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.998,
+     "violations": {
+      "lost_updates": 207862
+     },
+     "extra": {
+      "lost_pct": 3.6
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 10450944,
+     "wall_ms": 300.56,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.997,
+     "violations": {
+      "lost_updates": 1340840
+     },
+     "extra": {
+      "lost_pct": 12.8
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "racy-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 10222336,
+     "wall_ms": 303.09,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.984,
+     "violations": {
+      "lost_updates": 1536826
+     },
+     "extra": {
+      "lost_pct": 15
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 23906304,
+     "wall_ms": 300.6,
+     "ops_per_us": 79.5282,
+     "cpu_ns_per_op": 12.7,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 3326720,
+     "wall_ms": 300.61,
+     "ops_per_us": 11.0665,
+     "cpu_ns_per_op": 181.3,
+     "fairness": 0.994,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 2650880,
+     "wall_ms": 300.74,
+     "ops_per_us": 8.8146,
+     "cpu_ns_per_op": 448.9,
+     "fairness": 0.998,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 2679552,
+     "wall_ms": 309.16,
+     "ops_per_us": 8.6671,
+     "cpu_ns_per_op": 454.1,
+     "fairness": 0.991,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 2451456,
+     "wall_ms": 300.79,
+     "ops_per_us": 8.15,
+     "cpu_ns_per_op": 124.4,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 3713024,
+     "wall_ms": 300.55,
+     "ops_per_us": 12.3541,
+     "cpu_ns_per_op": 162.1,
+     "fairness": 0.993,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 3275008,
+     "wall_ms": 304.04,
+     "ops_per_us": 10.7718,
+     "cpu_ns_per_op": 367.8,
+     "fairness": 0.999,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "atomics-add-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 3710208,
+     "wall_ms": 301.64,
+     "ops_per_us": 12.3003,
+     "cpu_ns_per_op": 322.2,
+     "fairness": 0.975,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 27786752,
+     "wall_ms": 300.62,
+     "ops_per_us": 92.4304,
+     "cpu_ns_per_op": 10.9,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 4136448,
+     "wall_ms": 300.57,
+     "ops_per_us": 13.762,
+     "cpu_ns_per_op": 145.6,
+     "fairness": 0.965,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 2671616,
+     "wall_ms": 304.32,
+     "ops_per_us": 8.7789,
+     "cpu_ns_per_op": 439.2,
+     "fairness": 0.981,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 2808064,
+     "wall_ms": 304.81,
+     "ops_per_us": 9.2125,
+     "cpu_ns_per_op": 426.4,
+     "fairness": 0.883,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 2992640,
+     "wall_ms": 300.51,
+     "ops_per_us": 9.9586,
+     "cpu_ns_per_op": 103,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 3869184,
+     "wall_ms": 300.53,
+     "ops_per_us": 12.8744,
+     "cpu_ns_per_op": 154.6,
+     "fairness": 0.995,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 3368448,
+     "wall_ms": 300.37,
+     "ops_per_us": 11.2142,
+     "cpu_ns_per_op": 354.4,
+     "fairness": 0.998,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 3173888,
+     "wall_ms": 303.08,
+     "ops_per_us": 10.4722,
+     "cpu_ns_per_op": 376.8,
+     "fairness": 0.787,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 15173888,
+     "wall_ms": 300.54,
+     "ops_per_us": 50.4889,
+     "cpu_ns_per_op": 19.8,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2033152,
+     "wall_ms": 300.63,
+     "ops_per_us": 6.7629,
+     "cpu_ns_per_op": 295.6,
+     "fairness": 1,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 1704192,
+     "wall_ms": 302.5,
+     "ops_per_us": 5.6337,
+     "cpu_ns_per_op": 706.9,
+     "fairness": 0.991,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1424896,
+     "wall_ms": 301.27,
+     "ops_per_us": 4.7297,
+     "cpu_ns_per_op": 842.2,
+     "fairness": 0.996,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1292544,
+     "wall_ms": 300.5,
+     "ops_per_us": 4.3013,
+     "cpu_ns_per_op": 235.5,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 2306816,
+     "wall_ms": 300.56,
+     "ops_per_us": 7.6752,
+     "cpu_ns_per_op": 261,
+     "fairness": 0.999,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 2123520,
+     "wall_ms": 302.88,
+     "ops_per_us": 7.0111,
+     "cpu_ns_per_op": 555.2,
+     "fairness": 1,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "cas-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2052096,
+     "wall_ms": 305.76,
+     "ops_per_us": 6.7114,
+     "cpu_ns_per_op": 584.1,
+     "fairness": 0.994,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 16166656,
+     "wall_ms": 300.6,
+     "ops_per_us": 53.7806,
+     "cpu_ns_per_op": 18.7,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1736192,
+     "wall_ms": 300.57,
+     "ops_per_us": 5.7763,
+     "cpu_ns_per_op": 348.7,
+     "fairness": 0.999,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 2084096,
+     "wall_ms": 300.57,
+     "ops_per_us": 6.9338,
+     "cpu_ns_per_op": 563.5,
+     "fairness": 0.979,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 2231040,
+     "wall_ms": 300.68,
+     "ops_per_us": 7.4199,
+     "cpu_ns_per_op": 533.2,
+     "fairness": 0.929,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1266176,
+     "wall_ms": 300.51,
+     "ops_per_us": 4.2134,
+     "cpu_ns_per_op": 244.5,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 2041344,
+     "wall_ms": 300.67,
+     "ops_per_us": 6.7894,
+     "cpu_ns_per_op": 300.2,
+     "fairness": 1,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 2003712,
+     "wall_ms": 302.93,
+     "ops_per_us": 6.6144,
+     "cpu_ns_per_op": 590.6,
+     "fairness": 0.99,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "casincr-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2546176,
+     "wall_ms": 305.49,
+     "ops_per_us": 8.3346,
+     "cpu_ns_per_op": 468.7,
+     "fairness": 0.903,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 12578560,
+     "wall_ms": 300.6,
+     "ops_per_us": 41.8448,
+     "cpu_ns_per_op": 24,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2711552,
+     "wall_ms": 300.55,
+     "ops_per_us": 9.022,
+     "cpu_ns_per_op": 217.7,
+     "fairness": 0.955,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 1334528,
+     "wall_ms": 300.63,
+     "ops_per_us": 4.4391,
+     "cpu_ns_per_op": 894.4,
+     "fairness": 0.999,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1906944,
+     "wall_ms": 305.8,
+     "ops_per_us": 6.2358,
+     "cpu_ns_per_op": 581.2,
+     "fairness": 0.966,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1308416,
+     "wall_ms": 300.6,
+     "ops_per_us": 4.3527,
+     "cpu_ns_per_op": 232.1,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 2127360,
+     "wall_ms": 300.51,
+     "ops_per_us": 7.0791,
+     "cpu_ns_per_op": 283.4,
+     "fairness": 0.994,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 2134016,
+     "wall_ms": 301.67,
+     "ops_per_us": 7.0741,
+     "cpu_ns_per_op": 553.6,
+     "fairness": 0.978,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "counter-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2386688,
+     "wall_ms": 303.28,
+     "ops_per_us": 7.8696,
+     "cpu_ns_per_op": 494.2,
+     "fairness": 0.936,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 83993856,
+     "wall_ms": 300.5,
+     "ops_per_us": 279.5105,
+     "cpu_ns_per_op": 3.6,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 165836800,
+     "wall_ms": 300.56,
+     "ops_per_us": 551.7566,
+     "cpu_ns_per_op": 3.6,
+     "fairness": 0.995,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 297580032,
+     "wall_ms": 300.62,
+     "ops_per_us": 989.8945,
+     "cpu_ns_per_op": 3.9,
+     "fairness": 0.983,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 299133440,
+     "wall_ms": 300.66,
+     "ops_per_us": 994.9334,
+     "cpu_ns_per_op": 4,
+     "fairness": 0.84,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 2620160,
+     "wall_ms": 300.64,
+     "ops_per_us": 8.7153,
+     "cpu_ns_per_op": 116.8,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 5019648,
+     "wall_ms": 299.18,
+     "ops_per_us": 16.7778,
+     "cpu_ns_per_op": 116.1,
+     "fairness": 0.995,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 11120640,
+     "wall_ms": 301.43,
+     "ops_per_us": 36.8926,
+     "cpu_ns_per_op": 106,
+     "fairness": 0.999,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "local-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 10603264,
+     "wall_ms": 300.99,
+     "ops_per_us": 35.2284,
+     "cpu_ns_per_op": 110.9,
+     "fairness": 0.978,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 17218048,
+     "wall_ms": 300.58,
+     "ops_per_us": 57.282,
+     "cpu_ns_per_op": 17.5,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 33548288,
+     "wall_ms": 300.64,
+     "ops_per_us": 111.5885,
+     "cpu_ns_per_op": 17.9,
+     "fairness": 1,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 60171264,
+     "wall_ms": 302.86,
+     "ops_per_us": 198.679,
+     "cpu_ns_per_op": 19.8,
+     "fairness": 0.994,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 61338624,
+     "wall_ms": 305.31,
+     "ops_per_us": 200.903,
+     "cpu_ns_per_op": 19.7,
+     "fairness": 0.955,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 2494976,
+     "wall_ms": 300.52,
+     "ops_per_us": 8.3022,
+     "cpu_ns_per_op": 122.4,
+     "fairness": null,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 4481280,
+     "wall_ms": 300.64,
+     "ops_per_us": 14.9059,
+     "cpu_ns_per_op": 134.4,
+     "fairness": 0.959,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 9511424,
+     "wall_ms": 300.88,
+     "ops_per_us": 31.6118,
+     "cpu_ns_per_op": 123.7,
+     "fairness": 0.991,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 8978944,
+     "wall_ms": 304.47,
+     "ops_per_us": 29.4903,
+     "cpu_ns_per_op": 131.4,
+     "fairness": 0.966,
+     "violations": {
+      "lost_updates": 0
+     },
+     "extra": {
+      "lost_pct": 0
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 1000000,
+     "wall_ms": 19.596,
+     "ops_per_us": 51.0308,
+     "cpu_ns_per_op": 19.1,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "1000000",
+      "expect": "1000000",
+      "threads": 1
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2000000,
+     "wall_ms": 20.56,
+     "ops_per_us": 97.2763,
+     "cpu_ns_per_op": 21.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "2000000",
+      "expect": "2000000",
+      "threads": 2
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 4000000,
+     "wall_ms": 21.047,
+     "ops_per_us": 190.0508,
+     "cpu_ns_per_op": 19.4,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "4000000",
+      "expect": "4000000",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 8000000,
+     "wall_ms": 45.12,
+     "ops_per_us": 177.305,
+     "cpu_ns_per_op": 22.1,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "8000000",
+      "expect": "8000000",
+      "threads": 8
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-native",
+     "W": 1,
+     "fuzz": false,
+     "ops": 1000000,
+     "wall_ms": 10.093,
+     "ops_per_us": 99.0786,
+     "cpu_ns_per_op": 9.6,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "1000000",
+      "expect": "1000000",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-native",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2000000,
+     "wall_ms": 11.418,
+     "ops_per_us": 175.162,
+     "cpu_ns_per_op": 10.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "2000000",
+      "expect": "2000000",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-native",
+     "W": 4,
+     "fuzz": false,
+     "ops": 4000000,
+     "wall_ms": 22.932,
+     "ops_per_us": 174.4287,
+     "cpu_ns_per_op": 13,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "4000000",
+      "expect": "4000000",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-native",
+     "W": 8,
+     "fuzz": false,
+     "ops": 8000000,
+     "wall_ms": 29.086,
+     "ops_per_us": 275.0464,
+     "cpu_ns_per_op": 12.6,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "8000000",
+      "expect": "8000000",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-wasm",
+     "W": 1,
+     "fuzz": false,
+     "ops": 1000000,
+     "wall_ms": 10.78,
+     "ops_per_us": 92.7644,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "1000000",
+      "expect": "1000000",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-wasm",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2000000,
+     "wall_ms": 11.082,
+     "ops_per_us": 180.4728,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "2000000",
+      "expect": "2000000",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-wasm",
+     "W": 4,
+     "fuzz": false,
+     "ops": 4000000,
+     "wall_ms": 15.031,
+     "ops_per_us": 266.1167,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "4000000",
+      "expect": "4000000",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "shards-wasm",
+     "W": 8,
+     "fuzz": false,
+     "ops": 8000000,
+     "wall_ms": 31.372,
+     "ops_per_us": 255.0045,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "8000000",
+      "expect": "8000000",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-native",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 1.631,
+     "ops_per_us": 122.6242,
+     "cpu_ns_per_op": 7.6,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "200000",
+      "expect": "200000",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-native",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 14.913,
+     "ops_per_us": 26.8222,
+     "cpu_ns_per_op": 74.9,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "400000",
+      "expect": "400000",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-native",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800000,
+     "wall_ms": 36.742,
+     "ops_per_us": 21.7734,
+     "cpu_ns_per_op": 175.7,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "800000",
+      "expect": "800000",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-native",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600000,
+     "wall_ms": 56.543,
+     "ops_per_us": 28.297,
+     "cpu_ns_per_op": 132.3,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "1600000",
+      "expect": "1600000",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-wasm",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 2.029,
+     "ops_per_us": 98.5707,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "200000",
+      "expect": "200000",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-wasm",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 18.667,
+     "ops_per_us": 21.4282,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "400000",
+      "expect": "400000",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-wasm",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800000,
+     "wall_ms": 78.629,
+     "ops_per_us": 10.1744,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "800000",
+      "expect": "800000",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "faa-wasm",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600000,
+     "wall_ms": 153.872,
+     "ops_per_us": 10.3983,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "1600000",
+      "expect": "1600000",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "wrap-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 8000,
+     "wall_ms": 0.72,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 1,
+     "violations": {
+      "wrapped_silently": 1
+     },
+     "extra": {
+      "final": -2147479648
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "wrap-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 8000,
+     "wall_ms": 0.84,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 1,
+     "violations": {
+      "wrapped_silently": 1
+     },
+     "extra": {
+      "final": -2147479648
+     }
+    },
+    {
+     "scenario": "s1",
+     "lane": "wrap-verified",
+     "W": 2,
+     "fuzz": false,
+     "trap": "integer overflow: result outside the 29-bit encoding (HeapLang ints are unbounded)",
+     "violations": {}
+    },
+    {
+     "scenario": "s1",
+     "lane": "wrap-verified",
+     "W": 2,
+     "fuzz": true,
+     "trap": "integer overflow: result outside the 29-bit encoding (HeapLang ints are unbounded)",
+     "violations": {}
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "title": "S2 · Lock zoo: one theorem, very different locks",
+   "rows": [
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 1,
+     "fuzz": false,
+     "ops": 224206752,
+     "wall_ms": 300.77,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 2,
+     "fuzz": false,
+     "ops": 5184800,
+     "wall_ms": 300.7,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.992,
+     "violations": {
+      "torn_reads": 5184785,
+      "lost_updates": 1988662
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 4,
+     "fuzz": false,
+     "ops": 4528096,
+     "wall_ms": 304.89,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.994,
+     "violations": {
+      "torn_reads": 4527794,
+      "lost_updates": 3295763
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 8,
+     "fuzz": false,
+     "ops": 5609824,
+     "wall_ms": 304.97,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.839,
+     "violations": {
+      "torn_reads": 5608777,
+      "lost_updates": 4529628
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 1,
+     "fuzz": true,
+     "ops": 847520,
+     "wall_ms": 300.48,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 2,
+     "fuzz": true,
+     "ops": 1634464,
+     "wall_ms": 300.55,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 1634245,
+      "lost_updates": 421937
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 4,
+     "fuzz": true,
+     "ops": 2547232,
+     "wall_ms": 300.99,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.982,
+     "violations": {
+      "torn_reads": 2546992,
+      "lost_updates": 1348570
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2804448,
+     "wall_ms": 310.63,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.925,
+     "violations": {
+      "torn_reads": 2804253,
+      "lost_updates": 1997046
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 12285472,
+     "wall_ms": 300.56,
+     "ops_per_us": 40.8757,
+     "cpu_ns_per_op": 24.4,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2930464,
+     "wall_ms": 300.55,
+     "ops_per_us": 9.7502,
+     "cpu_ns_per_op": 147.2,
+     "fairness": 0.994,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 2784672,
+     "wall_ms": 300.54,
+     "ops_per_us": 9.2655,
+     "cpu_ns_per_op": 251.8,
+     "fairness": 0.994,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 3446016,
+     "wall_ms": 300.86,
+     "ops_per_us": 11.4539,
+     "cpu_ns_per_op": 273.6,
+     "fairness": 0.964,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1232128,
+     "wall_ms": 300.58,
+     "ops_per_us": 4.0992,
+     "cpu_ns_per_op": 252.3,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 707328,
+     "wall_ms": 300.55,
+     "ops_per_us": 2.3534,
+     "cpu_ns_per_op": 587.8,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 679200,
+     "wall_ms": 300.58,
+     "ops_per_us": 2.2596,
+     "cpu_ns_per_op": 907.4,
+     "fairness": 0.997,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 659584,
+     "wall_ms": 300.79,
+     "ops_per_us": 2.1928,
+     "cpu_ns_per_op": 1184.5,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 5224384,
+     "wall_ms": 300.56,
+     "ops_per_us": 17.3821,
+     "cpu_ns_per_op": 58.5,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1495616,
+     "wall_ms": 300.57,
+     "ops_per_us": 4.976,
+     "cpu_ns_per_op": 300.9,
+     "fairness": 0.996,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 1382528,
+     "wall_ms": 300.54,
+     "ops_per_us": 4.6001,
+     "cpu_ns_per_op": 529.9,
+     "fairness": 0.996,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1379840,
+     "wall_ms": 300.69,
+     "ops_per_us": 4.5889,
+     "cpu_ns_per_op": 706.4,
+     "fairness": 0.984,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 400256,
+     "wall_ms": 300.59,
+     "ops_per_us": 1.3316,
+     "cpu_ns_per_op": 780.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 213184,
+     "wall_ms": 300.64,
+     "ops_per_us": 0.7091,
+     "cpu_ns_per_op": 1871,
+     "fairness": 0.941,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 175424,
+     "wall_ms": 300.57,
+     "ops_per_us": 0.5836,
+     "cpu_ns_per_op": 3250.6,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 152768,
+     "wall_ms": 300.9,
+     "ops_per_us": 0.5077,
+     "cpu_ns_per_op": 4419.2,
+     "fairness": 0.995,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 9636096,
+     "wall_ms": 300.63,
+     "ops_per_us": 32.0527,
+     "cpu_ns_per_op": 31.3,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1094304,
+     "wall_ms": 300.55,
+     "ops_per_us": 3.641,
+     "cpu_ns_per_op": 546.1,
+     "fairness": 0.921,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 462144,
+     "wall_ms": 300.53,
+     "ops_per_us": 1.5377,
+     "cpu_ns_per_op": 2550.7,
+     "fairness": 0.989,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 231776,
+     "wall_ms": 314.41,
+     "ops_per_us": 0.7372,
+     "cpu_ns_per_op": 5379,
+     "fairness": 0.852,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1280320,
+     "wall_ms": 300.53,
+     "ops_per_us": 4.2602,
+     "cpu_ns_per_op": 242.2,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 1284096,
+     "wall_ms": 300.51,
+     "ops_per_us": 4.273,
+     "cpu_ns_per_op": 465.4,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 797344,
+     "wall_ms": 300.63,
+     "ops_per_us": 2.6522,
+     "cpu_ns_per_op": 1441,
+     "fairness": 0.995,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 388128,
+     "wall_ms": 306.58,
+     "ops_per_us": 1.266,
+     "cpu_ns_per_op": 3143.8,
+     "fairness": 0.893,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 4916736,
+     "wall_ms": 300.55,
+     "ops_per_us": 16.3591,
+     "cpu_ns_per_op": 61.5,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 405568,
+     "wall_ms": 300.66,
+     "ops_per_us": 1.3489,
+     "cpu_ns_per_op": 1495.4,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 229728,
+     "wall_ms": 300.53,
+     "ops_per_us": 0.7644,
+     "cpu_ns_per_op": 5190.8,
+     "fairness": 0.995,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 115904,
+     "wall_ms": 309.65,
+     "ops_per_us": 0.3743,
+     "cpu_ns_per_op": 10610.3,
+     "fairness": 0.872,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 394816,
+     "wall_ms": 300.62,
+     "ops_per_us": 1.3134,
+     "cpu_ns_per_op": 769.3,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 394304,
+     "wall_ms": 300.52,
+     "ops_per_us": 1.3121,
+     "cpu_ns_per_op": 1545.1,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 259616,
+     "wall_ms": 306,
+     "ops_per_us": 0.8484,
+     "cpu_ns_per_op": 4591.9,
+     "fairness": 0.987,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 139136,
+     "wall_ms": 305.34,
+     "ops_per_us": 0.4557,
+     "cpu_ns_per_op": 8474.1,
+     "fairness": 0.942,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 7482144,
+     "wall_ms": 300.69,
+     "ops_per_us": 24.8832,
+     "cpu_ns_per_op": 40.3,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1080928,
+     "wall_ms": 300.62,
+     "ops_per_us": 3.5957,
+     "cpu_ns_per_op": 557.1,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 788032,
+     "wall_ms": 302.52,
+     "ops_per_us": 2.6049,
+     "cpu_ns_per_op": 1500.1,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 6208,
+     "wall_ms": 429.28,
+     "ops_per_us": 0.0145,
+     "cpu_ns_per_op": 271086.8,
+     "fairness": 0.414,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 857216,
+     "wall_ms": 300.53,
+     "ops_per_us": 2.8524,
+     "cpu_ns_per_op": 361.5,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 158816,
+     "wall_ms": 300.62,
+     "ops_per_us": 0.5283,
+     "cpu_ns_per_op": 3793.8,
+     "fairness": 0.998,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 72032,
+     "wall_ms": 300.76,
+     "ops_per_us": 0.2395,
+     "cpu_ns_per_op": 16005.2,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 1888,
+     "wall_ms": 409.56,
+     "ops_per_us": 0.0046,
+     "cpu_ns_per_op": 819304.6,
+     "fairness": 0.501,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 3740704,
+     "wall_ms": 300.56,
+     "ops_per_us": 12.4456,
+     "cpu_ns_per_op": 81.7,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 574336,
+     "wall_ms": 300.61,
+     "ops_per_us": 1.9106,
+     "cpu_ns_per_op": 1061.1,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 290176,
+     "wall_ms": 303.74,
+     "ops_per_us": 0.9554,
+     "cpu_ns_per_op": 4081.2,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 3104,
+     "wall_ms": 400.88,
+     "ops_per_us": 0.0077,
+     "cpu_ns_per_op": 511678.5,
+     "fairness": 0.538,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 264544,
+     "wall_ms": 299.61,
+     "ops_per_us": 0.883,
+     "cpu_ns_per_op": 1176.7,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 101152,
+     "wall_ms": 300.55,
+     "ops_per_us": 0.3366,
+     "cpu_ns_per_op": 6076.2,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 46592,
+     "wall_ms": 301.53,
+     "ops_per_us": 0.1545,
+     "cpu_ns_per_op": 25092.3,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 448,
+     "wall_ms": 386.06,
+     "ops_per_us": 0.0012,
+     "cpu_ns_per_op": 3200109.4,
+     "fairness": 0.766,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "weblocks",
+     "W": 1,
+     "fuzz": false,
+     "skipped": "Node 22 has no navigator.locks"
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-native",
+     "W": 1,
+     "fuzz": false,
+     "ops": 50000,
+     "wall_ms": 1.361,
+     "ops_per_us": 36.7377,
+     "cpu_ns_per_op": 26,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 50000)",
+      "expect": "(0, 50000)",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-native",
+     "W": 2,
+     "fuzz": false,
+     "ops": 100000,
+     "wall_ms": 12.528,
+     "ops_per_us": 7.9821,
+     "cpu_ns_per_op": 247,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 100000)",
+      "expect": "(0, 100000)",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-native",
+     "W": 4,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 19.078,
+     "ops_per_us": 10.4833,
+     "cpu_ns_per_op": 221.7,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 200000)",
+      "expect": "(0, 200000)",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-native",
+     "W": 8,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 37.239,
+     "ops_per_us": 10.7414,
+     "cpu_ns_per_op": 276.4,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 400000)",
+      "expect": "(0, 400000)",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-wasm",
+     "W": 1,
+     "fuzz": false,
+     "ops": 50000,
+     "wall_ms": 1.478,
+     "ops_per_us": 33.8295,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 50000)",
+      "expect": "(0, 50000)",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-wasm",
+     "W": 2,
+     "fuzz": false,
+     "ops": 100000,
+     "wall_ms": 10.548,
+     "ops_per_us": 9.4805,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 100000)",
+      "expect": "(0, 100000)",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-wasm",
+     "W": 4,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 21.505,
+     "ops_per_us": 9.3002,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 200000)",
+      "expect": "(0, 200000)",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-wasm",
+     "W": 8,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 38.606,
+     "ops_per_us": 10.3611,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 400000)",
+      "expect": "(0, 400000)",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-native",
+     "W": 1,
+     "fuzz": false,
+     "ops": 50000,
+     "wall_ms": 1.148,
+     "ops_per_us": 43.554,
+     "cpu_ns_per_op": 22.4,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 50000)",
+      "expect": "(0, 50000)",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-native",
+     "W": 2,
+     "fuzz": false,
+     "ops": 100000,
+     "wall_ms": 31.26,
+     "ops_per_us": 3.199,
+     "cpu_ns_per_op": 613.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 100000)",
+      "expect": "(0, 100000)",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-native",
+     "W": 4,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 139.054,
+     "ops_per_us": 1.4383,
+     "cpu_ns_per_op": 2693.9,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 200000)",
+      "expect": "(0, 200000)",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-native",
+     "W": 8,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 496.653,
+     "ops_per_us": 0.8054,
+     "cpu_ns_per_op": 4876.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 400000)",
+      "expect": "(0, 400000)",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-wasm",
+     "W": 1,
+     "fuzz": false,
+     "ops": 50000,
+     "wall_ms": 1.417,
+     "ops_per_us": 35.2858,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 50000)",
+      "expect": "(0, 50000)",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-wasm",
+     "W": 2,
+     "fuzz": false,
+     "ops": 100000,
+     "wall_ms": 25.948,
+     "ops_per_us": 3.8539,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 100000)",
+      "expect": "(0, 100000)",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-wasm",
+     "W": 4,
+     "fuzz": false,
+     "ops": 200000,
+     "wall_ms": 117.005,
+     "ops_per_us": 1.7093,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 200000)",
+      "expect": "(0, 200000)",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-wasm",
+     "W": 8,
+     "fuzz": false,
+     "ops": 400000,
+     "wall_ms": 472.005,
+     "ops_per_us": 0.8474,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "(0, 400000)",
+      "expect": "(0, 400000)",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-spin-js",
+     "W": 2,
+     "fuzz": false,
+     "violations": {},
+     "extra": {
+      "after_kill": "hung (no acquire within 1000 ms)"
+     },
+     "hung": true
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-futex-js",
+     "W": 2,
+     "fuzz": false,
+     "violations": {},
+     "extra": {
+      "after_kill": "hung (no acquire within 1000 ms)"
+     },
+     "hung": true
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-spin-verified",
+     "W": 2,
+     "fuzz": false,
+     "violations": {},
+     "extra": {
+      "after_kill": "hung (no acquire within 1000 ms)"
+     },
+     "hung": true
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-ticket-verified",
+     "W": 2,
+     "fuzz": false,
+     "violations": {},
+     "extra": {
+      "after_kill": "hung (no acquire within 1000 ms)"
+     },
+     "hung": true
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-futex-verified",
+     "W": 2,
+     "fuzz": false,
+     "violations": {},
+     "extra": {
+      "after_kill": "hung (no acquire within 1000 ms)"
+     },
+     "hung": true
+    },
+    {
+     "scenario": "s2",
+     "lane": "kill-weblocks",
+     "W": 1,
+     "fuzz": false,
+     "skipped": "Node 22 has no navigator.locks"
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "title": "S4 · SPSC ring: the glitch counter",
+   "rows": [
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19200,
+     "wall_ms": 402.02,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 150
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38400,
+     "wall_ms": 401.2,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 300
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 76800,
+     "wall_ms": 401.74,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 600
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 153600,
+     "wall_ms": 403.15,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1200
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 403.06,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 403.05,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77312,
+     "wall_ms": 403.26,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 154240,
+     "wall_ms": 403.18,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1205
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 61723008,
+     "wall_ms": 400.68,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 1828
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 91990144,
+     "wall_ms": 404.55,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 58071
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 55473536,
+     "wall_ms": 409.84,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 10203
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 32535936,
+     "wall_ms": 416.34,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 3199
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 54713856,
+     "wall_ms": 400.68,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 15912
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 98711936,
+     "wall_ms": 402.21,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 24098
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 53664768,
+     "wall_ms": 408.98,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 17160
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-early-js-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 20500992,
+     "wall_ms": 420.16,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 6253
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 1,
+     "fuzz": false,
+     "ops": 18688,
+     "wall_ms": 403.72,
+     "ops_per_us": 0.0463,
+     "cpu_ns_per_op": 4390.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 5,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 2,
+     "fuzz": false,
+     "ops": 37760,
+     "wall_ms": 408.71,
+     "ops_per_us": 0.0924,
+     "cpu_ns_per_op": 3794.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 7,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 4,
+     "fuzz": false,
+     "ops": 73600,
+     "wall_ms": 405.72,
+     "ops_per_us": 0.1814,
+     "cpu_ns_per_op": 3721.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 28,
+      "ticks": 603
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 8,
+     "fuzz": false,
+     "ops": 153856,
+     "wall_ms": 405.77,
+     "ops_per_us": 0.3792,
+     "cpu_ns_per_op": 1802.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 3,
+      "ticks": 1205
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 403.56,
+     "ops_per_us": 0.0479,
+     "cpu_ns_per_op": 1994.5,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 404.08,
+     "ops_per_us": 0.0957,
+     "cpu_ns_per_op": 1926.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77184,
+     "wall_ms": 405.55,
+     "ops_per_us": 0.1903,
+     "cpu_ns_per_op": 1757.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 603
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage",
+     "W": 8,
+     "fuzz": true,
+     "ops": 153984,
+     "wall_ms": 405.28,
+     "ops_per_us": 0.3799,
+     "cpu_ns_per_op": 1421.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1203
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 7579264,
+     "wall_ms": 403.05,
+     "ops_per_us": 18.8047,
+     "cpu_ns_per_op": 95.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 15501184,
+     "wall_ms": 404.34,
+     "ops_per_us": 38.3372,
+     "cpu_ns_per_op": 91.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 16928640,
+     "wall_ms": 405.31,
+     "ops_per_us": 41.7676,
+     "cpu_ns_per_op": 90.4,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 23737216,
+     "wall_ms": 405.29,
+     "ops_per_us": 58.5684,
+     "cpu_ns_per_op": 66.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 9445888,
+     "wall_ms": 404.06,
+     "ops_per_us": 23.3777,
+     "cpu_ns_per_op": 75.3,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 17778048,
+     "wall_ms": 404.92,
+     "ops_per_us": 43.9053,
+     "cpu_ns_per_op": 81.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 19944448,
+     "wall_ms": 405.99,
+     "ops_per_us": 49.126,
+     "cpu_ns_per_op": 73.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "postmessage-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 23326848,
+     "wall_ms": 406.1,
+     "ops_per_us": 57.4411,
+     "cpu_ns_per_op": 68,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19328,
+     "wall_ms": 402.92,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 2275.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38656,
+     "wall_ms": 403.03,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 2175.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 77312,
+     "wall_ms": 403.08,
+     "ops_per_us": 0.1918,
+     "cpu_ns_per_op": 1923.5,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 154624,
+     "wall_ms": 403.1,
+     "ops_per_us": 0.3836,
+     "cpu_ns_per_op": 1369.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1208
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 402.93,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 2207.4,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 402.98,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 1866.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77312,
+     "wall_ms": 403.01,
+     "ops_per_us": 0.1918,
+     "cpu_ns_per_op": 1648.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 154624,
+     "wall_ms": 403.15,
+     "ops_per_us": 0.3835,
+     "cpu_ns_per_op": 1275.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1208
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 56513024,
+     "wall_ms": 401.17,
+     "ops_per_us": 140.8688,
+     "cpu_ns_per_op": 14.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 108857728,
+     "wall_ms": 404.35,
+     "ops_per_us": 269.2152,
+     "cpu_ns_per_op": 14.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 42233216,
+     "wall_ms": 417.81,
+     "ops_per_us": 101.0814,
+     "cpu_ns_per_op": 38.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 22700288,
+     "wall_ms": 410.01,
+     "ops_per_us": 55.3655,
+     "cpu_ns_per_op": 71,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 50985216,
+     "wall_ms": 400.64,
+     "ops_per_us": 127.2602,
+     "cpu_ns_per_op": 15.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 89581440,
+     "wall_ms": 401.79,
+     "ops_per_us": 222.9538,
+     "cpu_ns_per_op": 17.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 44935552,
+     "wall_ms": 403.58,
+     "ops_per_us": 111.3436,
+     "cpu_ns_per_op": 34.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-js-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 17948032,
+     "wall_ms": 407.19,
+     "ops_per_us": 44.0776,
+     "cpu_ns_per_op": 89.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19328,
+     "wall_ms": 403.01,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 2856.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38656,
+     "wall_ms": 403.02,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 2775.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 4,
+     "fuzz": false,
+     "ops": 77056,
+     "wall_ms": 402.97,
+     "ops_per_us": 0.1912,
+     "cpu_ns_per_op": 2266.3,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 602
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 8,
+     "fuzz": false,
+     "ops": 154148,
+     "wall_ms": 403.34,
+     "ops_per_us": 0.3822,
+     "cpu_ns_per_op": 2016.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 4,
+      "ticks": 1208
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 402.98,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 3380.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 403.01,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 3076.5,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77312,
+     "wall_ms": 403.91,
+     "ops_per_us": 0.1914,
+     "cpu_ns_per_op": 2831.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap",
+     "W": 8,
+     "fuzz": true,
+     "ops": 154368,
+     "wall_ms": 403.31,
+     "ops_per_us": 0.3827,
+     "cpu_ns_per_op": 1840.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1206
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 974564,
+     "wall_ms": 400.69,
+     "ops_per_us": 2.4322,
+     "cpu_ns_per_op": 823.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2870574,
+     "wall_ms": 403.65,
+     "ops_per_us": 7.1115,
+     "cpu_ns_per_op": 551.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 849940,
+     "wall_ms": 404.61,
+     "ops_per_us": 2.1006,
+     "cpu_ns_per_op": 1884.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 736915,
+     "wall_ms": 413.02,
+     "ops_per_us": 1.7842,
+     "cpu_ns_per_op": 2204.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 718550,
+     "wall_ms": 400.67,
+     "ops_per_us": 1.7934,
+     "cpu_ns_per_op": 1113.4,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 1018069,
+     "wall_ms": 400.77,
+     "ops_per_us": 2.5403,
+     "cpu_ns_per_op": 1543.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 659539,
+     "wall_ms": 409.44,
+     "ops_per_us": 1.6108,
+     "cpu_ns_per_op": 2297.5,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-heap-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 430373,
+     "wall_ms": 409.84,
+     "ops_per_us": 1.0501,
+     "cpu_ns_per_op": 3680.2,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19328,
+     "wall_ms": 402.96,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 2292.6,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38656,
+     "wall_ms": 403.03,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 2133,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 4,
+     "fuzz": false,
+     "ops": 77312,
+     "wall_ms": 403.22,
+     "ops_per_us": 0.1917,
+     "cpu_ns_per_op": 1783.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 8,
+     "fuzz": false,
+     "ops": 154496,
+     "wall_ms": 403.19,
+     "ops_per_us": 0.3832,
+     "cpu_ns_per_op": 1433.4,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1207
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 402.97,
+     "ops_per_us": 0.048,
+     "cpu_ns_per_op": 2326.7,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 403.09,
+     "ops_per_us": 0.0959,
+     "cpu_ns_per_op": 2146.8,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77312,
+     "wall_ms": 403.09,
+     "ops_per_us": 0.1918,
+     "cpu_ns_per_op": 1805.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane",
+     "W": 8,
+     "fuzz": true,
+     "ops": 153600,
+     "wall_ms": 401.32,
+     "ops_per_us": 0.3827,
+     "cpu_ns_per_op": 1309.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1200
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 52784640,
+     "wall_ms": 400.61,
+     "ops_per_us": 131.7606,
+     "cpu_ns_per_op": 15.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 86957952,
+     "wall_ms": 403.53,
+     "ops_per_us": 215.4931,
+     "cpu_ns_per_op": 18.3,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 33890432,
+     "wall_ms": 410.03,
+     "ops_per_us": 82.6529,
+     "cpu_ns_per_op": 48.1,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 23038080,
+     "wall_ms": 417.68,
+     "ops_per_us": 55.1567,
+     "cpu_ns_per_op": 72.3,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 25465344,
+     "wall_ms": 400.62,
+     "ops_per_us": 63.565,
+     "cpu_ns_per_op": 31.4,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 61025792,
+     "wall_ms": 400.67,
+     "ops_per_us": 152.3106,
+     "cpu_ns_per_op": 25.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 22896128,
+     "wall_ms": 403.89,
+     "ops_per_us": 56.6894,
+     "cpu_ns_per_op": 65.9,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 12426752,
+     "wall_ms": 409.55,
+     "ops_per_us": 30.3426,
+     "cpu_ns_per_op": 129,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19328,
+     "wall_ms": 402.98,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38528,
+     "wall_ms": 402.91,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 301
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 4,
+     "fuzz": false,
+     "ops": 77312,
+     "wall_ms": 403.12,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 8,
+     "fuzz": false,
+     "ops": 154496,
+     "wall_ms": 403.28,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1207
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 402.89,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38656,
+     "wall_ms": 403.09,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 302
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77312,
+     "wall_ms": 403.17,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early",
+     "W": 8,
+     "fuzz": true,
+     "ops": 154624,
+     "wall_ms": 403.22,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1208
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 61454720,
+     "wall_ms": 400.65,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 1192
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 108633984,
+     "wall_ms": 403.1,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 12302
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 5712896,
+     "wall_ms": 404.45,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 386
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 18170624,
+     "wall_ms": 414.93,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 2197
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 27306368,
+     "wall_ms": 400.6,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 2712
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 51214848,
+     "wall_ms": 401.67,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 8813
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 24963968,
+     "wall_ms": 409.67,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 4688
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "ring-dataplane-early-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 10060800,
+     "wall_ms": 411.81,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 2477
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 1,
+     "fuzz": false,
+     "ops": 19328,
+     "wall_ms": 403.01,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 2,
+     "fuzz": false,
+     "ops": 38528,
+     "wall_ms": 402.98,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 301
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 4,
+     "fuzz": false,
+     "ops": 77312,
+     "wall_ms": 403.05,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 604
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 8,
+     "fuzz": false,
+     "ops": 154624,
+     "wall_ms": 403.25,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1208
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 1,
+     "fuzz": true,
+     "ops": 19328,
+     "wall_ms": 403.04,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 151
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 2,
+     "fuzz": true,
+     "ops": 38400,
+     "wall_ms": 400.56,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 300
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 4,
+     "fuzz": true,
+     "ops": 77056,
+     "wall_ms": 403.05,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 602
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant",
+     "W": 8,
+     "fuzz": true,
+     "ops": 154368,
+     "wall_ms": 403.95,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 0
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 1206
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 1,
+     "fuzz": false,
+     "ops": 1307852,
+     "wall_ms": 400.7,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 5355
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 2,
+     "fuzz": false,
+     "ops": 2445490,
+     "wall_ms": 404.01,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 4123
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 4,
+     "fuzz": false,
+     "ops": 987455,
+     "wall_ms": 405.14,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 1368
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 8,
+     "fuzz": false,
+     "ops": 915407,
+     "wall_ms": 410.3,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 2109
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 1,
+     "fuzz": true,
+     "ops": 725356,
+     "wall_ms": 400.76,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 364
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 2,
+     "fuzz": true,
+     "ops": 1324263,
+     "wall_ms": 400.71,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 1757
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 4,
+     "fuzz": true,
+     "ops": 668012,
+     "wall_ms": 410.01,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 526
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    },
+    {
+     "scenario": "s4",
+     "lane": "heap-mutant-stress",
+     "W": 8,
+     "fuzz": true,
+     "ops": 438307,
+     "wall_ms": 401.95,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "stale_or_reordered": 330
+     },
+     "extra": {
+      "underruns": 0,
+      "ticks": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "title": "S5 · Disjoint tiles: a parallel Mandelbrot with zero synchronisation",
+   "rows": [
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 21.17,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 10.73,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1.05,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 6.04,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1.13,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 7.9,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 2,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 2.45,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 21.78,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 10.66,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 2,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 7.19,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 3,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1.09,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "racy-claimer-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 6.01,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 3,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 2,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 21.41,
+     "ops_per_us": 3.0609,
+     "cpu_ns_per_op": 350.2,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 12.31,
+     "ops_per_us": 5.322,
+     "cpu_ns_per_op": 364.5,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.02,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 11.69,
+     "ops_per_us": 5.6075,
+     "cpu_ns_per_op": 366.3,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.87,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 6.79,
+     "ops_per_us": 9.6525,
+     "cpu_ns_per_op": 360.4,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 2.14,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 1,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 22.07,
+     "ops_per_us": 2.9691,
+     "cpu_ns_per_op": 360.9,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 2,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 10.83,
+     "ops_per_us": 6.0507,
+     "cpu_ns_per_op": 414.4,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.02,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 4,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 10.48,
+     "ops_per_us": 6.2555,
+     "cpu_ns_per_op": 472.5,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.87,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "postmessage",
+     "W": 8,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 6.41,
+     "ops_per_us": 10.2308,
+     "cpu_ns_per_op": 278.1,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 2.44,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 21.04,
+     "ops_per_us": 3.1154,
+     "cpu_ns_per_op": 344,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 9.53,
+     "ops_per_us": 6.8749,
+     "cpu_ns_per_op": 292.6,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 10.3,
+     "ops_per_us": 6.3612,
+     "cpu_ns_per_op": 333.9,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.91,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 9.6,
+     "ops_per_us": 6.8292,
+     "cpu_ns_per_op": 365,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 2.94,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 20.77,
+     "ops_per_us": 3.1552,
+     "cpu_ns_per_op": 368.6,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 9.87,
+     "ops_per_us": 6.6387,
+     "cpu_ns_per_op": 337.5,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.07,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 11.01,
+     "ops_per_us": 5.9511,
+     "cpu_ns_per_op": 565.4,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 1.87,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "sab-static-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 5.86,
+     "ops_per_us": 11.189,
+     "cpu_ns_per_op": 337.6,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0
+     },
+     "extra": {
+      "imbalance": 2.16,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 20.4,
+     "ops_per_us": 3.2129,
+     "cpu_ns_per_op": 350.4,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 11.27,
+     "ops_per_us": 5.8131,
+     "cpu_ns_per_op": 397.7,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 8.23,
+     "ops_per_us": 7.965,
+     "cpu_ns_per_op": 457.9,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1.02,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 5.33,
+     "ops_per_us": 12.2871,
+     "cpu_ns_per_op": 321.3,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 2.04,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 20.65,
+     "ops_per_us": 3.1742,
+     "cpu_ns_per_op": 366.8,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 9.74,
+     "ops_per_us": 6.7292,
+     "cpu_ns_per_op": 296.8,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 5.58,
+     "ops_per_us": 11.7446,
+     "cpu_ns_per_op": 311.6,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 1.09,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "faa-claimer-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 65536,
+     "wall_ms": 5.62,
+     "ops_per_us": 11.6706,
+     "cpu_ns_per_op": 332.9,
+     "fairness": null,
+     "violations": {
+      "wrong_checksum": 0,
+      "double_claims": 0,
+      "missed_tiles": 0
+     },
+     "extra": {
+      "imbalance": 2.01,
+      "checksum": 3535067
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 72.909,
+     "ops_per_us": 0.8989,
+     "cpu_ns_per_op": 1122.3,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 1
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 39.341,
+     "ops_per_us": 1.6658,
+     "cpu_ns_per_op": 1158.7,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 2
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 23.509,
+     "ops_per_us": 2.7877,
+     "cpu_ns_per_op": 1003.9,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 33.054,
+     "ops_per_us": 1.9827,
+     "cpu_ns_per_op": 1437.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 8
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-native",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 16.552,
+     "ops_per_us": 3.9594,
+     "cpu_ns_per_op": 252.1,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-native",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 7.18,
+     "ops_per_us": 9.1276,
+     "cpu_ns_per_op": 198.6,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-native",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 6.534,
+     "ops_per_us": 10.03,
+     "cpu_ns_per_op": 284,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-native",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 7.187,
+     "ops_per_us": 9.1187,
+     "cpu_ns_per_op": 264.5,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 10
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-wasm",
+     "W": 1,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 15.788,
+     "ops_per_us": 4.151,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 3
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-wasm",
+     "W": 2,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 11.998,
+     "ops_per_us": 5.4622,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 4
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-wasm",
+     "W": 4,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 7.824,
+     "ops_per_us": 8.3763,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 6
+     }
+    },
+    {
+     "scenario": "s5",
+     "lane": "pmapg-wasm",
+     "W": 8,
+     "fuzz": false,
+     "ops": 65536,
+     "wall_ms": 13.379,
+     "ops_per_us": 4.8984,
+     "cpu_ns_per_op": null,
+     "fairness": null,
+     "violations": {
+      "wrong_result": 0
+     },
+     "extra": {
+      "result": "3535067",
+      "expect": "3535067",
+      "threads": 10
+     }
+    }
+   ]
+  },
+  {
+   "id": "s11",
+   "title": "S11 · Lost-wakeup hunt: where the proof does not help",
+   "rows": [
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200,
+     "wall_ms": 6.12,
+     "ops_per_us": 0.0327,
+     "cpu_ns_per_op": 28500,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400,
+     "wall_ms": 8.79,
+     "ops_per_us": 0.0455,
+     "cpu_ns_per_op": 25832.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800,
+     "wall_ms": 17.91,
+     "ops_per_us": 0.0447,
+     "cpu_ns_per_op": 34352.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600,
+     "wall_ms": 30.27,
+     "ops_per_us": 0.0529,
+     "cpu_ns_per_op": 31443.1,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 1,
+     "fuzz": true,
+     "ops": 200,
+     "wall_ms": 6.6,
+     "ops_per_us": 0.0303,
+     "cpu_ns_per_op": 29075,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 2,
+     "fuzz": true,
+     "ops": 400,
+     "wall_ms": 8.78,
+     "ops_per_us": 0.0455,
+     "cpu_ns_per_op": 25577.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 4,
+     "fuzz": true,
+     "ops": 800,
+     "wall_ms": 18.29,
+     "ops_per_us": 0.0437,
+     "cpu_ns_per_op": 33412.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "epoch-ok",
+     "W": 8,
+     "fuzz": true,
+     "ops": 1600,
+     "wall_ms": 28.64,
+     "ops_per_us": 0.0559,
+     "cpu_ns_per_op": 30230,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200,
+     "wall_ms": 10.8,
+     "ops_per_us": 0.0185,
+     "cpu_ns_per_op": 27560,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400,
+     "wall_ms": 289.97,
+     "ops_per_us": 0.0014,
+     "cpu_ns_per_op": 50132.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 53,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800,
+     "wall_ms": 183.24,
+     "ops_per_us": 0.0044,
+     "cpu_ns_per_op": 43951.3,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 45,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600,
+     "wall_ms": 150.87,
+     "ops_per_us": 0.0106,
+     "cpu_ns_per_op": 37345,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 28,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 1,
+     "fuzz": true,
+     "ops": 200,
+     "wall_ms": 10.54,
+     "ops_per_us": 0.019,
+     "cpu_ns_per_op": 25125,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 2,
+     "fuzz": true,
+     "ops": 400,
+     "wall_ms": 292.25,
+     "ops_per_us": 0.0014,
+     "cpu_ns_per_op": 46900,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 55,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 4,
+     "fuzz": true,
+     "ops": 800,
+     "wall_ms": 239.95,
+     "ops_per_us": 0.0033,
+     "cpu_ns_per_op": 48581.2,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 63,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-before-store",
+     "W": 8,
+     "fuzz": true,
+     "ops": 1600,
+     "wall_ms": 129.31,
+     "ops_per_us": 0.0124,
+     "cpu_ns_per_op": 36008.1,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 32,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200,
+     "wall_ms": 1030.95,
+     "ops_per_us": 0.0002,
+     "cpu_ns_per_op": 86110,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 200,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400,
+     "wall_ms": 1031.21,
+     "ops_per_us": 0.0004,
+     "cpu_ns_per_op": 75612.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 399,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800,
+     "wall_ms": 1029.83,
+     "ops_per_us": 0.0008,
+     "cpu_ns_per_op": 62276.2,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 797,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600,
+     "wall_ms": 1029.73,
+     "ops_per_us": 0.0016,
+     "cpu_ns_per_op": 50156.3,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1569,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 1,
+     "fuzz": true,
+     "ops": 200,
+     "wall_ms": 1028.08,
+     "ops_per_us": 0.0002,
+     "cpu_ns_per_op": 97510,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 199,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 2,
+     "fuzz": true,
+     "ops": 400,
+     "wall_ms": 1030.23,
+     "ops_per_us": 0.0004,
+     "cpu_ns_per_op": 77145,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 398,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 4,
+     "fuzz": true,
+     "ops": 800,
+     "wall_ms": 1033.79,
+     "ops_per_us": 0.0008,
+     "cpu_ns_per_op": 61097.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 797,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "wrong-word",
+     "W": 8,
+     "fuzz": true,
+     "ops": 1600,
+     "wall_ms": 1033.33,
+     "ops_per_us": 0.0015,
+     "cpu_ns_per_op": 50901.3,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1594,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 1,
+     "fuzz": false,
+     "ops": 200,
+     "wall_ms": 7.41,
+     "ops_per_us": 0.027,
+     "cpu_ns_per_op": 33900,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 2,
+     "fuzz": false,
+     "ops": 400,
+     "wall_ms": 1015.19,
+     "ops_per_us": 0.0004,
+     "cpu_ns_per_op": 86082.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 197,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800,
+     "wall_ms": 1039.1,
+     "ops_per_us": 0.0008,
+     "cpu_ns_per_op": 62750,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 586,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600,
+     "wall_ms": 1033.86,
+     "ops_per_us": 0.0015,
+     "cpu_ns_per_op": 47310.6,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1351,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 1,
+     "fuzz": true,
+     "ops": 200,
+     "wall_ms": 5.39,
+     "ops_per_us": 0.0371,
+     "cpu_ns_per_op": 25530,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 2,
+     "fuzz": true,
+     "ops": 400,
+     "wall_ms": 981.84,
+     "ops_per_us": 0.0004,
+     "cpu_ns_per_op": 80392.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 196,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 4,
+     "fuzz": true,
+     "ops": 800,
+     "wall_ms": 1039.29,
+     "ops_per_us": 0.0008,
+     "cpu_ns_per_op": 67346.2,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 587,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 8,
+     "fuzz": true,
+     "ops": 1600,
+     "wall_ms": 1036.9,
+     "ops_per_us": 0.0015,
+     "cpu_ns_per_op": 49061.9,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1342,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 5070512,
+     "wall_ms": 300.5,
+     "ops_per_us": 16.8734,
+     "cpu_ns_per_op": 60.4,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 0,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1289696,
+     "wall_ms": 300.68,
+     "ops_per_us": 4.2892,
+     "cpu_ns_per_op": 349.6,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 24671,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 1476576,
+     "wall_ms": 299.6,
+     "ops_per_us": 4.9286,
+     "cpu_ns_per_op": 502.1,
+     "fairness": 0.979,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 19137,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1679368,
+     "wall_ms": 301.02,
+     "ops_per_us": 5.5789,
+     "cpu_ns_per_op": 580.2,
+     "fairness": 0.989,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 17656,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 434424,
+     "wall_ms": 300.59,
+     "ops_per_us": 1.4452,
+     "cpu_ns_per_op": 732.2,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 0,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 187000,
+     "wall_ms": 300.58,
+     "ops_per_us": 0.6221,
+     "cpu_ns_per_op": 2196.4,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 15727,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 166712,
+     "wall_ms": 303.02,
+     "ops_per_us": 0.5502,
+     "cpu_ns_per_op": 3407.9,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 14416,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 136344,
+     "wall_ms": 301.1,
+     "ops_per_us": 0.4528,
+     "cpu_ns_per_op": 5170,
+     "fairness": 0.984,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 13903,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 5894808,
+     "wall_ms": 300.41,
+     "ops_per_us": 19.6223,
+     "cpu_ns_per_op": 51.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 0,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 4828760,
+     "wall_ms": 304.92,
+     "ops_per_us": 15.8362,
+     "cpu_ns_per_op": 63.8,
+     "fairness": 0.979,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 15,
+      "timeouts": 15
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 4388664,
+     "wall_ms": 303.03,
+     "ops_per_us": 14.4827,
+     "cpu_ns_per_op": 75.4,
+     "fairness": 0.969,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 45,
+      "timeouts": 45
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 3868720,
+     "wall_ms": 312.41,
+     "ops_per_us": 12.3836,
+     "cpu_ns_per_op": 83.4,
+     "fairness": 0.788,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 102,
+      "timeouts": 102
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 440840,
+     "wall_ms": 300.59,
+     "ops_per_us": 1.4666,
+     "cpu_ns_per_op": 712.1,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 0,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 391208,
+     "wall_ms": 302.85,
+     "ops_per_us": 1.2918,
+     "cpu_ns_per_op": 810.5,
+     "fairness": 0.962,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 15,
+      "timeouts": 15
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 291952,
+     "wall_ms": 303.06,
+     "ops_per_us": 0.9634,
+     "cpu_ns_per_op": 1110.6,
+     "fairness": 0.411,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 45,
+      "timeouts": 45
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "nowake-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 323992,
+     "wall_ms": 322.84,
+     "ops_per_us": 1.0036,
+     "cpu_ns_per_op": 1033.6,
+     "fairness": 0.374,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 106,
+      "timeouts": 106
+     }
+    }
+   ]
+  }
+ ],
+ "finished": "2026-11-20T20:28:24.987Z"
+}
