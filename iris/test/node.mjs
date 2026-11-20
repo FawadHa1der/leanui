@@ -7,10 +7,11 @@
 //     controls show interleavings (a lost update, the ring mutant's stale reads);
 //  4. the library modules' kernels, called from JavaScript through rt/embed.mjs, give their results;
 //  5. each translated program, on real threads, gives the result HeapLang's semantics gives, or
-//     traps where the encoding must (29-bit ints). Concurrent programs run several times. The
-//     racy controls are recorded, never required: stress results are probabilistic.
+//     traps where the encoding must (29-bit ints). Concurrent programs run several times, and one
+//     runs three times in one process, as the harness runs programs. The racy controls are
+//     recorded, never required: stress results are probabilistic.
 // Backends: js always; native and wasm when build.sh built them ("not built" otherwise; a backend
-// built only in part fails).
+// built only in part, or named in --backends and not built, fails).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -107,7 +108,9 @@ for (const p of progs.filter((p) => p.expect === null && p.interp.length))
 // must lose an update and some must read the ring mutant's stale slots, or the interpreter has
 // stopped interleaving.
 const someInterp = (name, ok) => progs.find((p) => p.name === name)?.interp.some((i) => /^-?\d+$/.test(i.result) && ok(Number(i.result)));
-if (!someInterp('small_counter_racy', (n) => n < 45)) fail('interp: no schedule of small_counter_racy loses an update');
+// the racy counter has the same threads and increments as the FAA counter
+const fullCount = Number(progs.find((p) => p.name === 'small_counter_faa').expect);
+if (!someInterp('small_counter_racy', (n) => n < fullCount)) fail('interp: no schedule of small_counter_racy loses an update');
 if (!someInterp('small_spsc_early', (n) => n > 0)) fail('interp: no schedule of small_spsc_early reads a stale slot');
 
 // 4. the embedding ABI (rt/embed.mjs): library kernels called from JavaScript, one thread
@@ -146,13 +149,13 @@ if (!someInterp('small_spsc_early', (n) => n > 0)) fail('interp: no schedule of 
 }
 
 // 5. backends
-function command(backend, name) {
-  if (backend === 'native') return [path.join(OUT, 'native', name), ['64', '1', '64']];
-  if (backend === 'wasm') return [process.execPath, [path.join(OUT, 'wasm', name + '.js'), '64', '1', '64']];
-  return [process.execPath, [path.join(IRIS, 'rt/run.mjs'), path.join(OUT, 'gen/js', name + '.mjs'), '--json', '--mb', '64']];
+function command(backend, name, runs) {
+  if (backend === 'native') return [path.join(OUT, 'native', name), ['64', String(runs), '64']];
+  if (backend === 'wasm') return [process.execPath, [path.join(OUT, 'wasm', name + '.js'), '64', String(runs), '64']];
+  return [process.execPath, [path.join(IRIS, 'rt/run.mjs'), path.join(OUT, 'gen/js', name + '.mjs'), '--json', '--mb', '64', '--runs', String(runs)]];
 }
-function runOnce(backend, name) {
-  const [cmd, argv] = command(backend, name);
+function runOnce(backend, name, runs = 1) {
+  const [cmd, argv] = command(backend, name, runs);
   try {
     const out = execFileSync(cmd, argv, { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] });
     return String(JSON.parse(out.trim().split('\n').pop()).result);
@@ -168,7 +171,11 @@ function runOnce(backend, name) {
 const binary = (backend, name) => backend === 'native' ? path.join(OUT, 'native', name) : path.join(OUT, 'wasm', name + '.wasm');
 for (const backend of wanted) {
   if (backend !== 'js') {
-    if (!fs.existsSync(path.join(OUT, backend))) { console.log(`\n[${backend}] not built`); continue; }
+    if (!fs.existsSync(path.join(OUT, backend))) {
+      if (args.includes('--backends')) fail(`[${backend}] not built, but named in --backends`);
+      else console.log(`\n[${backend}] not built`);
+      continue;
+    }
     const missing = progs.filter((p) => !fs.existsSync(binary(backend, p.name))).map((p) => p.name);
     if (missing.length) { fail(`[${backend}] ${missing.length} of ${progs.length} programs not built: ${missing.join(', ')}`); continue; }
   }
@@ -185,6 +192,10 @@ for (const backend of wanted) {
     if (got.every((g) => g === p.expect)) { pass++; console.log(`PASS  ${p.name.padEnd(30)} ${p.expect}${p.closed ? `   (${p.closed.split('.').pop()})` : ''}`); }
     else { failed++; fail(`${p.name.padEnd(30)} expected ${p.expect}, got ${got.join(', ')}`); }
   }
+  // several runs in one process, as the harness runs them: every run's value is compared
+  const multi = runOnce(backend, 'small_counter_faa', 3);
+  if (multi === progs.find((p) => p.name === 'small_counter_faa').expect) pass++;
+  else { failed++; fail(`small_counter_faa, 3 runs in one process: got ${multi}`); }
   console.log(`[${backend}] ${pass} passed, ${failed} failed (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
 }
 

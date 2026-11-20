@@ -122,9 +122,11 @@ async function runProgramLane(host, lane, W, sizes) {
   const expect = host.manifest.programs.find((p) => p.name === name)?.expect;
   const ops = lane.ops(W, sizes);
   const ok = !r.trap && r.result === expect;
+  // a row that trapped or hung has no speed, even if some runs finished before it
+  const timed = !r.trap && !r.error;
   return {
-    ops, wall_ms: r.wall_ms, ops_per_us: r.wall_ms ? +(ops / (r.wall_ms * 1000)).toFixed(4) : null,
-    cpu_ns_per_op: r.cpu_ms != null && r.cpu_ms >= 0 ? +((r.cpu_ms * 1e6) / ops).toFixed(1) : null,
+    ops, wall_ms: r.wall_ms, ops_per_us: timed && r.wall_ms ? +(ops / (r.wall_ms * 1000)).toFixed(4) : null,
+    cpu_ns_per_op: timed && r.cpu_ms != null && r.cpu_ms >= 0 ? +((r.cpu_ms * 1e6) / ops).toFixed(1) : null,
     fairness: null, trap: r.trap || undefined, error: r.error,
     violations: { wrong_result: ok ? 0 : 1 }, extra: { result: r.result, expect, threads: r.threads },
   };

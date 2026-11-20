@@ -44,7 +44,8 @@ bench/ (harness.mjs in Node, page/ in a browser) ◀─────────�
 The generator finds the kernels in each program and each library export by comparing terms with
 the proved constants (Lean's `=` on `Val`), and records them and their theorems in the manifest.
 A kernel therefore cannot drift from its proof: there is no second copy to drift. The proof chips
-of the harness and the page are built from that manifest.
+of the harness and the page take their kernels and theorems from that manifest; each lane's scope
+and its trusted and not-proved lines are written by hand in its scenario module.
 
 ## What is proved
 
@@ -61,15 +62,15 @@ names is in that guard.
 | `TicketLock` | iris-lean `Lib/TicketLock.lean` | `newlock_spec`, `waitLoop_spec`, `acquire_spec`, `release_spec` | The same `Lock` spec. FIFO order is not part of it. |
 | `RwSpinLock` | iris-lean `Lib/RwSpinLock.lean` | `newlock_spec`, `acquireReader_spec`, `releaseReader_spec`, `acquireWriter_spec`, `releaseWriter_spec` (and the two `tryAcquire…`) | Readers get a fraction of the resource, the writer all of it. |
 | `FutexMutex` | `Kernels/FutexMutex.lean` | `newlock_spec`, `slow_spec`, `acquire_spec`, `release_spec`, `isLock_iff`, `instLock` | Drepper's three-state mutex, which parks waiters instead of spinning: the same `Lock` spec (`instLock` is the instance). The lock word stays in {0, 1, 2}. |
-| `FutexNoWake` | `Kernels/FutexNoWake.lean` | `releaseNoWake_spec`, `instLock`, `criticalNoWake_spec` | `FutexMutex` with its `futexWake` removed, a lost-wakeup bug: the very same `Lock` spec. The proof cannot see a liveness bug (S11). |
-| `Critical` | `Kernels/Critical.lean` | `critical_spec`, `criticalSpin_spec`, `criticalTicket_spec`, `criticalFutex_spec` | One critical section (check two cells are equal, bump both) proved once for every `Lock` instance: it always returns `true`. The three locks of S2 get the same theorem. |
+| `FutexNoWake` | `Kernels/FutexNoWake.lean` | `releaseNoWake_spec`, `instLock`, `criticalNoWake_spec` | `FutexMutex` with its `futexWake` removed, a lost-wakeup bug: the very same `Lock` spec, so `critical_spec` covers its critical section too. The proof cannot see a liveness bug (S11). |
+| `Critical` | `Kernels/Critical.lean` | `critical_spec`, `criticalSpin_spec`, `criticalTicket_spec`, `criticalFutex_spec` | One critical section (check two cells are equal, bump both) proved once for every `Lock` instance: if it returns, it returns `true`. The three locks of S2 get the same theorem. |
 | `Hints` | `Kernels/Hints.lean` | `futexWait_spec`, `futexWake_spec` | Two functions that do nothing in HeapLang; the translator turns them into `Atomics.wait` and `Atomics.notify`. |
 | `Counter` | iris-lean `Lib/Counter.lean` | `newcounter_mono_spec`, `incr_mono_spec`, `read_mono_spec`, `newcounter_contrib_spec`, `incr_contrib_spec`, `read_contrib_spec`, `read_contrib_spec_1` | A CAS-loop counter: a read returns at least any lower bound its caller holds, and per-thread fractional contributions add up to the value (ghost fractions over one shared cell, not physical shards). Not logically atomic. |
 | `AtomicCounter` | `Kernels/AtomicCounter.lean` | `faaIncr_spec`, `casIncr_spec`, `casIncr_seq` | `faaIncr` (one `faa`) and `casIncr` (a CAS loop) are logically atomic: `<<l ↦ n>> incr l <<l ↦ n+1 \| RET n>>`, so a client can open its own invariant around the call. |
-| `Shards` | `Kernels/Shards.lean` | `bump_spec`, `shardCount_spec` | `n` threads each count `k` in a cell they own and add it to their own shard: every shard ends `k` higher. ParMap-style ownership; no invariant, no ghost state, no atomics. |
+| `Shards` | `Kernels/Shards.lean` | `bump_spec`, `shardCount_spec` | `n` threads each count `k` in a cell they own and add it to their own shard: every shard ends `k` higher. ParMap-style ownership; no invariant, no ghost state, no read-modify-write atomics. |
 | `Treiber` | `Kernels/Treiber.lean`, `Kernels/TreiberAtomic.lean` | `newStack_spec`, `push_spec`, `pop_spec`; `newStackA_spec`, `pushA_spec`, `popA_spec` | A pop returns a pushed element together with the resource its pusher gave up. The second set gives push and pop logically atomic specs against an abstract list (the Iris form of linearizability; the link to histories is not formalised in Lean). Nodes are never freed, which is why there is no ABA. |
 | `SpscRing` | `Kernels/SpscRing.lean` | `rb_init`, `tryPush_spec`, `tryPop_spec` | A bounded single-producer, single-consumer ring: the i-th push hands `P i v` to the i-th pop. With `P i v := v = msgs[i]` that is FIFO with nothing lost or duplicated. |
-| `ParMap` | `Kernels/ParMap.lean` | `pmap_spec` | A fork-join map of a pure function over an array, each thread owning a disjoint half: no invariant, no ghost state, no atomics. Pointwise only: a stencil (a blur) needs a different spec. |
+| `ParMap` | `Kernels/ParMap.lean` | `pmap_spec` | A fork-join map of a pure function over an array, each thread owning a disjoint half: no invariant, no ghost state, no read-modify-write atomics. Pointwise only: a stencil (a blur) needs a different spec. |
 | `ParMapG` | `Kernels/ParMapG.lean` | `seqMap_spec`, `pmapG_spec` | ParMap with a grain size: parts of at most `g` cells are mapped sequentially, so `W` bands need `W` threads instead of one per cell. The same ownership proof. |
 | `Mandel` | `Kernels/Mandel.lean` | `iter_spec`, `mandel_spec` | `mandel` computes the Lean function `Mandel.g` (a pixel's Mandelbrot iteration count, fixed point): the per-element spec `pmapG_spec` needs, so S5's whole fork-join render is covered. |
 | `Spawn`, `Par` | iris-lean `Lib/Spawn.lean`, `Lib/Par.lean` | `spawn_spec`, `join_spec`, `par_spec` | `join` returns a value satisfying the spawned thread's postcondition; `e1 ‖ e2` returns both results. The join spins. |
@@ -146,10 +147,10 @@ That is safety and partial correctness, nothing more.
 |---|---|
 | The translator, `Translate.lean` (about 580 lines) | Not verified. Tested: each program's result on real threads must match the result HeapLang's semantics gives, worked out by hand or by the reference interpreter under four schedules (`test/node.mjs`). |
 | The reference interpreter, `Interp.lean` | Reuses iris-lean's substitution, operators, heap and `Loc.fresh`; the evaluation contexts, head steps and scheduler are transcribed from `Semantics.lean`, not proved equal to `BaseStep`. |
-| The encoding: one Int32 word per value | The CAS lemma is proved (`cas_word_iff`). That the runtimes build the same words (about 20 lines each) is trusted. Integers are 29-bit: a result outside ±2^28 traps instead of wrapping, so a completed run computes HeapLang's result but a run can stop (S1's wrap lanes show both behaviours). `faa` detects overflow only after the wrapped word is in the cell: the trapping thread stops and the run is reported as a trap, but other threads may observe the wrapped value until the launcher, the C exit or the harness tears them down. HeapLang's integers are unbounded, so the proofs say nothing here; only bounded words (the futex word) are known to fit. Ring indices and counters trap after 2^28 operations. |
+| The encoding: one Int32 word per value | The CAS lemma is proved (`cas_word_iff`). That the runtimes build the same words (about 20 lines each) is trusted. Integers are 29-bit: a result outside ±2^28 traps instead of wrapping, so a completed run computes HeapLang's result but a run can stop (S1's wrap lanes show both behaviours). `faa` detects overflow only after the wrapped word is in the cell: the thread that wrapped it traps, and other threads may compute on the wrapped value until something stops them: the launcher's teardown, the C exit, or a harness lane's stop flag. Through `rt/embed.mjs` alone, nothing does. HeapLang's integers are unbounded, so the proofs say nothing here; only bounded words (the futex word) are known to fit. Ring indices and counters trap after 2^28 operations. |
 | SC on real hardware | JavaScript's and C11's memory models give sequential consistency to programs whose racing accesses are all SeqCst atomics, which is how every HeapLang access is emitted. Plain accesses initialise a fresh block before its pointer is published, and read immutable blocks: a happens-before argument, not a proof. |
 | No free, no GC | The heap never reuses a location, as in HeapLang; that is why the Treiber stack has no ABA problem here. Memory only grows: a run that allocates per operation stops with "out of memory" when the buffer is full, so runs are sized for it (64 MB for whole programs, 16 MB for a library heap; no stage-1 kernel allocates per operation). Unusable as is for a long-running page. |
-| The runtimes, `rt/` | The allocator, the fork queue, the thread pools, the futex hints, the embedding (`embed.mjs`). A delayed thread is one more interleaving, so scheduling cannot break safety. The JS launcher grows its pool when a fork finds no idle thread; the C pool is fixed and can hang (liveness), never compute a wrong value. A trap (stuck, overflow, out of memory) ends the whole run: the launcher stops every thread, the C program exits, and the harness stops every worker of the lane. |
+| The runtimes, `rt/` | The allocator, the fork queue, the thread pools, the futex hints, the embedding (`embed.mjs`). A delayed thread is one more interleaving, so scheduling cannot break safety. The JS launcher grows its pool when a fork finds no idle thread; the C pool is fixed and can hang (liveness), never compute a wrong value. A trap (stuck, overflow, out of memory) ends a whole program: the launcher terminates every thread and the C program exits. In a library lane it is an exception in the calling thread only (`rt/embed.mjs`): the harness then raises a stop flag that the lane's loops poll, and another worker may finish its loop first. |
 | The glue | The JavaScript that calls a kernel through `rt/embed.mjs` (which cells it passes, the loop around the call) and, in L3p lanes, the data plane. The same glue drives the JS lanes. |
 | Futex hints | Their no-op specs are proved; that the translator recognises exactly these two values is trusted. A wait is timed (20 ms), so a lost wakeup delays a waiter; it cannot strand it. |
 | Prophecies | Erased by the translator; iris-lean proves erasure sound (`ProphErasure.lean`), but the translator's erasure is its own. |
@@ -176,9 +177,10 @@ the harness reports throughput, CPU time per operation (`process.cpuUsage`, Node
 Library kernels (`gen/js/lib_*.mjs`) are called from harness Workers through `rt/embed.mjs`
 (L3, L3p); whole programs (`bench_*`) run on the HeapLang thread pool, with their HeapLang driver
 (L3 "whole program", L4), three times per row: every run's value must be the expected one, and a
-run that has not returned after 120 s is a hang. Fuzz mode adds random delays before
-shared-memory operations, in the translated runtime and at labelled points of the JavaScript
-lanes: more interleavings, not a fair speed comparison. Zero violations under fuzz is evidence
+JavaScript run that has not returned after 120 s, or a native or wasm program whose three runs
+take longer, fails the row. Fuzz mode adds random delays before shared-memory operations, in the
+translated runtime and at labelled points of the JavaScript lanes: more interleavings, not a fair
+speed comparison. Zero violations under fuzz is evidence
 about the trusted base (translator, runtime, glue), not a property of the proofs.
 
 **S1, counters** (`bench/scenarios/s1.mjs`). W threads add 1 to one counter: a racy
@@ -188,17 +190,17 @@ with one `Atomics.add` at the end (L1: no memory traffic per increment at all), 
 thread owns a padded cell (L2) against `Shards.shardCount` (L3, whole program; its proof is
 ParMap-style ownership). The wrap lanes start near the top of the integers: `Atomics.add` wraps to
 a negative number without a word; the verified counter traps, though only after the wrapped word
-is in the cell, so the other worker may add to it until the harness stops the lane.
+is in the cell, so the other worker keeps adding to the wrapped counter until its loop ends or it
+sees the harness's stop flag (usually the loop ends first).
 
 **S2, the lock zoo** (`s2.mjs`). W threads take a lock, check that two cells are equal and bump
 both. A futex mutex by hand (L1), spin and ticket locks by hand (L2) against
 `Critical.criticalFutex`, `criticalSpin`, `criticalTicket` (L3: one theorem, `critical_spec`, for
 all three), Web Locks in the page, and native and wasm32 builds of the futex and spin programs.
-In the JavaScript and L3 lanes the lock and the two cells sit on separate cache lines (the
-verified ticket lock's two counters share one, as iris-lean allocates them); the native and wasm32
-programs' HeapLang driver allocates them side by side. The kill test terminates a Worker while it
-holds the lock: every lock word in a `SharedArrayBuffer` stays taken, verified or not; Web Locks
-are released when the holder dies.
+In every lane the lock and the two cells sit on separate cache lines; a ticket lock's two
+counters share one, by hand as in iris-lean's `TicketLock`. The kill test terminates a Worker
+while it holds the lock: every lock word in a `SharedArrayBuffer` stays taken, verified or not;
+Web Locks are released when the holder dies.
 
 **S4, the glitch counter** (`s4.mjs`). W producer/consumer pairs; the consumer takes one
 128-sample quantum every 2.67 ms, standing in for an AudioWorklet ("tick"), or as fast as it can
@@ -218,51 +220,54 @@ exactly once" proof is stage 2's `Claim`), and `ParMapG.pmapG` with the proved `
 over the image in the heap (L3, L4). The verified algorithm has no lock and no read-modify-write
 atomics (translated, every heap access is an SC Atomics load or store); ownership of disjoint
 halves is the whole proof, and its join spins. Its times include allocating, initialising and
-summing the image, which the JS lanes do outside the timing: about 5 ms in JavaScript and 0.7 ms
-in C on the 4-vCPU VM. It has no data-plane lane: `pmapG_spec` constrains the final array, not
-how often a foreign callback would run, so a fast lane writing pixels outside the heap needs the
-`Claim` proof first. Every lane's checksum must equal
+summing the image, which the JS lanes do outside the timing: on the 4-vCPU VM about 0.7 ms in C,
+and in JavaScript about 2 ms at W = 1 and 5 to 7 ms above (the HeapLang main thread can land on a
+pool thread that has not compiled the loops yet). It has no data-plane lane: `pmapG_spec`
+constrains the final array, not how often a foreign callback would run, so a fast lane writing
+pixels outside the heap needs the `Claim` proof first. Every lane's checksum must equal
 `Σ Mandel.g`, computed in Lean.
 
 **S11, the lost-wakeup hunt** (`s11.mjs`). Sleepers wait with `Atomics.wait` for an event count;
 the correct protocol (L2) and three classic mistakes (L0: notify before the store, notify the
 wrong word, notify one waiter of several), each waiter rescued by a 5 ms watchdog. Then the
 verified pair: the critical section under `FutexMutex` and under `FutexNoWake`; the runtime counts
-the futex waits that only the 20 ms timeout ended. Both are proved by the same `Lock` theorems
-(`critical_spec` through each `Lock` instance); the behaviour is not. That rescue timeout, not a
-proof, is what keeps the system alive, as QED64's once-a-second kick does (`qed64/README.md`).
+the futex waits that only the 20 ms timeout ended. Both locks satisfy the same `Lock` spec, so one
+theorem (`critical_spec`) covers the section under each; the behaviour is not the same. That
+rescue timeout, not a proof, is what keeps the system alive, as QED64's once-a-second kick does
+(`qed64/README.md`).
 
 ### Results
 
 `node iris/bench/harness.mjs --json FILE` writes every row; `node iris/bench/summary.mjs FILE
 --readme` regenerates this section from it. The tables below come from
 `docs/results/stage1-harness.json`, a full run (W = 1, 2, 4, 8, fuzz off and on) on a 4-vCPU
-cloud VM: read them as ratios within one run, and re-measure on the reference Mac (ARM: a weaker
+cloud VM; two more runs with fuzz off, on the same VM the same hour, give the ranges quoted
+below. Read them as ratios within one run, and re-measure on the reference Mac (ARM: a weaker
 memory model, where the racy lanes may fail differently). W = 8 is oversubscribed; S4 runs 2W
 threads, so there W = 4 is too. In Chromium (`test/page.mjs`), the Web Locks lane ran without a
 violation, and in the kill test a Web Lock held by a terminated Worker was granted to the next
 request about 11 ms later, while every lock word in a `SharedArrayBuffer` stayed taken.
 
 <!-- results:begin -->
-Measured 2026-11-20 on linux x64, 4 logical cores, Node v22.23.5. CI machine numbers: read them as ratios within one run; re-measure on the reference Mac (S5 re-run after adding a JIT warm-up, same machine and hour; S2 and S11 re-run after padding the verified locks' cells to separate cache lines, same VM).
+Measured 2026-11-20 on linux x64, 4 logical cores, Node v22.23.5. CI machine numbers: read them as ratios within one run; re-measure on the reference Mac.
 
 **S1 · Counters: lost-update roulette**
 
 | lane | kind | W=1 | W=2 | W=4 | W=8 | CPU ns/op (W=8) | fairness (W=8) | violations, all runs | note |
 |---|---|--:|--:|--:|--:|--:|--:|---|---|
-| a[0] = a[0] + 1 (no synchronisation) | L0 | — | — | — | — |  | 0.661 | lost updates 1111158221 | 89.4% of the increments lost; V8 collapses this loop, so no speed |
-| Atomics.add (idiomatic) | L1 | 79.5 | 11.1 | 8.8 | 8.7 | 454.1 | 0.991 | 0 |  |
-| faaIncr (verified FAA, translated) | L3 | 92.4 | 13.8 | 8.8 | 9.2 | 426.4 | 0.883 | 0 |  |
-| compareExchange loop by hand | L2 | 50.5 | 6.8 | 5.6 | 4.7 | 842.2 | 0.996 | 0 |  |
-| casIncr (verified CAS loop, translated) | L3 | 53.8 | 5.8 | 6.9 | 7.4 | 533.2 | 0.929 | 0 |  |
-| iris-lean's Counter.incr (CAS loop) | L3 | 41.8 | 9.0 | 4.4 | 6.2 | 581.2 | 0.966 | 0 |  |
-| count locally, one Atomics.add at the end | L1 | 279.5 | 551.8 | 989.9 | 994.9 | 4 | 0.84 | 0 | V8 keeps the count in a register: no memory traffic per increment |
-| own padded shard, Atomics load+store (Shards' algorithm) | L2 | 57.3 | 111.6 | 198.7 | 200.9 | 19.7 | 0.955 | 0 |  |
-| Shards.shardCount (verified, whole program on the pool) | L3 | 51.0 | 97.3 | 190.1 | 177.3 | 22.1 |  | 0 |  |
-| Shards.shardCount → C11 → native | L4n | 99.1 | 175.2 | 174.4 | 275.0 | 12.6 |  | 0 |  |
-| Shards.shardCount → C11 → wasm32 | L4w | 92.8 | 180.5 | 266.1 | 255.0 |  |  | 0 |  |
-| faaIncr driver → C11 → native | L4n | 122.6 | 26.8 | 21.8 | 28.3 | 132.3 |  | 0 |  |
-| faaIncr driver → C11 → wasm32 | L4w | 98.6 | 21.4 | 10.2 | 10.4 |  |  | 0 |  |
+| a[0] = a[0] + 1 (no synchronisation) | L0 | — | — | — | — |  | 0.584 | lost updates 948442292 | 91% of the increments lost; V8 collapses this loop, so no speed |
+| Atomics.add (idiomatic) | L1 | 75.0 | 14.3 | 9.4 | 9.0 | 429.7 | 0.959 | 0 |  |
+| faaIncr (verified FAA, translated) | L3 | 72.5 | 15.0 | 8.5 | 9.1 | 390 | 0.945 | 0 |  |
+| compareExchange loop by hand | L2 | 55.8 | 10.7 | 5.6 | 4.1 | 961.3 | 0.968 | 0 |  |
+| casIncr (verified CAS loop, translated) | L3 | 43.3 | 7.9 | 6.1 | 6.1 | 640.9 | 0.991 | 0 |  |
+| iris-lean's Counter.incr (CAS loop) | L3 | 43.5 | 7.7 | 4.4 | 7.9 | 505.8 | 0.938 | 0 |  |
+| count locally, one Atomics.add at the end | L1 | 257.4 | 590.4 | 1084.6 | 886.4 | 4.5 | 0.965 | 0 | V8 keeps the count in a register: no memory traffic per increment |
+| own padded shard, Atomics load+store (Shards' algorithm) | L2 | 42.8 | 106.9 | 192.4 | 217.5 | 18.3 | 0.958 | 0 |  |
+| Shards.shardCount (verified, whole program on the pool) | L3 | 52.4 | 99.2 | 137.8 | 194.6 | 19.9 |  | 0 |  |
+| Shards.shardCount → C11 → native | L4n | 99.3 | 154.8 | 334.0 | 307.4 | 11.9 |  | 0 |  |
+| Shards.shardCount → C11 → wasm32 | L4w | 100.5 | 172.1 | 346.3 | 274.3 |  |  | 0 |  |
+| faaIncr driver → C11 → native | L4n | 122.4 | 32.5 | 23.0 | 22.4 | 156.4 |  | 0 |  |
+| faaIncr driver → C11 → wasm32 | L4w | 104.4 | 16.4 | 11.0 | 14.2 |  |  | 0 |  |
 | Atomics.add from 2^31 − wrap | L1 |  | — |  |  |  | 1 | wrapped silently 2 | final value -2147479648 (Int32 wrapped, no error) |
 | faaIncr from 2^28 − wrap | L3 |  | trap |  |  |  |  | 0 | trap: integer overflow: result outside the 29-bit encoding (HeapLang ints are unbounded) |
 
@@ -270,18 +275,18 @@ Measured 2026-11-20 on linux x64, 4 logical cores, Node v22.23.5. CI machine num
 
 | lane | kind | W=1 | W=2 | W=4 | W=8 | CPU ns/op (W=8) | fairness (W=8) | violations, all runs | note |
 |---|---|--:|--:|--:|--:|--:|--:|---|---|
-| no lock | L0 | — | — | — | — |  | 0.939 | torn reads 20901053, lost updates 12484017 |  |
-| futex mutex by hand (Drepper), plain body | L1 | 39.3 | 10.4 | 10.0 | 11.4 | 286.7 | 0.99 | 0 |  |
-| FutexMutex + critical section (verified) | L3 | 16.7 | 4.4 | 4.3 | 5.3 | 610.7 | 0.986 | 0 |  |
-| CAS spin lock by hand, plain body | L2 | 29.3 | 3.7 | 1.6 | 1.2 | 3413.4 | 0.942 | 0 |  |
-| SpinLock + critical section (verified) | L3 | 16.0 | 3.4 | 2.3 | 1.0 | 3884.3 | 0.828 | 0 |  |
-| ticket lock by hand, plain body | L2 | 25.2 | 3.1 | 2.1 | 0.002 | 2070300.2 | 0.636 | 0 |  |
-| TicketLock + critical section (verified) | L3 | 11.9 | 2.4 | 1.4 | 0.005 | 766566.3 | 0.483 | 0 |  |
+| no lock | L0 | — | — | — | — |  | 0.969 | torn reads 24554266, lost updates 12899009 |  |
+| futex mutex by hand (Drepper), plain body | L1 | 27.6 | 14.5 | 11.2 | 11.2 | 275.4 | 0.988 | 0 |  |
+| FutexMutex + critical section (verified) | L3 | 13.0 | 3.4 | 4.6 | 5.0 | 636.9 | 0.987 | 0 |  |
+| CAS spin lock by hand, plain body | L2 | 27.9 | 3.5 | 2.1 | 0.766 | 4825.1 | 0.821 | 0 |  |
+| SpinLock + critical section (verified) | L3 | 15.6 | 2.5 | 1.8 | 1.1 | 3614.1 | 0.831 | 0 |  |
+| ticket lock by hand, plain body | L2 | 24.0 | 4.3 | 1.9 | 0.002 | 1972330.4 | 0.61 | 0 |  |
+| TicketLock + critical section (verified) | L3 | 11.6 | 2.5 | 1.3 | 0.012 | 319498.5 | 0.501 | 0 |  |
 | Web Locks (navigator.locks), one request per section | L1 | skipped |  |  |  |  |  |  | Node 22 has no navigator.locks |
-| criticalFutex driver → C11 → native (50,000 sections per thread) | L4n | 38.0 | 4.9 | 8.3 | 8.3 | 383.7 |  | 0 |  |
-| criticalFutex driver → C11 → wasm32 (50,000 sections per thread) | L4w | 28.6 | 8.8 | 8.7 | 11.0 |  |  | 0 |  |
-| criticalSpin driver → C11 → native (50,000 sections per thread) | L4n | 37.1 | 3.8 | 1.4 | 0.713 | 5311.9 |  | 0 |  |
-| criticalSpin driver → C11 → wasm32 (50,000 sections per thread) | L4w | 27.5 | 4.5 | 1.5 | 0.741 |  |  | 0 |  |
+| criticalFutex driver → C11 → native (50,000 sections per thread) | L4n | 39.0 | 12.5 | 14.0 | 14.0 | 200.4 |  | 0 |  |
+| criticalFutex driver → C11 → wasm32 (50,000 sections per thread) | L4w | 26.7 | 10.7 | 9.6 | 11.5 |  |  | 0 |  |
+| criticalSpin driver → C11 → native (50,000 sections per thread) | L4n | 40.1 | 6.8 | 2.5 | 1.5 | 2614.1 |  | 0 |  |
+| criticalSpin driver → C11 → wasm32 (50,000 sections per thread) | L4w | 35.6 | 9.7 | 2.8 | 1.9 |  |  | 0 |  |
 | kill test: spin lock by hand | L2 |  | hung |  |  |  |  | 0 | hung (no acquire within 1000 ms) |
 | kill test: futex mutex by hand | L1 |  | hung |  |  |  |  | 0 | hung (no acquire within 1000 ms) |
 | kill test: SpinLock (verified) | L3 |  | hung |  |  |  |  | 0 | hung (no acquire within 1000 ms) |
@@ -293,43 +298,43 @@ Measured 2026-11-20 on linux x64, 4 logical cores, Node v22.23.5. CI machine num
 
 | lane | kind | W=1 | W=2 | W=4 | W=8 | CPU ns/op (W=8) | fairness (W=8) | violations, all runs | note |
 |---|---|--:|--:|--:|--:|--:|--:|---|---|
-| ring by hand, tail published before the slot is written | L0 | — | — | — | — |  |  | 0 | 0 underruns in 1200 ticks |
-| ring by hand, tail published before the slot is written, consumer flat out | L0 | — | — | — | — |  |  | stale or reordered 136724 |  |
-| postMessage, block buffers transferred back and forth | L1 | 0.046 | 0.092 | 0.181 | 0.379 | 1802.6 |  | 0 | 3 underruns in 1205 ticks |
-| postMessage, block buffers transferred back and forth, consumer flat out | L1 | 18.8 | 38.3 | 41.8 | 58.6 | 66.7 |  | 0 |  |
-| ring by hand (Atomics indices, plain Float32 slots) | L2 | 0.048 | 0.096 | 0.192 | 0.384 | 1369.8 |  | 0 | 0 underruns in 1208 ticks |
-| ring by hand (Atomics indices, plain Float32 slots), consumer flat out | L2 | 140.9 | 269.2 | 101.1 | 55.4 | 71 |  | 0 |  |
-| SpscRing, one sample per item, payload in the heap | L3 | 0.048 | 0.096 | 0.191 | 0.382 | 2016.6 |  | 0 | 4 underruns in 1208 ticks |
-| SpscRing, one sample per item, payload in the heap, consumer flat out | L3 | 2.4 | 7.1 | 2.1 | 1.8 | 2204.7 |  | 0 |  |
-| SpscRing carries block numbers, samples in a Float32Array | L3p | 0.048 | 0.096 | 0.192 | 0.383 | 1433.4 |  | 0 | 0 underruns in 1207 ticks |
-| SpscRing carries block numbers, samples in a Float32Array, consumer flat out | L3p | 131.8 | 215.5 | 82.7 | 55.2 | 72.3 |  | 0 |  |
-| the verified ring, but the glue fills the block after pushing it | L0 | — | — | — | — |  |  | 0 | 0 underruns in 1207 ticks |
-| the verified ring, but the glue fills the block after pushing it, consumer flat out | L0 | — | — | — | — |  |  | stale or reordered 34767 |  |
-| tryPushEarly (HeapLang mutant: publishes, then writes) | M | — | — | — | — |  |  | 0 | 0 underruns in 1208 ticks |
-| tryPushEarly (HeapLang mutant: publishes, then writes), consumer flat out | M | — | — | — | — |  |  | stale or reordered 15932 |  |
+| ring by hand, tail published before the slot is written | L0 | — | — | — | — |  |  | 0 | 0 underruns in 1202 ticks |
+| ring by hand, tail published before the slot is written, consumer flat out | L0 | — | — | — | — |  |  | stale or reordered 145691 |  |
+| postMessage, block buffers transferred back and forth | L1 | 0.046 | 0.093 | 0.177 | 0.379 | 2036 |  | 0 | 6 underruns in 1205 ticks |
+| postMessage, block buffers transferred back and forth, consumer flat out | L1 | 20.2 | 38.2 | 46.8 | 51.3 | 75.8 |  | 0 |  |
+| ring by hand (Atomics indices, plain Float32 slots) | L2 | 0.048 | 0.096 | 0.192 | 0.383 | 1389.7 |  | 0 | 0 underruns in 1205 ticks |
+| ring by hand (Atomics indices, plain Float32 slots), consumer flat out | L2 | 137.1 | 291.4 | 68.2 | 36.8 | 108 |  | 0 |  |
+| SpscRing, one sample per item, payload in the heap | L3 | 0.048 | 0.096 | 0.192 | 0.383 | 1988 |  | 0 | 0 underruns in 1208 ticks |
+| SpscRing, one sample per item, payload in the heap, consumer flat out | L3 | 3.6 | 6.2 | 2.1 | 0.725 | 5373.2 |  | 0 |  |
+| SpscRing carries block numbers, samples in a Float32Array | L3p | 0.048 | 0.096 | 0.192 | 0.383 | 1601 |  | 0 | 0 underruns in 1207 ticks |
+| SpscRing carries block numbers, samples in a Float32Array, consumer flat out | L3p | 84.0 | 225.3 | 97.5 | 27.6 | 143.6 |  | 0 |  |
+| the verified ring, but the glue fills the block after pushing it | L0 | — | — | — | — |  |  | 0 | 0 underruns in 1208 ticks |
+| the verified ring, but the glue fills the block after pushing it, consumer flat out | L0 | — | — | — | — |  |  | stale or reordered 53516 |  |
+| tryPushEarly (HeapLang mutant: publishes, then writes) | M | — | — | — | — |  |  | 0 | 0 underruns in 1206 ticks |
+| tryPushEarly (HeapLang mutant: publishes, then writes), consumer flat out | M | — | — | — | — |  |  | stale or reordered 25378 |  |
 
-**S5 · Disjoint tiles: a parallel Mandelbrot with zero synchronisation**
+**S5 · Disjoint tiles: a parallel Mandelbrot without locks**
 
 | lane | kind | W=1 | W=2 | W=4 | W=8 | CPU ns/op (W=8) | fairness (W=8) | violations, all runs | note |
 |---|---|--:|--:|--:|--:|--:|--:|---|---|
-| tiles claimed with next = next + 1 (no atomics) | L0 | — | — | — | — |  |  | double claims 10 |  |
-| each Worker returns its band as a transferred buffer | L1 | 3.1 | 5.3 | 5.6 | 9.7 | 360.4 |  | 0 | slowest thread 2.14× the mean |
-| one SharedArrayBuffer, a band per Worker (ParMapG by hand) | L2 | 3.1 | 6.9 | 6.4 | 6.8 | 365 |  | 0 | slowest thread 2.94× the mean |
-| tiles of 8 rows claimed with Atomics.add (not verified yet) | L2 | 3.2 | 5.8 | 8.0 | 12.3 | 321.3 |  | 0 | slowest thread 2.04× the mean |
-| ParMapG.pmapG with Mandel.mandel (verified, whole program on the pool) | L3 | 0.899 | 1.7 | 2.8 | 2.0 | 1437.5 |  | 0 | the time includes allocating, initialising and summing the image: about 5 ms on the 4-vCPU VM |
-| the same → C11 → native | L4n | 4.0 | 9.1 | 10.0 | 9.1 | 264.5 |  | 0 | the time includes allocating, initialising and summing the image: about 0.7 ms on the 4-vCPU VM |
-| the same → C11 → wasm32 | L4w | 4.2 | 5.5 | 8.4 | 4.9 |  |  | 0 | the time includes allocating, initialising and summing the image: about 0.7 ms on the 4-vCPU VM |
+| tiles claimed with next = next + 1 (no atomics) | L0 | — | — | — | — |  |  | double claims 9 |  |
+| each Worker returns its band as a transferred buffer | L1 | 2.9 | 5.4 | 6.3 | 10.0 | 368.8 |  | 0 | slowest thread 2.21× the mean |
+| one SharedArrayBuffer, a band per Worker (ParMapG by hand) | L2 | 2.8 | 2.3 | 6.3 | 7.7 | 344.9 |  | 0 | slowest thread 2.31× the mean |
+| tiles of 8 rows claimed with Atomics.add (not verified yet) | L2 | 3.1 | 5.5 | 12.3 | 10.8 | 356.9 |  | 0 | slowest thread 2.02× the mean |
+| ParMapG.pmapG with Mandel.mandel (verified, whole program on the pool) | L3 | 0.845 | 1.5 | 2.6 | 2.5 | 1141.4 |  | 0 | the time includes allocating, initialising and summing the image (on the 4-vCPU VM, about 2 ms at W = 1 and 5 to 7 ms above) |
+| the same → C11 → native | L4n | 6.3 | 9.3 | 8.9 | 8.0 | 335.7 |  | 0 | the time includes allocating, initialising and summing the image (on the 4-vCPU VM, about 0.7 ms) |
+| the same → C11 → wasm32 | L4w | 4.1 | 7.9 | 5.5 | 7.4 |  |  | 0 | the time includes allocating, initialising and summing the image (on the 4-vCPU VM, about 0.7 ms) |
 
 **S11 · Lost-wakeup hunt: where the proof does not help**
 
 | lane | kind | W=1 | W=2 | W=4 | W=8 | CPU ns/op (W=8) | fairness (W=8) | violations, all runs | note |
 |---|---|--:|--:|--:|--:|--:|--:|---|---|
-| event count: store, bump epoch, notify all | L2 | 0.029 | 0.037 | 0.035 | 0.032 | 38315.6 |  | 0 | 0 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
-| mutant: notify before the store | L0 | 0.019 | 0.001 | 0.003 | 0.009 | 41405.6 |  | 0 | 40 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
-| mutant: notify the state word, not the epoch | L0 | 0.000 | 0.000 | 0.001 | 0.002 | 49249.4 |  | 0 | 1568 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
-| mutant: notify one waiter of several | L0 | 0.032 | 0.000 | 0.001 | 0.002 | 50683.7 |  | 0 | 1353 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
-| FutexMutex critical section (verified) | L3 | 17.0 | 4.0 | 4.2 | 5.8 | 558.1 | 0.992 | 0 | 0 of 18389 futex waits ended only by the 20 ms timeout |
-| FutexNoWake: futexWake removed (verified too) | L3 | 17.3 | 16.2 | 14.2 | 14.2 | 72 | 0.686 | 0 | 105 of 105 futex waits ended only by the 20 ms timeout |
+| event count: store, bump epoch, notify all | L2 | 0.031 | 0.040 | 0.044 | 0.048 | 32890 |  | 0 | 0 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
+| mutant: notify before the store | L0 | 0.030 | 0.002 | 0.003 | 0.012 | 39483.1 |  | 0 | 38 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
+| mutant: notify the state word, not the epoch | L0 | 0.000 | 0.000 | 0.001 | 0.002 | 51221.2 |  | 0 | 1575 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
+| mutant: notify one waiter of several | L0 | 0.028 | 0.000 | 0.001 | 0.002 | 48215 |  | 0 | 1338 lost wakeups rescued by the 5 ms watchdog (200 cycles) |
+| FutexMutex critical section (verified) | L3 | 14.9 | 4.1 | 4.3 | 5.7 | 558.6 | 0.987 | 0 | 0 of 16644 futex waits ended only by the 20 ms timeout |
+| FutexNoWake: futexWake removed (verified too) | L3 | 15.3 | 13.5 | 14.7 | 13.0 | 92.1 | 0.883 | 0 | 105 of 105 futex waits ended only by the 20 ms timeout |
 
 Kinds: L0 broken (correctness counts only); L1 idiomatic JavaScript; L2 same algorithm, by hand in JavaScript; L3 verified, payload in the heap; L3p verified protocol, trusted data plane; L4n verified, C11 → native; L4w verified, C11 → wasm32; M HeapLang mutant, no proof. "—": not shown (a broken lane's speed means nothing). Throughput is operations per microsecond, all threads together, fuzz off; S4 counts samples, S5 pixels, S11 wakeups. Fairness is Jain's index over the threads' counts (1: equal shares).
 <!-- results:end -->
@@ -337,19 +342,21 @@ Kinds: L0 broken (correctness counts only); L1 idiomatic JavaScript; L2 same alg
 What the numbers say, honestly:
 
 - **The translation, not the proof, sets the verified lanes' speed.** Where the work is one
-  hardware atomic (S1's FAA) the verified lane runs at the speed of `Atomics.add`, and the
-  verified shards at the speed of the same algorithm by hand. Where a kernel does arithmetic or
-  SC accesses, the translated JavaScript is slower than JavaScript by hand: every integer
-  operation is checked for overflow, and every heap access is an atomic. For S5's Mandelbrot that
-  is about 2 to 4 times, a ratio that also counts the verified lane's setup and sum (about 5 ms).
-  For S2's critical section it is the gap at W = 1, about 2 times (1.8 to 2.4). At W ≥ 2 the
-  futex mutex keeps that gap, while the verified spin and ticket locks range from 1.5 times slower
-  to 1.4 times faster than the same locks by hand (the oversubscribed ticket locks at W = 8 are
-  too erratic to compare). The stage-1 run, with the verified lock and cells side by side on one
-  cache line, had them 1.9 to 2.7 times slower at every W ≥ 2: that gap was mostly false sharing,
-  not the translation. These are ratios from the 4-vCPU CI machine, to be re-measured on the
-  reference Mac. The same HeapLang compiled through C comes close to hand-written JavaScript or
-  beats it.
+  hardware atomic (S1's FAA) the verified lane runs within 25% of `Atomics.add`, and the verified
+  shards at 0.7 to 1.2 times the speed of the same algorithm by hand. Where a kernel does
+  arithmetic or SC accesses, the translated JavaScript is slower than JavaScript by hand: every
+  integer operation is checked for overflow, and every heap access is an atomic. For S5's
+  Mandelbrot the hand-written bands are 1.5 to 5.6 times faster, a ratio that also counts the
+  verified lane's setup and sum. For S2's critical section the translation costs 1.8 to 2.9 times
+  at W = 1; at W ≥ 2 the futex mutex keeps or widens that gap (1.9 to 4.3), while the verified
+  spin and ticket locks range from 1.4 times faster to 1.8 times slower than the same locks by
+  hand (the oversubscribed ticket locks at W = 8 are too erratic to compare). In the stage-1 run,
+  with the verified lock and cells on one cache line, they were 1.9 to 2.7 times slower at every
+  W ≥ 2: much of that gap was false sharing, not the translation. The same HeapLang compiled
+  through C runs at 0.9 to 4 times the speed of hand-written JavaScript natively, and 0.6 to 3.4
+  times as wasm32 (slowest: the futex mutex at W = 1). Each range spans three runs on the 4-vCPU
+  CI machine (the tables show the first; a single ratio can move a lot from run to run), to be
+  re-measured on the reference Mac.
 - **The large wins come from not sharing**, and those are the protocols the proofs state:
   shards, disjoint bands, a ring's single writer per index. Locally counted increments (V8 keeps
   them in a register) are faster still and need no proof.

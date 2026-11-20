@@ -8,7 +8,7 @@ import { now } from '../core.mjs';
 
 export const id = 's5';
 export const module = 'bench/scenarios/s5.mjs';
-export const title = 'S5 · Disjoint tiles: a parallel Mandelbrot with zero synchronisation';
+export const title = 'S5 · Disjoint tiles: a parallel Mandelbrot without locks';
 export const question = 'W threads render disjoint parts of one image. Same pixels everywhere? Who waits for whom?';
 export const sizes = { full: {}, quick: {} };
 
@@ -41,7 +41,7 @@ const program = (backend, kind, label) => ({
   id: `pmapg-${backend === 'js' ? 'verified' : backend}`, kind, label, mode: 'program', backend,
   program: (W) => `bench_s5_mandel_w${W}`, ops: () => N,
   scope: 'pmapG_spec and mandel_spec: every pixel becomes g of its index, each part owned by one thread; the init and sum loops around it are unproved glue',
-  note: () => `the time includes allocating, initialising and summing the image: about ${backend === 'js' ? 5 : 0.7} ms on the 4-vCPU VM`,
+  note: () => `the time includes allocating, initialising and summing the image (on the 4-vCPU VM, ${backend === 'js' ? 'about 2 ms at W = 1 and 5 to 7 ms above' : 'about 0.7 ms'})`,
   only: backend === 'js' ? undefined : 'node', onlyWhy: 'native and wasm lanes run under Node only',
 });
 

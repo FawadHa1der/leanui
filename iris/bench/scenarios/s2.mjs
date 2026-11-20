@@ -48,6 +48,7 @@ function jsLock(id, kind, label, lock) {
 // Verified lanes: Critical.critical<Lock> from gen/js/lib_locks.mjs; the whole section is HeapLang.
 // A cache line of padding after the lock and after the first cell puts the lock, A and B on
 // separate lines, as in the JS lanes (allocation is sequential: adjacent, they would share one).
+// The ticket lock's two counters share a line in both: iris-lean allocates them side by side.
 const NEW = { Spin: 'SpinLock.newlock', Ticket: 'TicketLock.newlock', Futex: 'FutexMutex.newlock', NoWake: 'FutexMutex.newlock' };
 export async function heapSetup(ctx, which) {
   const lib = await ctx.lib('lib_locks');

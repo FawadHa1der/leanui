@@ -22,10 +22,11 @@ export const locks = {
     acquire(a, w, F) { for (;;) { F(); if (Atomics.compareExchange(a, w, 0, 1) === 0) return; } },
     release(a, w, F) { F(); Atomics.store(a, w, 0); },
   },
-  // ticket lock: next ticket at w, now serving at w + LINE (iris-lean's TicketLock)
+  // ticket lock: next ticket at w, now serving at w + 1, side by side as iris-lean's TicketLock
+  // allocates its two counters
   ticket: {
-    acquire(a, w, F) { F(); const t = Atomics.add(a, w, 1); for (;;) { F(); if (Atomics.load(a, w + LINE) === t) return; } },
-    release(a, w, F) { F(); Atomics.add(a, w + LINE, 1); },
+    acquire(a, w, F) { F(); const t = Atomics.add(a, w, 1); for (;;) { F(); if (Atomics.load(a, w + 1) === t) return; } },
+    release(a, w, F) { F(); Atomics.add(a, w + 1, 1); },
   },
   // Drepper's three-state futex mutex (0 free, 1 locked, 2 locked with waiters): FutexMutex by hand
   futex: {

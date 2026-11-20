@@ -225,12 +225,16 @@ def shardsProg (t k : Nat) : Exp := hl%
   sum #0 #0
 
 /-- S2: `t` threads × `k` critical sections under one lock: (sections that saw two different
-values, final count). -/
+values, final count). A cache line of padding (16 cells) after `a`, `b` and the lock puts them on
+separate lines, as in the harness's JavaScript and library lanes. -/
 def criticalProg (newlock crit : Val) (t k : Nat) : Exp := hl%
   let a := ref(#0);
+  allocn(#16, #0);
   let b := ref(#0);
+  allocn(#16, #0);
   let bad := ref(#0);
   let lk := &newlock #();
+  allocn(#16, #0);
   &onThreads #t (λ _, &rep #k (λ _, if &crit lk a b then #() else (faa(bad, #1); #())));
   (!bad, !a)
 

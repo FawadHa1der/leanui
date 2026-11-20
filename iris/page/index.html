@@ -8,9 +8,10 @@
   <a href="https://github.com/leanprover-community/iris-lean">iris-lean</a>, translated from the
   very Lean constants the theorems are about into JavaScript over one <code>SharedArrayBuffer</code>.
   Every lane runs in Web Workers on this page. Each verified lane carries a proof chip that says
-  what is proved, what is trusted, and what is not proved; the chips are built from the
-  generator's manifest. The proofs cover safety under sequentially consistent interleavings:
-  nothing about speed, progress or fairness, and nothing about the JavaScript around a kernel.</p>
+  what is proved, what is trusted, and what is not proved; its kernels and theorems come from the
+  generator's manifest, its scope and caveats are written per lane. The proofs cover safety under
+  sequentially consistent interleavings: nothing about speed, progress or fairness, and nothing
+  about the JavaScript around a kernel.</p>
   <div id="gate" hidden></div>
   <form id="controls" onsubmit="return false" hidden>
     <fieldset id="scenarios"><legend>Scenarios</legend></fieldset>

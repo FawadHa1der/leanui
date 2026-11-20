@@ -1,5 +1,6 @@
-// What a lane may claim, built from the generator's manifest (never written by hand), and the
-// rule the harness and the tests use to judge a run.
+// What a lane may claim, and the rule the harness and the tests use to judge a run. A chip's
+// kernels and theorems come from the generator's manifest; its scope and its trusted and
+// not-proved lines are written per lane in scenarios/.
 //
 // Lane kinds:
 //   L0   deliberately broken JavaScript (or broken glue around a verified kernel): its

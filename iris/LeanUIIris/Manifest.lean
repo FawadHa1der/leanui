@@ -88,7 +88,7 @@ def kernels : List Kernel := [
     consts := vals% [LeanUIIris.ParMap.pmap]
     theorems := [``LeanUIIris.ParMap.pmap_spec]
     says := "maps a pure function over an owned array, each thread owning a disjoint half; \
-      no invariant, no atomics" },
+      no invariant, no read-modify-write atomics" },
   { name := "Treiber", source := ours "Treiber, TreiberAtomic"
     consts := vals% [LeanUIIris.Treiber.newStack, LeanUIIris.Treiber.push, LeanUIIris.Treiber.pop]
     theorems := [``LeanUIIris.Treiber.newStack_spec, ``LeanUIIris.Treiber.push_spec,
@@ -123,23 +123,23 @@ def kernels : List Kernel := [
     theorems := [``LeanUIIris.Critical.critical_spec, ``LeanUIIris.Critical.criticalSpin_spec,
       ``LeanUIIris.Critical.criticalTicket_spec, ``LeanUIIris.Critical.criticalFutex_spec]
     says := "one critical section proved once for every Lock instance: under the lock the two \
-      cells are always equal, so the section returns true" },
+      cells are always equal, so the section, if it returns, returns true" },
   { name := "FutexNoWake", source := ours "FutexNoWake"
     consts := vals% [LeanUIIris.FutexNoWake.releaseNoWake, LeanUIIris.FutexNoWake.criticalNoWake]
     theorems := [``LeanUIIris.FutexNoWake.releaseNoWake_spec, ``LeanUIIris.FutexNoWake.instLock,
-      ``LeanUIIris.FutexNoWake.criticalNoWake_spec]
+      ``LeanUIIris.FutexNoWake.criticalNoWake_spec, ``LeanUIIris.Critical.critical_spec]
     says := "FutexMutex with its futexWake removed (a lost-wakeup bug) satisfies the very same \
       Lock spec: the proof cannot see a liveness bug" },
   { name := "Shards", source := ours "Shards"
     consts := vals% [LeanUIIris.Shards.bump, LeanUIIris.Shards.shardCount]
     theorems := [``LeanUIIris.Shards.bump_spec, ``LeanUIIris.Shards.shardCount_spec]
     says := "n threads each count k in memory they own and add it to their own shard: every \
-      shard ends k higher; ParMap-style ownership, no invariant, no atomics" },
+      shard ends k higher; ParMap-style ownership, no invariant, no read-modify-write atomics" },
   { name := "ParMapG", source := ours "ParMapG"
     consts := vals% [LeanUIIris.ParMapG.seqMap, LeanUIIris.ParMapG.pmapG]
     theorems := [``LeanUIIris.ParMapG.seqMap_spec, ``LeanUIIris.ParMapG.pmapG_spec]
     says := "ParMap with a grain size: disjoint parts mapped in parallel, each sequentially; \
-      the array ends as map g; no invariant, no atomics" },
+      the array ends as map g; no invariant, no read-modify-write atomics" },
   { name := "Mandel", source := ours "Mandel"
     consts := vals% [LeanUIIris.Mandel.iter, LeanUIIris.Mandel.mandel]
     theorems := [``LeanUIIris.Mandel.iter_spec, ``LeanUIIris.Mandel.mandel_spec]

@@ -8,7 +8,8 @@ wait expires (20 ms). That is a liveness bug, and the proof does not see it: `fu
 proved no-op, so removing it changes no safety fact, and `releaseNoWake_spec` is the very
 statement of `FutexMutex.release_spec`. `instLock` makes the mutant a lawful `Lock`, so
 `Critical.critical_spec` covers `criticalNoWake` as well. S11 in `iris/README.md` runs both and
-counts the expired waits: the theorems are the same, the behaviour is not.
+counts the expired waits: the `Lock` spec is the same, so `critical_spec` covers both; the
+behaviour is not.
 -/
 import LeanUIIris.Kernels.Critical
 
@@ -74,7 +75,7 @@ theorem releaseNoWake_spec (γ : GName) (lk : Val) (R : IProp GF) :
       imodintro
       iapply Hcont; itrivial
 
-/-- The mutant is a lawful `Lock`: the same interface, the same theorems. -/
+/-- The mutant is a lawful `Lock`: the same interface, the same spec. -/
 @[implicit_reducible]
 def instLock [HeapLangGS hlc GF] : Lock GF where
   newlock := FutexMutex.newlock

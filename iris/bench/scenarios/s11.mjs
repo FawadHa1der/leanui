@@ -66,7 +66,7 @@ function futex(which, label) {
     id: which === 'NoWake' ? 'nowake-verified' : 'futex-verified', kind: 'L3', label, mode: 'timed',
     lib: 'lib_locks', uses: [fn],
     scope: 'proved: the lock and the critical section (critical_spec, through each Lock instance); nothing about wakeups',
-    notProved: ['that a waiter is ever woken: FutexNoWake satisfies the same theorems'],
+    notProved: ['that a waiter is ever woken: FutexNoWake satisfies the same Lock spec'],
     note: (r) => r.extra ? `${r.extra.timeouts} of ${r.extra.waits} futex waits ended only by the 20 ms timeout` : '',
     setup: (ctx) => heapSetup(ctx, which),
     async run(ctx) {

@@ -109,7 +109,7 @@ const acas = (l, e, d) => Atomics.compareExchange(H, l >> 3, e, d), axchg = (l, 
 export function faa(l, d) {
   const old = Atomics.add(H, l >> 3, d);
   const r = old + d;
-  if ((r | 0) !== r) ovf();                          // wrapped in the cell: fail-stop
+  if ((r | 0) !== r) ovf();                          // the wrapped word is already in the cell: this thread traps, others may see it
   return old;
 }
 
