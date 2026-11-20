@@ -43,7 +43,8 @@ for (const s of run.scenarios) {
     const v = Object.entries(viol).filter(([, n]) => n).map(([k, n]) => `${k.replace(/_/g, ' ')} ${n}`).join(', ') || (rows.every((r) => r.skipped) ? '' : '0');
     const note = big.skipped ? big.skipped : big.trap ? `trap: ${big.trap}` : big.error ? `error: ${String(big.error).split('\n')[0]}`
       : lane.note ? lane.note(big) : (big.extra?.after_kill || '');
-    out.push(`| ${md(lane.label)} | ${lane.kind} | ${Ws.map((w) => cell(w)).join(' | ')} | ${big.cpu_ns_per_op ?? ''} | ${big.fairness ?? ''} | ${md(v)} | ${md(note)} |`);
+    const atMax = big.W === maxW; // a lane that never ran at the largest W leaves these two cells empty
+    out.push(`| ${md(lane.label)} | ${lane.kind} | ${Ws.map((w) => cell(w)).join(' | ')} | ${atMax ? big.cpu_ns_per_op ?? '' : ''} | ${atMax ? big.fairness ?? '' : ''} | ${md(v)} | ${md(note)} |`);
   }
 }
 out.push('', `Kinds: ${Object.entries(KINDS).map(([k, t]) => `${k} ${t}`).join('; ')}. "—": not shown (a broken lane's speed means nothing). ` +

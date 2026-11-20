@@ -45,7 +45,8 @@ The generator finds the kernels in each program and each library export by compa
 the proved constants (Lean's `=` on `Val`), and records them and their theorems in the manifest.
 A kernel therefore cannot drift from its proof: there is no second copy to drift. The proof chips
 of the harness and the page take their kernels and theorems from that manifest; each lane's scope
-and its trusted and not-proved lines are written by hand in its scenario module.
+and its trusted and not-proved lines are written by hand, per lane kind in `bench/chips.mjs` and
+per lane in its scenario module.
 
 ## What is proved
 
@@ -222,10 +223,10 @@ atomics (translated, every heap access is an SC Atomics load or store); ownershi
 halves is the whole proof, and its join spins. Its times include allocating, initialising and
 summing the image, which the JS lanes do outside the timing: on the 4-vCPU VM about 0.7 ms in C,
 and in JavaScript about 2 ms at W = 1 and 5 to 7 ms above (the HeapLang main thread can land on a
-pool thread that has not compiled the loops yet). It has no data-plane lane: `pmapG_spec`
-constrains the final array, not how often a foreign callback would run, so a fast lane writing
-pixels outside the heap needs the `Claim` proof first. Every lane's checksum must equal
-`Σ Mandel.g`, computed in Lean.
+pool thread that has not compiled the loops yet; CI machine, to be re-measured on the reference
+Mac). It has no data-plane lane: `pmapG_spec` constrains the final array, not how often a foreign
+callback would run, so a fast lane writing pixels outside the heap needs the `Claim` proof first.
+Every lane's checksum must equal `Σ Mandel.g`, computed in Lean.
 
 **S11, the lost-wakeup hunt** (`s11.mjs`). Sleepers wait with `Atomics.wait` for an event count;
 the correct protocol (L2) and three classic mistakes (L0: notify before the store, notify the
@@ -268,7 +269,7 @@ Measured 2026-11-20 on linux x64, 4 logical cores, Node v22.23.5. CI machine num
 | Shards.shardCount → C11 → wasm32 | L4w | 100.5 | 172.1 | 346.3 | 274.3 |  |  | 0 |  |
 | faaIncr driver → C11 → native | L4n | 122.4 | 32.5 | 23.0 | 22.4 | 156.4 |  | 0 |  |
 | faaIncr driver → C11 → wasm32 | L4w | 104.4 | 16.4 | 11.0 | 14.2 |  |  | 0 |  |
-| Atomics.add from 2^31 − wrap | L1 |  | — |  |  |  | 1 | wrapped silently 2 | final value -2147479648 (Int32 wrapped, no error) |
+| Atomics.add from 2^31 − wrap | L1 |  | — |  |  |  |  | wrapped silently 2 | final value -2147479648 (Int32 wrapped, no error) |
 | faaIncr from 2^28 − wrap | L3 |  | trap |  |  |  |  | 0 | trap: integer overflow: result outside the 29-bit encoding (HeapLang ints are unbounded) |
 
 **S2 · Lock zoo: one theorem, very different locks**
@@ -348,15 +349,16 @@ What the numbers say, honestly:
   integer operation is checked for overflow, and every heap access is an atomic. For S5's
   Mandelbrot the hand-written bands are 1.5 to 5.6 times faster, a ratio that also counts the
   verified lane's setup and sum. For S2's critical section the translation costs 1.8 to 2.9 times
-  at W = 1; at W ≥ 2 the futex mutex keeps or widens that gap (1.9 to 4.3), while the verified
-  spin and ticket locks range from 1.4 times faster to 1.8 times slower than the same locks by
-  hand (the oversubscribed ticket locks at W = 8 are too erratic to compare). In the stage-1 run,
-  with the verified lock and cells on one cache line, they were 1.9 to 2.7 times slower at every
-  W ≥ 2: much of that gap was false sharing, not the translation. The same HeapLang compiled
-  through C runs at 0.9 to 4 times the speed of hand-written JavaScript natively, and 0.6 to 3.4
-  times as wasm32 (slowest: the futex mutex at W = 1). Each range spans three runs on the 4-vCPU
-  CI machine (the tables show the first; a single ratio can move a lot from run to run), to be
-  re-measured on the reference Mac.
+  at W = 1; at W ≥ 2 the futex mutex keeps that gap (1.8 to 4.3), while at W = 2 and 4 the
+  verified spin and ticket locks run from parity to 1.8 times slower than the same locks by hand.
+  At W = 8, oversubscribed, both swing from run to run: the verified spin lock from 1.4 times
+  faster to 1.3 times slower, the ticket lock from 6 times faster to 10 times slower. In the
+  stage-1 run, with the verified lock and cells on one cache line, they were 1.9 to 2.7 times
+  slower at every W ≥ 2: much of that gap was false sharing, not the translation. The same
+  HeapLang compiled through C runs at 0.9 to 4 times the speed of hand-written JavaScript
+  natively, and 0.6 to 3.4 times as wasm32 (slowest: the futex mutex at W = 1). Each range spans
+  three runs on the 4-vCPU CI machine (the tables show the first; a single ratio can move a lot
+  from run to run), to be re-measured on the reference Mac.
 - **The large wins come from not sharing**, and those are the protocols the proofs state:
   shards, disjoint bands, a ring's single writer per index. Locally counted increments (V8 keeps
   them in a register) are faster still and need no proof.
@@ -436,7 +438,8 @@ axiom guard without generating anything.
 
 The native lane is built when `cc` is available, the wasm lane when `emcc` is (on `PATH`, or named
 by `EMCC`, with `EM_CONFIG` for an emsdk that is not activated); otherwise they are "not built",
-and the tests and the harness skip them. A program that does not compile fails the build.
+and the tests and the harness skip them, except that the tests fail on a backend that `--backends`
+names (CI passes `--backends js,native`). A program that does not compile fails the build.
 
 `test/node.mjs` checks, in order:
 
@@ -450,13 +453,14 @@ and the tests and the harness skip them. A program that does not compile fails t
    program, and finds the racy counter's lost updates and the ring mutant's stale reads.
 4. **The embedding**: the library kernels called from JavaScript give their results.
 5. **Every program on every built backend** gives HeapLang's result, or traps where the encoding
-   must; a backend built only in part fails. The racy controls are recorded, never required:
-   stress results are probabilistic.
+   must; a backend built only in part fails, and so does one named in `--backends` and not
+   built. The racy controls are recorded, never required: stress results are probabilistic.
 
 The page (`dist/iris/index.html`) runs the same scenario modules in module Web Workers, with a proof
-chip per lane (what is proved, the scope, what is trusted, what is not proved), built from the
-manifest. It needs cross-origin isolation; without it, it shows only the theorem table and why.
-It is not linked from the site.
+chip per lane (what is proved, the scope, what is trusted, what is not proved): its kernels and
+theorems come from the manifest, the rest is written by hand, per lane kind in `bench/chips.mjs`
+and per lane in `bench/scenarios/`. It needs cross-origin isolation; without it, it shows only
+the theorem table and why. It is not linked from the site.
 
     .lake/build/bin/leanui serve dist --port 5391 --coop &
     node iris/test/page.mjs http://127.0.0.1:5391 chromium      # every scenario, then the refusal without COOP/COEP
