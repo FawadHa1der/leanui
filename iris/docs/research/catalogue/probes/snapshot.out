@@ -1,0 +1,5 @@
+{"mode":"none","K":16,"writerPerUs":3.903,"readerPerUs":3.762,"torn":107311,"tornPct":9.341,"retries":0,"meanVersionsBehind":1}
+{"mode":"seqPlain","K":16,"writerPerUs":2.789,"readerPerUs":1.012,"torn":0,"tornPct":0,"retries":6869041,"meanVersionsBehind":0.7}
+{"mode":"seqAtomic","K":16,"writerPerUs":0.863,"readerPerUs":0.102,"torn":0,"tornPct":0,"retries":12048184,"meanVersionsBehind":0.4}
+{"mode":"triple","K":16,"writerPerUs":7.754,"readerPerUs":7.86,"torn":0,"tornPct":0,"retries":0,"meanVersionsBehind":1.3}
+{"mode":"mutex","K":16,"writerPerUs":4.369,"readerPerUs":1.794,"torn":0,"tornPct":0,"retries":0,"meanVersionsBehind":1.1}

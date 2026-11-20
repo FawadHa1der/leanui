@@ -11,3 +11,6 @@ bench/wasm64/rc64.*
 # the QED64 lane (qed64/README.md): its shimmed LeanUI and its downloads and builds
 qed64/.shim/
 qed64/.cache/
+
+# the iris/ project (iris/README.md): its own Lake build (iris-lean and its dependencies, 600-800 MB)
+iris/.lake/

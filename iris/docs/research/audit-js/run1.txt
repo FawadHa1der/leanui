@@ -1,0 +1,6 @@
+{"kind":"faa","threads":4,"expected":8000000,"got":8000000,"ok":true,"ms":794.6,"ratio_vs_faa":1}
+{"kind":"cas","threads":4,"expected":8000000,"got":8000000,"ok":true,"ms":1082.8,"ratio_vs_faa":1.36}
+{"kind":"lock","threads":4,"expected":8000000,"got":8000000,"ok":true,"ms":2635.7,"ratio_vs_faa":3.32}
+{"kind":"racy","threads":4,"expected":8000000,"got":8000000,"ok":true,"ms":78.5,"ratio_vs_faa":0.1}
+{"kind":"spsc-atomic-indices","n":5000000,"cap":1024,"ok":true,"timeout":false,"outOfOrder":0,"ms":1416,"ratio_vs_faa":1.78}
+{"kind":"spsc-plain-indices","n":5000000,"cap":1024,"ok":true,"timeout":false,"outOfOrder":0,"ms":211.1,"ratio_vs_faa":0.27}

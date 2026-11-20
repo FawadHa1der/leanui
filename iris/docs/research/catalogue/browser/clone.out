@@ -1,0 +1,2 @@
+isolated got Memory; counter after = 1
+notIsolated postMessage throws DataCloneError: Failed to execute 'postMessage' on 'Worker': SharedArrayBuffer transfer requires self.crossOriginIsolated.

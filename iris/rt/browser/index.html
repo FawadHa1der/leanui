@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HeapLang runner</title>
+<pre id="out">running…</pre>
+<script type="module">
+// Runs one translated program in module Web Workers: ?prog=<module URL>&pool=4&runs=3.
+// SharedArrayBuffer needs a cross-origin isolated page (leanui serve dist --coop). The main thread
+// never blocks: it waits with Atomics.waitAsync. The result is shown and set as window.__result.
+import { launch } from '../launch.mjs';
+const q = new URLSearchParams(location.search);
+const out = (o) => { window.__result = o; document.getElementById('out').textContent = JSON.stringify(o, null, 1); };
+try {
+  if (!crossOriginIsolated) throw new Error('the page is not cross-origin isolated, so it has no SharedArrayBuffer');
+  const progUrl = new URL(q.get('prog'), location.href).href;
+  const prog = await import(progUrl);
+  const r = await launch(prog, {
+    pool: +(q.get('pool') || 4), runs: +(q.get('runs') || 3), mb: +(q.get('mb') || 64), maxThreads: 256,
+    newWorker(sab, onMessage) {
+      const w = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+      w.onmessage = (e) => onMessage(e.data);
+      w.onerror = (e) => onMessage({ error: e.message });
+      w.postMessage({ sab, progUrl });
+      return w;
+    },
+  });
+  out({ ...r, crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency, ua: navigator.userAgent });
+} catch (e) {
+  out({ error: String(e && e.stack || e) });
+}
+</script>

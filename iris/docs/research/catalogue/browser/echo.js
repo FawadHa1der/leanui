@@ -1,0 +1,1 @@
+onmessage = e => { try { const m = e.data; const v = m.buffer ? new Int32Array(m.buffer) : null; if (v) Atomics.add(v, 0, 1); postMessage('got ' + (m.constructor && m.constructor.name)); } catch (err) { postMessage('worker error ' + err.message); } };

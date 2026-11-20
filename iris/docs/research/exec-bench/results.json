@@ -1,0 +1,1314 @@
+{
+ "meta": {
+  "loadavg_start": [
+   19.08,
+   13.5,
+   9.6
+  ],
+  "loadavg_end": [
+   21.02,
+   12.91,
+   10.73
+  ],
+  "date": "2026-11-20T18:43:21.186Z",
+  "node": "v22.23.5",
+  "cpus": 4,
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "runs": 5,
+  "reps": 2,
+  "note": "CI machine (4 vCPU cloud VM); use ratios, re-measure on the reference Mac"
+ },
+ "rows": [
+  {
+   "group": "counter",
+   "label": "fetch-and-add",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "Atomics.add",
+    "r": {
+     "ms": 2.395,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "faa (wp_faa)",
+    "r": {
+     "prog": "counter_faa_t1",
+     "ms": 3.003,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_faa_t1",
+    "native": {
+     "ms": 2.1,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 2.465,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "CAS loop",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "CAS loop",
+    "r": {
+     "ms": 3.744,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "Counter.incr (verified)",
+    "r": {
+     "prog": "counter_cas_t1",
+     "ms": 4.418,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_cas_t1",
+    "native": {
+     "ms": 2.089,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 2.143,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "CAS spinlock, plain ++",
+    "r": {
+     "ms": 4.437,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "SpinLock (verified)",
+    "r": {
+     "prog": "counter_spin_t1",
+     "ms": 7.573,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_spin_t1",
+    "native": {
+     "ms": 3.84,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 4.017,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock, all-SC body",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "CAS spinlock, SC ++",
+    "r": {
+     "ms": 7.53,
+     "result": "200000"
+    }
+   },
+   "trans": null,
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "ticket lock",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "ticket lock",
+    "r": {
+     "ms": 5.683,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "TicketLock (verified)",
+    "r": {
+     "prog": "counter_ticket_t1",
+     "ms": 20.018,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_ticket_t1",
+    "native": {
+     "ms": 3.525,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 4.229,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "futex mutex",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "Drepper mutex, wait/notify",
+    "r": {
+     "ms": 4.832,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "FutexMutex + hints (hints verified no-op)",
+    "r": {
+     "prog": "counter_futex_t1",
+     "ms": 8.444,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_futex_t1",
+    "native": {
+     "ms": 3.804,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 4.281,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock + hints",
+   "T": 1,
+   "ops": 200000,
+   "base": null,
+   "trans": {
+    "name": "SpinLock + hints",
+    "r": {
+     "prog": "counter_spinhint_t1",
+     "ms": 12.882,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_spinhint_t1",
+    "native": {
+     "ms": 27.69,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 10.47,
+     "result": "200000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "NO lock (racy)",
+   "T": 1,
+   "ops": 200000,
+   "base": {
+    "name": "plain I[c]++",
+    "r": {
+     "ms": 0.604,
+     "result": "200000"
+    }
+   },
+   "trans": {
+    "name": "c <- !c + 1 (no proof possible)",
+    "r": {
+     "prog": "counter_racy_t1",
+     "ms": 4.713,
+     "result": "200000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0.2
+    },
+    "prog": "counter_racy_t1",
+    "native": {
+     "ms": 2.197,
+     "result": "200000"
+    },
+    "wasm": {
+     "ms": 2.531,
+     "result": "200000"
+    }
+   },
+   "note": "lost updates expected for T>1"
+  },
+  {
+   "group": "counter",
+   "label": "fetch-and-add",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "Atomics.add",
+    "r": {
+     "ms": 24.442,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "faa (wp_faa)",
+    "r": {
+     "prog": "counter_faa_t2",
+     "ms": 30.785,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_faa_t2",
+    "native": {
+     "ms": 19.041,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 27.311,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "CAS loop",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "CAS loop",
+    "r": {
+     "ms": 43.655,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "Counter.incr (verified)",
+    "r": {
+     "prog": "counter_cas_t2",
+     "ms": 56.896,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_cas_t2",
+    "native": {
+     "ms": 33.572,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 34.066,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "CAS spinlock, plain ++",
+    "r": {
+     "ms": 77.63,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "SpinLock (verified)",
+    "r": {
+     "prog": "counter_spin_t2",
+     "ms": 123.777,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_spin_t2",
+    "native": {
+     "ms": 73.697,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 78.635,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock, all-SC body",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "CAS spinlock, SC ++",
+    "r": {
+     "ms": 97.149,
+     "result": "400000"
+    }
+   },
+   "trans": null,
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "ticket lock",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "ticket lock",
+    "r": {
+     "ms": 96.819,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "TicketLock (verified)",
+    "r": {
+     "prog": "counter_ticket_t2",
+     "ms": 175.266,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_ticket_t2",
+    "native": {
+     "ms": 97.405,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 90.346,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "futex mutex",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "Drepper mutex, wait/notify",
+    "r": {
+     "ms": 29.346,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "FutexMutex + hints (hints verified no-op)",
+    "r": {
+     "prog": "counter_futex_t2",
+     "ms": 66.017,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_futex_t2",
+    "native": {
+     "ms": 38.885,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 33.813,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock + hints",
+   "T": 2,
+   "ops": 400000,
+   "base": null,
+   "trans": {
+    "name": "SpinLock + hints",
+    "r": {
+     "prog": "counter_spinhint_t2",
+     "ms": 101.534,
+     "result": "400000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_spinhint_t2",
+    "native": {
+     "ms": 65.329,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 89.365,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "NO lock (racy)",
+   "T": 2,
+   "ops": 400000,
+   "base": {
+    "name": "plain I[c]++",
+    "r": {
+     "ms": 0.609,
+     "result": "215664 | 207525"
+    }
+   },
+   "trans": {
+    "name": "c <- !c + 1 (no proof possible)",
+    "r": {
+     "prog": "counter_racy_t2",
+     "ms": 32.479,
+     "result": "258489 | 224750",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "counter_racy_t2",
+    "native": {
+     "ms": 21.59,
+     "result": "264830 | 274473"
+    },
+    "wasm": {
+     "ms": 24.402,
+     "result": "294509 | 276469"
+    }
+   },
+   "note": "lost updates expected for T>1"
+  },
+  {
+   "group": "counter",
+   "label": "fetch-and-add",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "Atomics.add",
+    "r": {
+     "ms": 86.023,
+     "result": "800000"
+    }
+   },
+   "trans": {
+    "name": "faa (wp_faa)",
+    "r": {
+     "prog": "counter_faa_t4",
+     "ms": 89.039,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_faa_t4",
+    "native": {
+     "ms": 33.546,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 74.835,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "CAS loop",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "CAS loop",
+    "r": {
+     "ms": 137.279,
+     "result": "800000"
+    }
+   },
+   "trans": {
+    "name": "Counter.incr (verified)",
+    "r": {
+     "prog": "counter_cas_t4",
+     "ms": 146.811,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_cas_t4",
+    "native": {
+     "ms": 91.29,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 85.632,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "CAS spinlock, plain ++",
+    "r": {
+     "ms": 319.688,
+     "result": "800000"
+    }
+   },
+   "trans": {
+    "name": "SpinLock (verified)",
+    "r": {
+     "prog": "counter_spin_t4",
+     "ms": 524.224,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_spin_t4",
+    "native": {
+     "ms": 398.594,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 412.801,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock, all-SC body",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "CAS spinlock, SC ++",
+    "r": {
+     "ms": 434.196,
+     "result": "800000"
+    }
+   },
+   "trans": null,
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "ticket lock",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "ticket lock",
+    "r": {
+     "ms": 354.918,
+     "result": "800000"
+    }
+   },
+   "trans": {
+    "name": "TicketLock (verified)",
+    "r": {
+     "prog": "counter_ticket_t4",
+     "ms": 816.786,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_ticket_t4",
+    "native": {
+     "ms": 521.081,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 390.19,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "futex mutex",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "Drepper mutex, wait/notify",
+    "r": {
+     "ms": 62.274,
+     "result": "800000"
+    }
+   },
+   "trans": {
+    "name": "FutexMutex + hints (hints verified no-op)",
+    "r": {
+     "prog": "counter_futex_t4",
+     "ms": 131.557,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_futex_t4",
+    "native": {
+     "ms": 70.556,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 85.658,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin lock + hints",
+   "T": 4,
+   "ops": 800000,
+   "base": null,
+   "trans": {
+    "name": "SpinLock + hints",
+    "r": {
+     "prog": "counter_spinhint_t4",
+     "ms": 272.2,
+     "result": "800000",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_spinhint_t4",
+    "native": {
+     "ms": 228.131,
+     "result": "800000"
+    },
+    "wasm": {
+     "ms": 120.232,
+     "result": "800000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "NO lock (racy)",
+   "T": 4,
+   "ops": 800000,
+   "base": {
+    "name": "plain I[c]++",
+    "r": {
+     "ms": 1.106,
+     "result": "401300 | 397748"
+    }
+   },
+   "trans": {
+    "name": "c <- !c + 1 (no proof possible)",
+    "r": {
+     "prog": "counter_racy_t4",
+     "ms": 80.238,
+     "result": "387473 | 325171",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "counter_racy_t4",
+    "native": {
+     "ms": 54.627,
+     "result": "431611 | 369521"
+    },
+    "wasm": {
+     "ms": 52.954,
+     "result": "382429 | 376321"
+    }
+   },
+   "note": "lost updates expected for T>1"
+  },
+  {
+   "group": "counter",
+   "label": "spin lock (8 thr / 4 vCPU)",
+   "T": 8,
+   "ops": 400000,
+   "base": {
+    "name": "CAS spinlock, plain ++",
+    "r": {
+     "ms": 265.868,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "SpinLock (verified)",
+    "r": {
+     "prog": "counter_spin_t8",
+     "ms": 416.952,
+     "result": "400000",
+     "threads": 8,
+     "max_live": 8,
+     "heap_mb": 1.1
+    },
+    "prog": "counter_spin_t8",
+    "native": {
+     "ms": 225.223,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 309.786,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "CAS loop (8 thr / 4 vCPU)",
+   "T": 8,
+   "ops": 400000,
+   "base": {
+    "name": "CAS loop",
+    "r": {
+     "ms": 79.597,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "Counter.incr (verified)",
+    "r": {
+     "prog": "counter_cas_t8",
+     "ms": 76.698,
+     "result": "400000",
+     "threads": 8,
+     "max_live": 8,
+     "heap_mb": 1.1
+    },
+    "prog": "counter_cas_t8",
+    "native": {
+     "ms": 40.766,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 49.436,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "futex mutex (8 thr / 4 vCPU)",
+   "T": 8,
+   "ops": 400000,
+   "base": {
+    "name": "Drepper mutex",
+    "r": {
+     "ms": 25.951,
+     "result": "400000"
+    }
+   },
+   "trans": {
+    "name": "FutexMutex + hints",
+    "r": {
+     "prog": "counter_futex_t8",
+     "ms": 52.251,
+     "result": "400000",
+     "threads": 8,
+     "max_live": 8,
+     "heap_mb": 1.1
+    },
+    "prog": "counter_futex_t8",
+    "native": {
+     "ms": 32.738,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 33.846,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "spin + hints (8 thr / 4 vCPU)",
+   "T": 8,
+   "ops": 400000,
+   "base": null,
+   "trans": {
+    "name": "SpinLock + hints",
+    "r": {
+     "prog": "counter_spinhint_t8",
+     "ms": 104.061,
+     "result": "400000",
+     "threads": 8,
+     "max_live": 8,
+     "heap_mb": 1.1
+    },
+    "prog": "counter_spinhint_t8",
+    "native": {
+     "ms": 95.844,
+     "result": "400000"
+    },
+    "wasm": {
+     "ms": 68.221,
+     "result": "400000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "counter",
+   "label": "ticket lock (8 thr / 4 vCPU)",
+   "T": 8,
+   "ops": 16000,
+   "base": {
+    "name": "ticket lock",
+    "r": {
+     "ms": 3140.028,
+     "result": "16000"
+    }
+   },
+   "trans": {
+    "name": "TicketLock (verified)",
+    "r": {
+     "prog": "counter_ticket_t8",
+     "ms": 20572.9,
+     "result": "16000",
+     "threads": 8,
+     "max_live": 8,
+     "heap_mb": 1.1
+    },
+    "prog": "counter_ticket_t8",
+    "native": {
+     "ms": 2659.373,
+     "result": "16000"
+    },
+    "wasm": {
+     "ms": 10.006,
+     "result": "16000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "rwlock",
+   "label": "readers/writer, 1 write in 10",
+   "T": 4,
+   "ops": 400000,
+   "base": {
+    "name": "RW spinlock",
+    "r": {
+     "ms": 86.147,
+     "result": "(0, 40000)"
+    }
+   },
+   "trans": {
+    "name": "RwSpinLock (verified)",
+    "r": {
+     "prog": "rw_t4",
+     "ms": 159.533,
+     "result": "(0, 40000)",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "rw_t4",
+    "native": {
+     "ms": 74.38,
+     "result": "(0, 40000)"
+    },
+    "wasm": {
+     "ms": 111.639,
+     "result": "(0, 40000)"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "lockfree",
+   "label": "Treiber stack push/pop",
+   "T": 4,
+   "ops": 80000,
+   "base": {
+    "name": "Treiber over SAB",
+    "r": {
+     "ms": 13.448,
+     "result": "(200020000, true)"
+    }
+   },
+   "trans": {
+    "name": "Treiber (iris-audit proof)",
+    "r": {
+     "prog": "treiber_t4",
+     "ms": 15,
+     "result": "(200020000, true)",
+     "threads": 4,
+     "max_live": 4,
+     "heap_mb": 4
+    },
+    "prog": "treiber_t4",
+    "native": {
+     "ms": 12.63,
+     "result": "(200020000, true)"
+    },
+    "wasm": {
+     "ms": 16.32,
+     "result": "(200020000, true)"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "sum 4M, sequential",
+   "T": 1,
+   "ops": 4000000,
+   "base": {
+    "name": "loop",
+    "r": {
+     "ms": 9.763,
+     "result": "8004000"
+    }
+   },
+   "trans": {
+    "name": "sumSq",
+    "r": {
+     "prog": "seq_sum",
+     "ms": 22.854,
+     "result": "8004000",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0
+    },
+    "prog": "seq_sum",
+    "native": {
+     "ms": 10.38,
+     "result": "8004000"
+    },
+    "wasm": {
+     "ms": 8.09,
+     "result": "8004000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "sum 4M, two halves",
+   "T": 2,
+   "ops": 4000000,
+   "base": {
+    "name": "2 workers",
+    "r": {
+     "ms": 5.522,
+     "result": "8004000"
+    }
+   },
+   "trans": {
+    "name": "Par.par (verified)",
+    "r": {
+     "prog": "par_sum",
+     "ms": 16.033,
+     "result": "8004000",
+     "threads": 2,
+     "max_live": 2,
+     "heap_mb": 0.3
+    },
+    "prog": "par_sum",
+    "native": {
+     "ms": 4.007,
+     "result": "8004000"
+    },
+    "wasm": {
+     "ms": 4.235,
+     "result": "8004000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "sum 4M with i*i (overflows 2^28)",
+   "T": 1,
+   "ops": 4000000,
+   "base": null,
+   "trans": {
+    "name": "sumSqOvf",
+    "r": {
+     "prog": "seq_sum_overflow",
+     "ms": null,
+     "result": "TRAP: integer overflow: result outside the 29-",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0
+    },
+    "prog": "seq_sum_overflow",
+    "native": {
+     "ms": null,
+     "result": "TRAP: HeapLang program stuck / unsupported: in"
+    },
+    "wasm": {
+     "ms": null,
+     "result": "TRAP: HeapLang program stuck / unsupported: in"
+    }
+   },
+   "note": "HeapLang value is fine; translation traps"
+  },
+  {
+   "group": "forkjoin",
+   "label": "fib(32) sequential",
+   "T": 1,
+   "ops": 1,
+   "base": {
+    "name": "fib",
+    "r": {
+     "ms": 20.357,
+     "result": "2178309"
+    }
+   },
+   "trans": {
+    "name": "pfib d=0",
+    "r": {
+     "prog": "pfib_d0",
+     "ms": 24.541,
+     "result": "2178309",
+     "threads": 1,
+     "max_live": 1,
+     "heap_mb": 0
+    },
+    "prog": "pfib_d0",
+    "native": {
+     "ms": 13.717,
+     "result": "2178309"
+    },
+    "wasm": {
+     "ms": 19.444,
+     "result": "2178309"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "fib(32), 4 leaves",
+   "T": 4,
+   "ops": 1,
+   "base": {
+    "name": "4 workers",
+    "r": {
+     "ms": 19.289,
+     "result": "2178309"
+    }
+   },
+   "trans": {
+    "name": "pfib d=2 (Par)",
+    "r": {
+     "prog": "pfib_d2",
+     "ms": 34.952,
+     "result": "2178309",
+     "threads": 5,
+     "max_live": 4,
+     "heap_mb": 0.5
+    },
+    "prog": "pfib_d2",
+    "native": {
+     "ms": 29.22,
+     "result": "2178309"
+    },
+    "wasm": {
+     "ms": 25.485,
+     "result": "2178309"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "fib(32), 64 leaves, spin-join",
+   "T": 4,
+   "ops": 1,
+   "base": null,
+   "trans": {
+    "name": "pfib d=6 (Par)",
+    "r": {
+     "prog": "pfib_d6",
+     "ms": 207.914,
+     "result": "2178309",
+     "threads": 46,
+     "max_live": 33,
+     "heap_mb": 6
+    },
+    "prog": "pfib_d6",
+    "native": {
+     "ms": 187.991,
+     "result": "2178309"
+    },
+    "wasm": {
+     "ms": 88.498,
+     "result": "2178309"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "forkjoin",
+   "label": "fib(32), 64 leaves, hinted join",
+   "T": 4,
+   "ops": 1,
+   "base": null,
+   "trans": {
+    "name": "pfib d=6 (Par + hints)",
+    "r": {
+     "prog": "pfib_hint_d6",
+     "ms": 62.191,
+     "result": "2178309",
+     "threads": 44,
+     "max_live": 31,
+     "heap_mb": 5.7
+    },
+    "prog": "pfib_hint_d6",
+    "native": {
+     "ms": 9.225,
+     "result": "2178309"
+    },
+    "wasm": {
+     "ms": 12.104,
+     "result": "2178309"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "seq",
+   "label": "quicksort 20k linked list",
+   "T": 1,
+   "ops": 20000,
+   "base": {
+    "name": "same algorithm, JS objects",
+    "r": {
+     "ms": 29.571,
+     "result": "true"
+    }
+   },
+   "trans": {
+    "name": "Quicksort.quicksort (verified)",
+    "r": {
+     "prog": "qsort_20k",
+     "ms": 35.101,
+     "result": "true",
+     "threads": 2,
+     "max_live": 1,
+     "heap_mb": 66.9
+    },
+    "prog": "qsort_20k",
+    "native": {
+     "ms": 27.697,
+     "result": "true"
+    },
+    "wasm": {
+     "ms": 13.34,
+     "result": "true"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "seq",
+   "label": "quicksort 20k (context)",
+   "T": 1,
+   "ops": 20000,
+   "base": {
+    "name": "Array.prototype.sort",
+    "r": {
+     "ms": 10.262,
+     "result": "true"
+    }
+   },
+   "trans": null,
+   "note": ""
+  },
+  {
+   "group": "threads",
+   "label": "1000 tiny tasks",
+   "T": 4,
+   "ops": 1000,
+   "base": {
+    "name": "postMessage pool",
+    "r": {
+     "ms": 4.906,
+     "result": "1000"
+    }
+   },
+   "trans": {
+    "name": "1000 x fork",
+    "r": {
+     "prog": "fork_many_1000",
+     "ms": 55.891,
+     "result": "1000",
+     "threads": 512,
+     "max_live": 9,
+     "heap_mb": 0.7
+    },
+    "prog": "fork_many_1000",
+    "native": {
+     "ms": 3.453,
+     "result": "1000"
+    },
+    "wasm": {
+     "ms": 4.079,
+     "result": "1000"
+    }
+   },
+   "note": ""
+  },
+  {
+   "group": "threads",
+   "label": "50 tasks, new Worker each",
+   "T": 50,
+   "ops": 50,
+   "base": {
+    "name": "new Worker per task",
+    "r": {
+     "ms": 920.188,
+     "result": "50"
+    }
+   },
+   "trans": null,
+   "note": ""
+  }
+ ]
+}

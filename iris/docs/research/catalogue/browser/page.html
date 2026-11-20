@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>probe</title><canvas id="c"></canvas>
+<script type="module">
+const f = {};
+f.crossOriginIsolated = globalThis.crossOriginIsolated;
+f.SharedArrayBuffer = typeof SharedArrayBuffer;
+f.AtomicsPause = typeof Atomics.pause; f.AtomicsWaitAsync = typeof Atomics.waitAsync;
+f.mainThreadAtomicsWait = (() => { if (typeof SharedArrayBuffer === 'undefined') return 'no SAB'; try { return Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1); } catch (e) { return 'throws ' + e.name + ': ' + e.message; } })();
+f.wasmSharedMemory = (() => { try { const m = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); return m.buffer.constructor.name; } catch (e) { return 'throws ' + e.message; } })();
+f.navigatorLocks = typeof navigator.locks; f.SharedWorker = typeof SharedWorker; f.serviceWorker = typeof navigator.serviceWorker;
+f.AudioWorklet = typeof AudioWorkletNode; f.paintWorklet = typeof CSS.paintWorklet; f.animationWorklet = typeof CSS.animationWorklet;
+f.OffscreenCanvas = typeof OffscreenCanvas; f.transferControlToOffscreen = typeof HTMLCanvasElement.prototype.transferControlToOffscreen;
+f.Float16Array = typeof globalThis.Float16Array; f.schedulerPostTask = typeof globalThis.scheduler?.postTask; f.schedulerYield = typeof globalThis.scheduler?.yield;
+f.hardwareConcurrency = navigator.hardwareConcurrency; f.userAgent = navigator.userAgent;
+f.opfs = typeof navigator.storage?.getDirectory;
+f.growableSAB = (() => { try { const s = new SharedArrayBuffer(8, { maxByteLength: 64 }); s.grow(16); return s.byteLength; } catch (e) { return String(e); } })();
+// transferable streams
+f.transferableStream = await (async () => { try { const { port1, port2 } = new MessageChannel(); const rs = new ReadableStream({ start(c) { c.enqueue(7); c.close(); } });
+  const got = new Promise(r => port2.onmessage = e => r(e.data)); port1.postMessage(rs, [rs]); const r2 = await got; const rd = r2.getReader(); return (await rd.read()).value === 7; } catch (e) { return 'throws ' + e.message; } })();
+// worker-side checks: Atomics.wait allowed, OPFS sync access handle, navigator.locks
+f.worker = await new Promise(res => { const w = new Worker('worker.js', { type: 'module' }); w.onmessage = e => res(e.data); w.onerror = e => res('error ' + e.message); });
+// Web Locks: two contexts, exclusive lock, held across an await
+if (navigator.locks) {
+  const order = [];
+  await Promise.all([1, 2].map(i => navigator.locks.request('L', async () => { order.push('in' + i); await new Promise(r => setTimeout(r, 20)); order.push('out' + i); })));
+  f.webLocksOrder = order.join(',');
+  f.webLocksQuery = JSON.stringify(await navigator.locks.query());
+}
+// OffscreenCanvas transfer: the canvas element can no longer give a context
+{ const c = document.getElementById('c'); const off = c.transferControlToOffscreen(); const { port1 } = new MessageChannel(); port1.postMessage(off, [off]); try { c.getContext('2d'); f.canvasAfterTransfer = 'getContext ok?'; } catch (e) { f.canvasAfterTransfer = 'throws ' + e.name; } }
+window.__probe = f;
+</script>

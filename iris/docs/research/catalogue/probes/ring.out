@@ -1,0 +1,6 @@
+{"mode":"ring","N":2000000,"itemsPerUs":5.262,"sumOk":true,"outOfOrder":0}
+{"mode":"ringCached","N":2000000,"itemsPerUs":82.876,"sumOk":true,"outOfOrder":0}
+{"mode":"ringWait","N":2000000,"itemsPerUs":2.63,"sumOk":true,"outOfOrder":0}
+{"mode":"ringBug","N":2000000,"itemsPerUs":6.136,"sumOk":false,"outOfOrder":2504}
+{"mode":"postEach","N":200000,"itemsPerUs":0.709,"sumOk":true,"outOfOrder":0}
+{"mode":"postBatch","N":2000000,"itemsPerUs":70.849,"sumOk":true,"outOfOrder":0}

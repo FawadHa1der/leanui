@@ -1,0 +1,22 @@
+# The verified side of the threads suite (iris/README.md): HeapLang programs proved in iris-lean,
+# a translator from those very constants to JavaScript (SharedArrayBuffer + Atomics) and C11, and
+# a reference interpreter that tests it. A project of its own, apart from the main build: iris-lean
+# pins Lean 4.36.0 (the main build is on 4.34.0), and its build lives in iris/.lake.
+name = "leanui-iris"
+defaultTargets = ["LeanUIIris", "iris-gen"]
+
+# Pinned: iris-lean moves fast, and the proofs follow its proof mode closely.
+[[require]]
+name = "iris"
+git = "https://github.com/leanprover-community/iris-lean"
+rev = "100ed29e10b3b5e91d676d31ea708987882079e0"
+subDir = "Iris"
+
+# Kernels and their proofs, the translator, the reference interpreter, the axiom guard
+[[lean_lib]]
+name = "LeanUIIris"
+
+# Writes the translated programs and their manifest: `lake exe iris-gen ../dist/iris/gen`
+[[lean_exe]]
+name = "iris-gen"
+root = "Gen"
