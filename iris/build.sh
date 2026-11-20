@@ -34,12 +34,13 @@ cp bench/core.mjs bench/chips.mjs bench/kernels.mjs bench/worker.mjs bench/host-
 cp bench/scenarios/*.mjs "$OUT/bench/scenarios/"
 cp page/index.html page/iris.mjs page/iris.css "$OUT/"
 
-# Each translated C program is a whole program: the runtime is two headers it includes.
+# Each translated C program is a whole program: the runtime is two headers it includes. A compile
+# that fails fails the build (xargs exits nonzero).
 CC="${CC:-cc}"
 if [ $native = 1 ] && command -v "$CC" > /dev/null; then
   mkdir -p "$OUT/native"
   ls "$OUT"/gen/c/*.c | xargs -P "$(nproc)" -I{} sh -c \
-    'n=$(basename {} .c); '"$CC"' -O2 -pthread -I"'"$ROOT"'/iris/rt" -w {} -o "'"$OUT"'/native/$n" || echo "native: $n failed"'
+    'n=$(basename {} .c); '"$CC"' -O2 -pthread -I"'"$ROOT"'/iris/rt" -w {} -o "'"$OUT"'/native/$n"'
   echo "dist/iris/native: $(ls "$OUT/native" | wc -l) programs"
 else
   echo "dist/iris/native: not built (no C compiler, or --no-native)"
@@ -52,8 +53,7 @@ if [ $wasm = 1 ] && [ -n "$EMCC" ]; then
   mkdir -p "$OUT/wasm"
   ls "$OUT"/gen/c/*.c | xargs -P 2 -I{} sh -c \
     'n=$(basename {} .c); "'"$EMCC"'" -O2 -pthread -I"'"$ROOT"'/iris/rt" -w {} -o "'"$OUT"'/wasm/$n.js" \
-       -sPTHREAD_POOL_SIZE=72 -sINITIAL_MEMORY=1280MB -sENVIRONMENT=node -sEXIT_RUNTIME=1 -sSTACK_SIZE=1MB \
-       || echo "wasm: $n failed"'
+       -sPTHREAD_POOL_SIZE=72 -sINITIAL_MEMORY=1280MB -sENVIRONMENT=node -sEXIT_RUNTIME=1 -sSTACK_SIZE=1MB'
   echo "dist/iris/wasm: $(ls "$OUT"/wasm/*.wasm | wc -l) programs"
 else
   echo "dist/iris/wasm: not built (no emcc, or --no-wasm)"

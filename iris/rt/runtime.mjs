@@ -94,10 +94,11 @@ export function bor(a, b) { if (isBool(a)) return (a === TRUE || b === TRUE) ? T
 export function bxor(a, b) { if (isBool(a)) return (a !== b) ? TRUE : FALSE; return a ^ b; }
 export function shl(a, b) {
   const n = b >> 3, m = a >> 3;
-  if (n >= 0) { const r = m * 2 ** n * 8; if (!Number.isSafeInteger(r) || (r | 0) !== r) ovf(); return r; }
+  if (n >= 0) { if (m === 0) return 0; const r = m * 2 ** n * 8; if (!Number.isSafeInteger(r) || (r | 0) !== r) ovf(); return r; }
   return (m >> Math.min(-n, 31)) * 8;
 }
-export function shr(a, b) { return shl(a, -b); }
+// m >>> n is m <<< (-n) in HeapLang; -b overflows for the word of -2^28 alone (m <<< 2^28)
+export function shr(a, b) { if (b === INT_MIN_W) { if ((a >> 3) === 0) return 0; ovf(); } return shl(a, -b); }
 export function off(l, i) { const r = l + i; if ((r | 0) !== r) ovf(); return r; }
 export function neg(w) { if (isBool(w)) return w === TRUE ? FALSE : TRUE; return ~(w >> 3) * 8; }
 export function minus(w) { const r = -w; if ((r | 0) !== r) ovf(); return r; }

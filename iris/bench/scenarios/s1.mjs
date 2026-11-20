@@ -116,8 +116,11 @@ export const lanes = [
     id: 'wrap-verified', kind: 'L3', label: 'faaIncr from 2^28 − wrap', mode: 'fixed', oneW: 2, noSpeed: true, expectTrap: true,
     lib: 'lib_counters', uses: ['AtomicCounter.faaIncr'],
     async setup(ctx) { const s = await heapSetup(ctx); const lib = await ctx.lib('lib_counters'); E.open(s.heap, lib).H[E.cell(s.c)] = E.int(2 ** 28 - ctx.sizes.wrap); return s; },
-    async run(ctx) { const K = await heapOpen(ctx), t0 = ctx.ready(); for (let k = 0; k < ctx.sizes.wrap; k++) K['AtomicCounter.faaIncr'](ctx.shared.c); return { ops: ctx.sizes.wrap, t0, t1: now() }; },
-    note: (r) => r.trap ? 'trapped (fail-stop): HeapLang ints are unbounded, the encoding is 29-bit' : 'did not trap',
-    scope: 'kernel proved for unbounded integers; the 29-bit encoding traps instead of wrapping',
+    // the other worker stops at the harness's stop flag, set when one traps
+    async run(ctx) { const K = await heapOpen(ctx), t0 = ctx.ready(); for (let k = 0; k < ctx.sizes.wrap && !ctx.stopped(); k++) K['AtomicCounter.faaIncr'](ctx.shared.c); return { ops: ctx.sizes.wrap, t0, t1: now() }; },
+    note: (r) => r.trap ? 'trapped: HeapLang ints are unbounded, the encoding is 29-bit' : 'did not trap',
+    scope: 'kernel proved for unbounded integers. In the 29-bit encoding, faa detects overflow only after the wrapped word is in ' +
+      'the cell: the trapping thread stops and the run is reported as a trap, but the other thread may observe the wrapped value ' +
+      'until the harness stops it',
   },
 ];

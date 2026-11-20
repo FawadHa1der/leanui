@@ -45,13 +45,19 @@ function jsLock(id, kind, label, lock) {
   };
 }
 
-// Verified lanes: Critical.critical<Lock> from gen/js/lib_locks.mjs; the whole section is HeapLang
+// Verified lanes: Critical.critical<Lock> from gen/js/lib_locks.mjs; the whole section is HeapLang.
+// A cache line of padding after the lock and after the first cell puts the lock, A and B on
+// separate lines, as in the JS lanes (allocation is sequential: adjacent, they would share one).
 const NEW = { Spin: 'SpinLock.newlock', Ticket: 'TicketLock.newlock', Futex: 'FutexMutex.newlock', NoWake: 'FutexMutex.newlock' };
 export async function heapSetup(ctx, which) {
   const lib = await ctx.lib('lib_locks');
   const heap = E.newHeap(lib, 16);
   const { K } = E.open(heap, lib);
-  return { heap, lk: K[NEW[which]](E.UNIT), a: E.alloc(1, E.int(0)), b: E.alloc(1, E.int(0)) };
+  const pad = () => E.alloc(LINE, E.int(0));
+  const lk = K[NEW[which]](E.UNIT); pad();
+  const a = E.alloc(1, E.int(0)); pad();
+  const b = E.alloc(1, E.int(0));
+  return { heap, lk, a, b };
 }
 export async function heapOpen(ctx) {
   const lib = await ctx.lib('lib_locks');

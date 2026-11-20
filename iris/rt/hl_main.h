@@ -1,5 +1,6 @@
 // The thread pool and driver for translated C programs; the translation unit includes it last.
 //   ./prog [pool=4] [runs=3] [heapMB=256]   prints one JSON line, like run.mjs --json
+// Every run's value is checked: if two runs disagree, the result is "runs disagree: a / b".
 // The pool is fixed (the JS launcher grows its own): a program needing more simultaneously live
 // HeapLang threads than the pool can hang, which is liveness; it cannot compute a wrong value.
 #ifndef __EMSCRIPTEN__
@@ -83,19 +84,23 @@ int main(int argc, char **argv) {
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for (int i = 0; i < pool; i++) { pthread_t t; if (pthread_create(&t, &attr, pool_thread, 0)) { fprintf(stderr, "pthread_create failed\n"); return 3; } }
   double times[64], cpus[64]; int nt = 0;
+  static char res[4096], got[4096], both[8200];
   for (int r = 0; r < runs && r < 64; r++) {
     __atomic_store_n(&H[C_DONE], 0, SEQ);
     double t0 = now_ms(), c0 = cpu_ms();
     hl_fork(hl_MAIN);
     while (__atomic_load_n(&H[C_DONE], SEQ) == 0) fwait(&H[C_DONE], 0, 100.0);
     times[nt] = now_ms() - t0; cpus[nt++] = cpu_ms() - c0;
+    decode(r == 0 ? res : got, sizeof res, __atomic_load_n(&H[C_RESULT], SEQ), 0);
+    if (r > 0 && strcmp(res, got) != 0 && strncmp(res, "runs disagree", 13) != 0) {
+      snprintf(both, sizeof both, "runs disagree: %s / %s", res, got);
+      snprintf(res, sizeof res, "%s", both);
+    }
   }
   for (int i = 1; i < nt; i++) for (int k = i; k > 0 && times[k] < times[k - 1]; k--) {
     double x = times[k]; times[k] = times[k - 1]; times[k - 1] = x;
     x = cpus[k]; cpus[k] = cpus[k - 1]; cpus[k - 1] = x;
   }
-  static char res[4096];
-  decode(res, sizeof res, __atomic_load_n(&H[C_RESULT], SEQ), 0);
   char cpu[32];
   if (cpus[nt / 2] >= 0 && cpu_ms() >= 0) snprintf(cpu, sizeof cpu, "%.3f", cpus[nt / 2]); else snprintf(cpu, sizeof cpu, "null");
   printf("{\"program\":\"%s\",\"result\":\"%s\",\"median_ms\":%.3f,\"min_ms\":%.3f,\"cpu_ms\":%s,\"pool\":%d,\"forks\":%d,\"max_live\":%d,\"heap_cells_used\":%d}\n",

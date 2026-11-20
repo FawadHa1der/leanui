@@ -3,12 +3,14 @@
 //  1. provenance: every theorem the manifest names is in LeanUIIris/Axioms.lean's guard, and the
 //     kernels a program is said to call were found in it (the generator compares terms);
 //  2. translator statistics that no result would reveal (a dropped futex hint changes no value);
-//  3. the reference interpreter, under every schedule, gives the hand-worked result;
+//  3. the reference interpreter, under every schedule, gives the hand-worked result, and its racy
+//     controls show interleavings (a lost update, the ring mutant's stale reads);
 //  4. the library modules' kernels, called from JavaScript through rt/embed.mjs, give their results;
 //  5. each translated program, on real threads, gives the result HeapLang's semantics gives, or
 //     traps where the encoding must (29-bit ints). Concurrent programs run several times. The
 //     racy controls are recorded, never required: stress results are probabilistic.
-// Backends: js always; native and wasm when build.sh built them ("not built" otherwise).
+// Backends: js always; native and wasm when build.sh built them ("not built" otherwise; a backend
+// built only in part fails).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -87,7 +89,11 @@ let interpRuns = 0, outOfFuel = 0;
 for (const p of progs) {
   for (const { schedule, result } of p.interp) {
     interpRuns++;
-    if (result === 'OUT OF FUEL') { outOfFuel++; continue; }
+    if (result === 'OUT OF FUEL') {
+      outOfFuel++;
+      if (p.name !== 'edge_loop-1e6') fail(`interp: ${p.name} ran out of fuel under ${schedule}`);
+      continue;
+    }
     if (p.expect === null || p.expect === 'TRAP') continue;
     if (result !== p.expect) fail(`interp: ${p.name} gave ${result} under ${schedule}, expected ${p.expect}`);
   }
@@ -97,6 +103,12 @@ for (const p of progs.filter((p) => p.expect === 'TRAP'))
   console.log(`  ${p.name}: HeapLang gives ${p.interp[0].result}; the translation must trap instead`);
 for (const p of progs.filter((p) => p.expect === null && p.interp.length))
   console.log(`  ${p.name} (racy control): ${p.interp.map((i) => `${i.result} [${i.schedule}]`).join(', ')}`);
+// The schedules are seeded, so the racy controls give the same values every time: some schedule
+// must lose an update and some must read the ring mutant's stale slots, or the interpreter has
+// stopped interleaving.
+const someInterp = (name, ok) => progs.find((p) => p.name === name)?.interp.some((i) => /^-?\d+$/.test(i.result) && ok(Number(i.result)));
+if (!someInterp('small_counter_racy', (n) => n < 45)) fail('interp: no schedule of small_counter_racy loses an update');
+if (!someInterp('small_spsc_early', (n) => n > 0)) fail('interp: no schedule of small_spsc_early reads a stale slot');
 
 // 4. the embedding ABI (rt/embed.mjs): library kernels called from JavaScript, one thread
 {
@@ -124,6 +136,12 @@ for (const p of progs.filter((p) => p.expect === null && p.interp.length))
   let trapped = false;
   try { E.int(2 ** 28); } catch { trapped = true; }
   if (!trapped) fail('embed: 2^28 should not encode');
+  // m >>> n is m <<< (-n): a shift by -2^28, the one amount whose negation wraps, is 0 for 0 and
+  // overflows otherwise (no edge program can test it: the interpreter would build 1 <<< 2^28)
+  const RT = await import(path.join(IRIS, 'rt/runtime.mjs'));
+  trapped = false;
+  try { RT.shr(E.int(1), E.int(-(2 ** 28))); } catch { trapped = true; }
+  if (!trapped || RT.shr(E.int(0), E.int(-(2 ** 28))) !== 0) fail('runtime: 1 >>> -2^28 should trap, 0 >>> -2^28 give 0');
   console.log('embed: counters, the four critical sections and the ring, called from JavaScript');
 }
 
@@ -145,10 +163,15 @@ function runOnce(backend, name) {
     return 'ERROR ' + String(e.stderr || e.message).trim().split('\n').slice(-3).join(' | ').slice(0, 300);
   }
 }
-const built = (backend) => backend === 'js' ||
-  progs.every((p) => fs.existsSync(backend === 'native' ? path.join(OUT, 'native', p.name) : path.join(OUT, 'wasm', p.name + '.wasm')));
+// A backend is "not built" when build.sh made no directory for it; a directory that lacks some
+// programs is a failed build.
+const binary = (backend, name) => backend === 'native' ? path.join(OUT, 'native', name) : path.join(OUT, 'wasm', name + '.wasm');
 for (const backend of wanted) {
-  if (!built(backend)) { console.log(`\n[${backend}] not built`); continue; }
+  if (backend !== 'js') {
+    if (!fs.existsSync(path.join(OUT, backend))) { console.log(`\n[${backend}] not built`); continue; }
+    const missing = progs.filter((p) => !fs.existsSync(binary(backend, p.name))).map((p) => p.name);
+    if (missing.length) { fail(`[${backend}] ${missing.length} of ${progs.length} programs not built: ${missing.join(', ')}`); continue; }
+  }
   console.log(`\n[${backend}]`);
   let pass = 0, failed = 0;
   const t0 = performance.now();

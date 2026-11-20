@@ -6,7 +6,7 @@
   "cores": 4,
   "platform": "linux x64"
  },
- "note": "CI machine numbers: read them as ratios within one run; re-measure on the reference Mac (S5 re-run after adding a JIT warm-up, same machine and hour)",
+ "note": "CI machine numbers: read them as ratios within one run; re-measure on the reference Mac (S5 re-run after adding a JIT warm-up, same machine and hour; S2 and S11 re-run after padding the verified locks' cells to separate cache lines, same VM)",
  "started": "2026-11-20T20:25:54.668Z",
  "quick": false,
  "Ws": [
@@ -1549,8 +1549,8 @@
      "lane": "no-lock",
      "W": 1,
      "fuzz": false,
-     "ops": 224206752,
-     "wall_ms": 300.77,
+     "ops": 163273664,
+     "wall_ms": 300.73,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
      "fairness": null,
@@ -1564,14 +1564,14 @@
      "lane": "no-lock",
      "W": 2,
      "fuzz": false,
-     "ops": 5184800,
-     "wall_ms": 300.7,
+     "ops": 4530784,
+     "wall_ms": 300.75,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
-     "fairness": 0.992,
+     "fairness": 0.993,
      "violations": {
-      "torn_reads": 5184785,
-      "lost_updates": 1988662
+      "torn_reads": 4516043,
+      "lost_updates": 1495034
      }
     },
     {
@@ -1579,14 +1579,14 @@
      "lane": "no-lock",
      "W": 4,
      "fuzz": false,
-     "ops": 4528096,
-     "wall_ms": 304.89,
+     "ops": 4839712,
+     "wall_ms": 300.85,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
-     "fairness": 0.994,
+     "fairness": 0.983,
      "violations": {
-      "torn_reads": 4527794,
-      "lost_updates": 3295763
+      "torn_reads": 4837066,
+      "lost_updates": 3417161
      }
     },
     {
@@ -1594,14 +1594,14 @@
      "lane": "no-lock",
      "W": 8,
      "fuzz": false,
-     "ops": 5609824,
-     "wall_ms": 304.97,
+     "ops": 4286592,
+     "wall_ms": 305.53,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
-     "fairness": 0.839,
+     "fairness": 0.939,
      "violations": {
-      "torn_reads": 5608777,
-      "lost_updates": 4529628
+      "torn_reads": 4274361,
+      "lost_updates": 3557211
      }
     },
     {
@@ -1609,8 +1609,8 @@
      "lane": "no-lock",
      "W": 1,
      "fuzz": true,
-     "ops": 847520,
-     "wall_ms": 300.48,
+     "ops": 1106976,
+     "wall_ms": 300.68,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
      "fairness": null,
@@ -1624,147 +1624,147 @@
      "lane": "no-lock",
      "W": 2,
      "fuzz": true,
-     "ops": 1634464,
-     "wall_ms": 300.55,
+     "ops": 1767200,
+     "wall_ms": 300.87,
      "ops_per_us": null,
      "cpu_ns_per_op": null,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 1634245,
-      "lost_updates": 421937
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "no-lock",
-     "W": 4,
-     "fuzz": true,
-     "ops": 2547232,
-     "wall_ms": 300.99,
-     "ops_per_us": null,
-     "cpu_ns_per_op": null,
-     "fairness": 0.982,
-     "violations": {
-      "torn_reads": 2546992,
-      "lost_updates": 1348570
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "no-lock",
-     "W": 8,
-     "fuzz": true,
-     "ops": 2804448,
-     "wall_ms": 310.63,
-     "ops_per_us": null,
-     "cpu_ns_per_op": null,
-     "fairness": 0.925,
-     "violations": {
-      "torn_reads": 2804253,
-      "lost_updates": 1997046
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 1,
-     "fuzz": false,
-     "ops": 12285472,
-     "wall_ms": 300.56,
-     "ops_per_us": 40.8757,
-     "cpu_ns_per_op": 24.4,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 2,
-     "fuzz": false,
-     "ops": 2930464,
-     "wall_ms": 300.55,
-     "ops_per_us": 9.7502,
-     "cpu_ns_per_op": 147.2,
-     "fairness": 0.994,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 4,
-     "fuzz": false,
-     "ops": 2784672,
-     "wall_ms": 300.54,
-     "ops_per_us": 9.2655,
-     "cpu_ns_per_op": 251.8,
-     "fairness": 0.994,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 8,
-     "fuzz": false,
-     "ops": 3446016,
-     "wall_ms": 300.86,
-     "ops_per_us": 11.4539,
-     "cpu_ns_per_op": 273.6,
-     "fairness": 0.964,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 1,
-     "fuzz": true,
-     "ops": 1232128,
-     "wall_ms": 300.58,
-     "ops_per_us": 4.0992,
-     "cpu_ns_per_op": 252.3,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 2,
-     "fuzz": true,
-     "ops": 707328,
-     "wall_ms": 300.55,
-     "ops_per_us": 2.3534,
-     "cpu_ns_per_op": 587.8,
-     "fairness": 0.999,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-js",
-     "W": 4,
-     "fuzz": true,
-     "ops": 679200,
-     "wall_ms": 300.58,
-     "ops_per_us": 2.2596,
-     "cpu_ns_per_op": 907.4,
      "fairness": 0.997,
      "violations": {
+      "torn_reads": 1766739,
+      "lost_updates": 466155
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 4,
+     "fuzz": true,
+     "ops": 2637408,
+     "wall_ms": 300.67,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.986,
+     "violations": {
+      "torn_reads": 2637211,
+      "lost_updates": 1443281
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "no-lock",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2869984,
+     "wall_ms": 309.96,
+     "ops_per_us": null,
+     "cpu_ns_per_op": null,
+     "fairness": 0.99,
+     "violations": {
+      "torn_reads": 2869633,
+      "lost_updates": 2105175
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 11818816,
+     "wall_ms": 300.68,
+     "ops_per_us": 39.3075,
+     "cpu_ns_per_op": 25.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 3124800,
+     "wall_ms": 300.68,
+     "ops_per_us": 10.3925,
+     "cpu_ns_per_op": 133.6,
+     "fairness": 0.992,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 2995520,
+     "wall_ms": 300.68,
+     "ops_per_us": 9.9626,
+     "cpu_ns_per_op": 232.5,
+     "fairness": 0.994,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 3423808,
+     "wall_ms": 300.7,
+     "ops_per_us": 11.3863,
+     "cpu_ns_per_op": 286.7,
+     "fairness": 0.99,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 1237312,
+     "wall_ms": 300.67,
+     "ops_per_us": 4.1152,
+     "cpu_ns_per_op": 250.1,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 734176,
+     "wall_ms": 300.64,
+     "ops_per_us": 2.442,
+     "cpu_ns_per_op": 559.6,
+     "fairness": 0.963,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 601760,
+     "wall_ms": 300.72,
+     "ops_per_us": 2.0011,
+     "cpu_ns_per_op": 1031.7,
+     "fairness": 0.993,
+     "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      }
@@ -1774,460 +1774,10 @@
      "lane": "futex-js",
      "W": 8,
      "fuzz": true,
-     "ops": 659584,
-     "wall_ms": 300.79,
-     "ops_per_us": 2.1928,
-     "cpu_ns_per_op": 1184.5,
-     "fairness": 0.999,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 1,
-     "fuzz": false,
-     "ops": 5224384,
-     "wall_ms": 300.56,
-     "ops_per_us": 17.3821,
-     "cpu_ns_per_op": 58.5,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 2,
-     "fuzz": false,
-     "ops": 1495616,
-     "wall_ms": 300.57,
-     "ops_per_us": 4.976,
-     "cpu_ns_per_op": 300.9,
-     "fairness": 0.996,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 4,
-     "fuzz": false,
-     "ops": 1382528,
-     "wall_ms": 300.54,
-     "ops_per_us": 4.6001,
-     "cpu_ns_per_op": 529.9,
-     "fairness": 0.996,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 8,
-     "fuzz": false,
-     "ops": 1379840,
-     "wall_ms": 300.69,
-     "ops_per_us": 4.5889,
-     "cpu_ns_per_op": 706.4,
-     "fairness": 0.984,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 1,
-     "fuzz": true,
-     "ops": 400256,
-     "wall_ms": 300.59,
-     "ops_per_us": 1.3316,
-     "cpu_ns_per_op": 780.8,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 2,
-     "fuzz": true,
-     "ops": 213184,
-     "wall_ms": 300.64,
-     "ops_per_us": 0.7091,
-     "cpu_ns_per_op": 1871,
-     "fairness": 0.941,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 4,
-     "fuzz": true,
-     "ops": 175424,
-     "wall_ms": 300.57,
-     "ops_per_us": 0.5836,
-     "cpu_ns_per_op": 3250.6,
-     "fairness": 0.999,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "futex-verified",
-     "W": 8,
-     "fuzz": true,
-     "ops": 152768,
-     "wall_ms": 300.9,
-     "ops_per_us": 0.5077,
-     "cpu_ns_per_op": 4419.2,
-     "fairness": 0.995,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 1,
-     "fuzz": false,
-     "ops": 9636096,
-     "wall_ms": 300.63,
-     "ops_per_us": 32.0527,
-     "cpu_ns_per_op": 31.3,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 2,
-     "fuzz": false,
-     "ops": 1094304,
-     "wall_ms": 300.55,
-     "ops_per_us": 3.641,
-     "cpu_ns_per_op": 546.1,
-     "fairness": 0.921,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 4,
-     "fuzz": false,
-     "ops": 462144,
-     "wall_ms": 300.53,
-     "ops_per_us": 1.5377,
-     "cpu_ns_per_op": 2550.7,
-     "fairness": 0.989,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 8,
-     "fuzz": false,
-     "ops": 231776,
-     "wall_ms": 314.41,
-     "ops_per_us": 0.7372,
-     "cpu_ns_per_op": 5379,
-     "fairness": 0.852,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 1,
-     "fuzz": true,
-     "ops": 1280320,
-     "wall_ms": 300.53,
-     "ops_per_us": 4.2602,
-     "cpu_ns_per_op": 242.2,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 2,
-     "fuzz": true,
-     "ops": 1284096,
-     "wall_ms": 300.51,
-     "ops_per_us": 4.273,
-     "cpu_ns_per_op": 465.4,
-     "fairness": 0.999,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 4,
-     "fuzz": true,
-     "ops": 797344,
-     "wall_ms": 300.63,
-     "ops_per_us": 2.6522,
-     "cpu_ns_per_op": 1441,
-     "fairness": 0.995,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-js",
-     "W": 8,
-     "fuzz": true,
-     "ops": 388128,
-     "wall_ms": 306.58,
-     "ops_per_us": 1.266,
-     "cpu_ns_per_op": 3143.8,
-     "fairness": 0.893,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 1,
-     "fuzz": false,
-     "ops": 4916736,
-     "wall_ms": 300.55,
-     "ops_per_us": 16.3591,
-     "cpu_ns_per_op": 61.5,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 2,
-     "fuzz": false,
-     "ops": 405568,
-     "wall_ms": 300.66,
-     "ops_per_us": 1.3489,
-     "cpu_ns_per_op": 1495.4,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 4,
-     "fuzz": false,
-     "ops": 229728,
-     "wall_ms": 300.53,
-     "ops_per_us": 0.7644,
-     "cpu_ns_per_op": 5190.8,
-     "fairness": 0.995,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 8,
-     "fuzz": false,
-     "ops": 115904,
-     "wall_ms": 309.65,
-     "ops_per_us": 0.3743,
-     "cpu_ns_per_op": 10610.3,
-     "fairness": 0.872,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 1,
-     "fuzz": true,
-     "ops": 394816,
-     "wall_ms": 300.62,
-     "ops_per_us": 1.3134,
-     "cpu_ns_per_op": 769.3,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 2,
-     "fuzz": true,
-     "ops": 394304,
-     "wall_ms": 300.52,
-     "ops_per_us": 1.3121,
-     "cpu_ns_per_op": 1545.1,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 4,
-     "fuzz": true,
-     "ops": 259616,
-     "wall_ms": 306,
-     "ops_per_us": 0.8484,
-     "cpu_ns_per_op": 4591.9,
-     "fairness": 0.987,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "spin-verified",
-     "W": 8,
-     "fuzz": true,
-     "ops": 139136,
-     "wall_ms": 305.34,
-     "ops_per_us": 0.4557,
-     "cpu_ns_per_op": 8474.1,
-     "fairness": 0.942,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 1,
-     "fuzz": false,
-     "ops": 7482144,
-     "wall_ms": 300.69,
-     "ops_per_us": 24.8832,
-     "cpu_ns_per_op": 40.3,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 2,
-     "fuzz": false,
-     "ops": 1080928,
-     "wall_ms": 300.62,
-     "ops_per_us": 3.5957,
-     "cpu_ns_per_op": 557.1,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 4,
-     "fuzz": false,
-     "ops": 788032,
-     "wall_ms": 302.52,
-     "ops_per_us": 2.6049,
-     "cpu_ns_per_op": 1500.1,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 8,
-     "fuzz": false,
-     "ops": 6208,
-     "wall_ms": 429.28,
-     "ops_per_us": 0.0145,
-     "cpu_ns_per_op": 271086.8,
-     "fairness": 0.414,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 1,
-     "fuzz": true,
-     "ops": 857216,
-     "wall_ms": 300.53,
-     "ops_per_us": 2.8524,
-     "cpu_ns_per_op": 361.5,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 2,
-     "fuzz": true,
-     "ops": 158816,
-     "wall_ms": 300.62,
-     "ops_per_us": 0.5283,
-     "cpu_ns_per_op": 3793.8,
+     "ops": 644064,
+     "wall_ms": 301.08,
+     "ops_per_us": 2.1392,
+     "cpu_ns_per_op": 1233.3,
      "fairness": 0.998,
      "violations": {
       "torn_reads": 0,
@@ -2236,43 +1786,493 @@
     },
     {
      "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 4,
-     "fuzz": true,
-     "ops": 72032,
-     "wall_ms": 300.76,
-     "ops_per_us": 0.2395,
-     "cpu_ns_per_op": 16005.2,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-js",
-     "W": 8,
-     "fuzz": true,
-     "ops": 1888,
-     "wall_ms": 409.56,
-     "ops_per_us": 0.0046,
-     "cpu_ns_per_op": 819304.6,
-     "fairness": 0.501,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     }
-    },
-    {
-     "scenario": "s2",
-     "lane": "ticket-verified",
+     "lane": "futex-verified",
      "W": 1,
      "fuzz": false,
-     "ops": 3740704,
+     "ops": 5013504,
+     "wall_ms": 300.62,
+     "ops_per_us": 16.6773,
+     "cpu_ns_per_op": 60.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1317536,
+     "wall_ms": 300.66,
+     "ops_per_us": 4.3821,
+     "cpu_ns_per_op": 365.3,
+     "fairness": 0.993,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 1306944,
+     "wall_ms": 300.91,
+     "ops_per_us": 4.3433,
+     "cpu_ns_per_op": 567.9,
+     "fairness": 0.995,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1598784,
+     "wall_ms": 300.51,
+     "ops_per_us": 5.3202,
+     "cpu_ns_per_op": 610.7,
+     "fairness": 0.986,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 349056,
+     "wall_ms": 300.54,
+     "ops_per_us": 1.1614,
+     "cpu_ns_per_op": 899.5,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 238752,
      "wall_ms": 300.56,
-     "ops_per_us": 12.4456,
-     "cpu_ns_per_op": 81.7,
+     "ops_per_us": 0.7944,
+     "cpu_ns_per_op": 1715,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 320576,
+     "wall_ms": 300.23,
+     "ops_per_us": 1.0678,
+     "cpu_ns_per_op": 1980.2,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 166048,
+     "wall_ms": 301.5,
+     "ops_per_us": 0.5507,
+     "cpu_ns_per_op": 4060.4,
+     "fairness": 0.986,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 8813920,
+     "wall_ms": 300.66,
+     "ops_per_us": 29.3156,
+     "cpu_ns_per_op": 34.4,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1122048,
+     "wall_ms": 300.6,
+     "ops_per_us": 3.7328,
+     "cpu_ns_per_op": 533.7,
+     "fairness": 0.99,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 492000,
+     "wall_ms": 300.62,
+     "ops_per_us": 1.6366,
+     "cpu_ns_per_op": 2431.4,
+     "fairness": 0.985,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 354560,
+     "wall_ms": 305.74,
+     "ops_per_us": 1.1597,
+     "cpu_ns_per_op": 3413.4,
+     "fairness": 0.942,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 871648,
+     "wall_ms": 300.49,
+     "ops_per_us": 2.9008,
+     "cpu_ns_per_op": 347.9,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 1264032,
+     "wall_ms": 300.52,
+     "ops_per_us": 4.2061,
+     "cpu_ns_per_op": 468.6,
+     "fairness": 0.991,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 732064,
+     "wall_ms": 302.68,
+     "ops_per_us": 2.4186,
+     "cpu_ns_per_op": 1609.3,
+     "fairness": 0.988,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 449856,
+     "wall_ms": 313.21,
+     "ops_per_us": 1.4363,
+     "cpu_ns_per_op": 2536.8,
+     "fairness": 0.971,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 4804544,
+     "wall_ms": 300.56,
+     "ops_per_us": 15.9852,
+     "cpu_ns_per_op": 63.3,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 2,
+     "fuzz": false,
+     "ops": 1030464,
+     "wall_ms": 300.59,
+     "ops_per_us": 3.4282,
+     "cpu_ns_per_op": 587.2,
+     "fairness": 0.998,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 4,
+     "fuzz": false,
+     "ops": 702656,
+     "wall_ms": 300.62,
+     "ops_per_us": 2.3373,
+     "cpu_ns_per_op": 1701.1,
+     "fairness": 0.994,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 312000,
+     "wall_ms": 306.18,
+     "ops_per_us": 1.019,
+     "cpu_ns_per_op": 3884.3,
+     "fairness": 0.828,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 411200,
+     "wall_ms": 301.51,
+     "ops_per_us": 1.3638,
+     "cpu_ns_per_op": 757.5,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 387296,
+     "wall_ms": 300.23,
+     "ops_per_us": 1.29,
+     "cpu_ns_per_op": 1552.6,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 322112,
+     "wall_ms": 299.31,
+     "ops_per_us": 1.0762,
+     "cpu_ns_per_op": 3625.6,
+     "fairness": 0.995,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "spin-verified",
+     "W": 8,
+     "fuzz": true,
+     "ops": 144320,
+     "wall_ms": 301.17,
+     "ops_per_us": 0.4792,
+     "cpu_ns_per_op": 7946.4,
+     "fairness": 0.986,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 1,
+     "fuzz": false,
+     "ops": 7565120,
+     "wall_ms": 300.63,
+     "ops_per_us": 25.1642,
+     "cpu_ns_per_op": 39.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 2,
+     "fuzz": false,
+     "ops": 943072,
+     "wall_ms": 300.61,
+     "ops_per_us": 3.1372,
+     "cpu_ns_per_op": 631.9,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 4,
+     "fuzz": false,
+     "ops": 625184,
+     "wall_ms": 302.95,
+     "ops_per_us": 2.0637,
+     "cpu_ns_per_op": 1925.6,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 8,
+     "fuzz": false,
+     "ops": 896,
+     "wall_ms": 468.84,
+     "ops_per_us": 0.0019,
+     "cpu_ns_per_op": 2070300.2,
+     "fairness": 0.636,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 1,
+     "fuzz": true,
+     "ops": 838848,
+     "wall_ms": 300.56,
+     "ops_per_us": 2.7909,
+     "cpu_ns_per_op": 362.8,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 2,
+     "fuzz": true,
+     "ops": 164416,
+     "wall_ms": 300.52,
+     "ops_per_us": 0.5471,
+     "cpu_ns_per_op": 3583.3,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 4,
+     "fuzz": true,
+     "ops": 71072,
+     "wall_ms": 302.98,
+     "ops_per_us": 0.2346,
+     "cpu_ns_per_op": 16453.1,
+     "fairness": 1,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-js",
+     "W": 8,
+     "fuzz": true,
+     "ops": 2976,
+     "wall_ms": 367.93,
+     "ops_per_us": 0.0081,
+     "cpu_ns_per_op": 464345.8,
+     "fairness": 0.545,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     }
+    },
+    {
+     "scenario": "s2",
+     "lane": "ticket-verified",
+     "W": 1,
+     "fuzz": false,
+     "ops": 3572032,
+     "wall_ms": 300.61,
+     "ops_per_us": 11.8825,
+     "cpu_ns_per_op": 84.5,
      "fairness": null,
      "violations": {
       "torn_reads": 0,
@@ -2284,11 +2284,11 @@
      "lane": "ticket-verified",
      "W": 2,
      "fuzz": false,
-     "ops": 574336,
-     "wall_ms": 300.61,
-     "ops_per_us": 1.9106,
-     "cpu_ns_per_op": 1061.1,
-     "fairness": 1,
+     "ops": 726688,
+     "wall_ms": 300.57,
+     "ops_per_us": 2.4177,
+     "cpu_ns_per_op": 809.3,
+     "fairness": 0.989,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -2299,10 +2299,10 @@
      "lane": "ticket-verified",
      "W": 4,
      "fuzz": false,
-     "ops": 290176,
-     "wall_ms": 303.74,
-     "ops_per_us": 0.9554,
-     "cpu_ns_per_op": 4081.2,
+     "ops": 426176,
+     "wall_ms": 303.67,
+     "ops_per_us": 1.4034,
+     "cpu_ns_per_op": 2815.3,
      "fairness": 1,
      "violations": {
       "torn_reads": 0,
@@ -2314,11 +2314,11 @@
      "lane": "ticket-verified",
      "W": 8,
      "fuzz": false,
-     "ops": 3104,
-     "wall_ms": 400.88,
-     "ops_per_us": 0.0077,
-     "cpu_ns_per_op": 511678.5,
-     "fairness": 0.538,
+     "ops": 3392,
+     "wall_ms": 689.12,
+     "ops_per_us": 0.0049,
+     "cpu_ns_per_op": 766566.3,
+     "fairness": 0.483,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -2329,10 +2329,10 @@
      "lane": "ticket-verified",
      "W": 1,
      "fuzz": true,
-     "ops": 264544,
-     "wall_ms": 299.61,
-     "ops_per_us": 0.883,
-     "cpu_ns_per_op": 1176.7,
+     "ops": 273760,
+     "wall_ms": 301.56,
+     "ops_per_us": 0.9078,
+     "cpu_ns_per_op": 1126.8,
      "fairness": null,
      "violations": {
       "torn_reads": 0,
@@ -2344,11 +2344,11 @@
      "lane": "ticket-verified",
      "W": 2,
      "fuzz": true,
-     "ops": 101152,
-     "wall_ms": 300.55,
-     "ops_per_us": 0.3366,
-     "cpu_ns_per_op": 6076.2,
-     "fairness": 1,
+     "ops": 99072,
+     "wall_ms": 300.51,
+     "ops_per_us": 0.3297,
+     "cpu_ns_per_op": 6215.7,
+     "fairness": 0.995,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -2359,10 +2359,10 @@
      "lane": "ticket-verified",
      "W": 4,
      "fuzz": true,
-     "ops": 46592,
-     "wall_ms": 301.53,
-     "ops_per_us": 0.1545,
-     "cpu_ns_per_op": 25092.3,
+     "ops": 57344,
+     "wall_ms": 301.24,
+     "ops_per_us": 0.1904,
+     "cpu_ns_per_op": 19697,
      "fairness": 1,
      "violations": {
       "torn_reads": 0,
@@ -2374,11 +2374,11 @@
      "lane": "ticket-verified",
      "W": 8,
      "fuzz": true,
-     "ops": 448,
-     "wall_ms": 386.06,
-     "ops_per_us": 0.0012,
-     "cpu_ns_per_op": 3200109.4,
-     "fairness": 0.766,
+     "ops": 608,
+     "wall_ms": 366.81,
+     "ops_per_us": 0.0017,
+     "cpu_ns_per_op": 2224348.7,
+     "fairness": 0.851,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -2397,9 +2397,9 @@
      "W": 1,
      "fuzz": false,
      "ops": 50000,
-     "wall_ms": 1.361,
-     "ops_per_us": 36.7377,
-     "cpu_ns_per_op": 26,
+     "wall_ms": 1.315,
+     "ops_per_us": 38.0228,
+     "cpu_ns_per_op": 24.8,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2416,9 +2416,9 @@
      "W": 2,
      "fuzz": false,
      "ops": 100000,
-     "wall_ms": 12.528,
-     "ops_per_us": 7.9821,
-     "cpu_ns_per_op": 247,
+     "wall_ms": 20.435,
+     "ops_per_us": 4.8936,
+     "cpu_ns_per_op": 407.4,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2435,9 +2435,9 @@
      "W": 4,
      "fuzz": false,
      "ops": 200000,
-     "wall_ms": 19.078,
-     "ops_per_us": 10.4833,
-     "cpu_ns_per_op": 221.7,
+     "wall_ms": 24.084,
+     "ops_per_us": 8.3043,
+     "cpu_ns_per_op": 387.5,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2454,9 +2454,9 @@
      "W": 8,
      "fuzz": false,
      "ops": 400000,
-     "wall_ms": 37.239,
-     "ops_per_us": 10.7414,
-     "cpu_ns_per_op": 276.4,
+     "wall_ms": 48.387,
+     "ops_per_us": 8.2667,
+     "cpu_ns_per_op": 383.7,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2473,8 +2473,8 @@
      "W": 1,
      "fuzz": false,
      "ops": 50000,
-     "wall_ms": 1.478,
-     "ops_per_us": 33.8295,
+     "wall_ms": 1.75,
+     "ops_per_us": 28.5714,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2492,8 +2492,8 @@
      "W": 2,
      "fuzz": false,
      "ops": 100000,
-     "wall_ms": 10.548,
-     "ops_per_us": 9.4805,
+     "wall_ms": 11.421,
+     "ops_per_us": 8.7558,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2511,8 +2511,8 @@
      "W": 4,
      "fuzz": false,
      "ops": 200000,
-     "wall_ms": 21.505,
-     "ops_per_us": 9.3002,
+     "wall_ms": 23.01,
+     "ops_per_us": 8.6919,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2530,8 +2530,8 @@
      "W": 8,
      "fuzz": false,
      "ops": 400000,
-     "wall_ms": 38.606,
-     "ops_per_us": 10.3611,
+     "wall_ms": 36.359,
+     "ops_per_us": 11.0014,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2549,9 +2549,9 @@
      "W": 1,
      "fuzz": false,
      "ops": 50000,
-     "wall_ms": 1.148,
-     "ops_per_us": 43.554,
-     "cpu_ns_per_op": 22.4,
+     "wall_ms": 1.346,
+     "ops_per_us": 37.1471,
+     "cpu_ns_per_op": 24.9,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2568,9 +2568,9 @@
      "W": 2,
      "fuzz": false,
      "ops": 100000,
-     "wall_ms": 31.26,
-     "ops_per_us": 3.199,
-     "cpu_ns_per_op": 613.5,
+     "wall_ms": 26.615,
+     "ops_per_us": 3.7573,
+     "cpu_ns_per_op": 529.4,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2587,9 +2587,9 @@
      "W": 4,
      "fuzz": false,
      "ops": 200000,
-     "wall_ms": 139.054,
-     "ops_per_us": 1.4383,
-     "cpu_ns_per_op": 2693.9,
+     "wall_ms": 142.531,
+     "ops_per_us": 1.4032,
+     "cpu_ns_per_op": 2760.5,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2606,9 +2606,9 @@
      "W": 8,
      "fuzz": false,
      "ops": 400000,
-     "wall_ms": 496.653,
-     "ops_per_us": 0.8054,
-     "cpu_ns_per_op": 4876.5,
+     "wall_ms": 560.935,
+     "ops_per_us": 0.7131,
+     "cpu_ns_per_op": 5311.9,
      "fairness": null,
      "violations": {
       "wrong_result": 0
@@ -2625,8 +2625,8 @@
      "W": 1,
      "fuzz": false,
      "ops": 50000,
-     "wall_ms": 1.417,
-     "ops_per_us": 35.2858,
+     "wall_ms": 1.821,
+     "ops_per_us": 27.4574,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2644,8 +2644,8 @@
      "W": 2,
      "fuzz": false,
      "ops": 100000,
-     "wall_ms": 25.948,
-     "ops_per_us": 3.8539,
+     "wall_ms": 22.359,
+     "ops_per_us": 4.4725,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2663,8 +2663,8 @@
      "W": 4,
      "fuzz": false,
      "ops": 200000,
-     "wall_ms": 117.005,
-     "ops_per_us": 1.7093,
+     "wall_ms": 135.466,
+     "ops_per_us": 1.4764,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -2682,8 +2682,8 @@
      "W": 8,
      "fuzz": false,
      "ops": 400000,
-     "wall_ms": 472.005,
-     "ops_per_us": 0.8474,
+     "wall_ms": 539.765,
+     "ops_per_us": 0.7411,
      "cpu_ns_per_op": null,
      "fairness": null,
      "violations": {
@@ -5633,9 +5633,9 @@
      "W": 1,
      "fuzz": false,
      "ops": 200,
-     "wall_ms": 6.12,
-     "ops_per_us": 0.0327,
-     "cpu_ns_per_op": 28500,
+     "wall_ms": 6.95,
+     "ops_per_us": 0.0288,
+     "cpu_ns_per_op": 39020,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5649,9 +5649,9 @@
      "W": 2,
      "fuzz": false,
      "ops": 400,
-     "wall_ms": 8.79,
-     "ops_per_us": 0.0455,
-     "cpu_ns_per_op": 25832.5,
+     "wall_ms": 10.75,
+     "ops_per_us": 0.0372,
+     "cpu_ns_per_op": 30512.5,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5665,9 +5665,9 @@
      "W": 4,
      "fuzz": false,
      "ops": 800,
-     "wall_ms": 17.91,
-     "ops_per_us": 0.0447,
-     "cpu_ns_per_op": 34352.5,
+     "wall_ms": 22.54,
+     "ops_per_us": 0.0355,
+     "cpu_ns_per_op": 40131.3,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5681,9 +5681,9 @@
      "W": 8,
      "fuzz": false,
      "ops": 1600,
-     "wall_ms": 30.27,
-     "ops_per_us": 0.0529,
-     "cpu_ns_per_op": 31443.1,
+     "wall_ms": 50.33,
+     "ops_per_us": 0.0318,
+     "cpu_ns_per_op": 38315.6,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5697,9 +5697,9 @@
      "W": 1,
      "fuzz": true,
      "ops": 200,
-     "wall_ms": 6.6,
-     "ops_per_us": 0.0303,
-     "cpu_ns_per_op": 29075,
+     "wall_ms": 6.29,
+     "ops_per_us": 0.0318,
+     "cpu_ns_per_op": 30620,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5713,9 +5713,9 @@
      "W": 2,
      "fuzz": true,
      "ops": 400,
-     "wall_ms": 8.78,
-     "ops_per_us": 0.0455,
-     "cpu_ns_per_op": 25577.5,
+     "wall_ms": 9.4,
+     "ops_per_us": 0.0426,
+     "cpu_ns_per_op": 27505,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5729,9 +5729,9 @@
      "W": 4,
      "fuzz": true,
      "ops": 800,
-     "wall_ms": 18.29,
-     "ops_per_us": 0.0437,
-     "cpu_ns_per_op": 33412.5,
+     "wall_ms": 20.9,
+     "ops_per_us": 0.0383,
+     "cpu_ns_per_op": 41327.5,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5745,9 +5745,9 @@
      "W": 8,
      "fuzz": true,
      "ops": 1600,
-     "wall_ms": 28.64,
-     "ops_per_us": 0.0559,
-     "cpu_ns_per_op": 30230,
+     "wall_ms": 35.62,
+     "ops_per_us": 0.0449,
+     "cpu_ns_per_op": 33865,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5761,9 +5761,9 @@
      "W": 1,
      "fuzz": false,
      "ops": 200,
-     "wall_ms": 10.8,
-     "ops_per_us": 0.0185,
-     "cpu_ns_per_op": 27560,
+     "wall_ms": 10.62,
+     "ops_per_us": 0.0188,
+     "cpu_ns_per_op": 26785,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5777,13 +5777,13 @@
      "W": 2,
      "fuzz": false,
      "ops": 400,
-     "wall_ms": 289.97,
-     "ops_per_us": 0.0014,
-     "cpu_ns_per_op": 50132.5,
+     "wall_ms": 316.77,
+     "ops_per_us": 0.0013,
+     "cpu_ns_per_op": 54257.5,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 53,
+      "rescues": 58,
       "cycles": 200
      }
     },
@@ -5793,13 +5793,13 @@
      "W": 4,
      "fuzz": false,
      "ops": 800,
-     "wall_ms": 183.24,
-     "ops_per_us": 0.0044,
-     "cpu_ns_per_op": 43951.3,
+     "wall_ms": 258.23,
+     "ops_per_us": 0.0031,
+     "cpu_ns_per_op": 46930,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 45,
+      "rescues": 57,
       "cycles": 200
      }
     },
@@ -5809,13 +5809,13 @@
      "W": 8,
      "fuzz": false,
      "ops": 1600,
-     "wall_ms": 150.87,
-     "ops_per_us": 0.0106,
-     "cpu_ns_per_op": 37345,
+     "wall_ms": 186.5,
+     "ops_per_us": 0.0086,
+     "cpu_ns_per_op": 41405.6,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 28,
+      "rescues": 40,
       "cycles": 200
      }
     },
@@ -5825,9 +5825,9 @@
      "W": 1,
      "fuzz": true,
      "ops": 200,
-     "wall_ms": 10.54,
-     "ops_per_us": 0.019,
-     "cpu_ns_per_op": 25125,
+     "wall_ms": 12.08,
+     "ops_per_us": 0.0166,
+     "cpu_ns_per_op": 44830,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5841,13 +5841,13 @@
      "W": 2,
      "fuzz": true,
      "ops": 400,
-     "wall_ms": 292.25,
+     "wall_ms": 280.99,
      "ops_per_us": 0.0014,
-     "cpu_ns_per_op": 46900,
+     "cpu_ns_per_op": 58405,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 55,
+      "rescues": 52,
       "cycles": 200
      }
     },
@@ -5857,13 +5857,13 @@
      "W": 4,
      "fuzz": true,
      "ops": 800,
-     "wall_ms": 239.95,
+     "wall_ms": 243.86,
      "ops_per_us": 0.0033,
-     "cpu_ns_per_op": 48581.2,
+     "cpu_ns_per_op": 54338.8,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 63,
+      "rescues": 71,
       "cycles": 200
      }
     },
@@ -5873,13 +5873,13 @@
      "W": 8,
      "fuzz": true,
      "ops": 1600,
-     "wall_ms": 129.31,
-     "ops_per_us": 0.0124,
-     "cpu_ns_per_op": 36008.1,
+     "wall_ms": 195.03,
+     "ops_per_us": 0.0082,
+     "cpu_ns_per_op": 41680,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 32,
+      "rescues": 52,
       "cycles": 200
      }
     },
@@ -5889,13 +5889,13 @@
      "W": 1,
      "fuzz": false,
      "ops": 200,
-     "wall_ms": 1030.95,
+     "wall_ms": 1032.38,
      "ops_per_us": 0.0002,
-     "cpu_ns_per_op": 86110,
+     "cpu_ns_per_op": 105840,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 200,
+      "rescues": 199,
       "cycles": 200
      }
     },
@@ -5905,13 +5905,13 @@
      "W": 2,
      "fuzz": false,
      "ops": 400,
-     "wall_ms": 1031.21,
+     "wall_ms": 1032.36,
      "ops_per_us": 0.0004,
-     "cpu_ns_per_op": 75612.5,
+     "cpu_ns_per_op": 86105,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 399,
+      "rescues": 397,
       "cycles": 200
      }
     },
@@ -5921,13 +5921,13 @@
      "W": 4,
      "fuzz": false,
      "ops": 800,
-     "wall_ms": 1029.83,
+     "wall_ms": 1035.08,
      "ops_per_us": 0.0008,
-     "cpu_ns_per_op": 62276.2,
+     "cpu_ns_per_op": 70816.2,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 797,
+      "rescues": 789,
       "cycles": 200
      }
     },
@@ -5937,13 +5937,13 @@
      "W": 8,
      "fuzz": false,
      "ops": 1600,
-     "wall_ms": 1029.73,
-     "ops_per_us": 0.0016,
-     "cpu_ns_per_op": 50156.3,
+     "wall_ms": 1033.56,
+     "ops_per_us": 0.0015,
+     "cpu_ns_per_op": 49249.4,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 1569,
+      "rescues": 1568,
       "cycles": 200
      }
     },
@@ -5953,9 +5953,9 @@
      "W": 1,
      "fuzz": true,
      "ops": 200,
-     "wall_ms": 1028.08,
+     "wall_ms": 1030.69,
      "ops_per_us": 0.0002,
-     "cpu_ns_per_op": 97510,
+     "cpu_ns_per_op": 245880,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -5969,13 +5969,13 @@
      "W": 2,
      "fuzz": true,
      "ops": 400,
-     "wall_ms": 1030.23,
+     "wall_ms": 1027.19,
      "ops_per_us": 0.0004,
-     "cpu_ns_per_op": 77145,
+     "cpu_ns_per_op": 447200,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 398,
+      "rescues": 396,
       "cycles": 200
      }
     },
@@ -5985,13 +5985,13 @@
      "W": 4,
      "fuzz": true,
      "ops": 800,
-     "wall_ms": 1033.79,
+     "wall_ms": 1031.56,
      "ops_per_us": 0.0008,
-     "cpu_ns_per_op": 61097.5,
+     "cpu_ns_per_op": 133426.3,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 797,
+      "rescues": 785,
       "cycles": 200
      }
     },
@@ -6001,13 +6001,13 @@
      "W": 8,
      "fuzz": true,
      "ops": 1600,
-     "wall_ms": 1033.33,
-     "ops_per_us": 0.0015,
-     "cpu_ns_per_op": 50901.3,
+     "wall_ms": 1031,
+     "ops_per_us": 0.0016,
+     "cpu_ns_per_op": 57907.5,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 1594,
+      "rescues": 1575,
       "cycles": 200
      }
     },
@@ -6017,9 +6017,9 @@
      "W": 1,
      "fuzz": false,
      "ops": 200,
-     "wall_ms": 7.41,
-     "ops_per_us": 0.027,
-     "cpu_ns_per_op": 33900,
+     "wall_ms": 6.3,
+     "ops_per_us": 0.0317,
+     "cpu_ns_per_op": 30005,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -6033,9 +6033,73 @@
      "W": 2,
      "fuzz": false,
      "ops": 400,
-     "wall_ms": 1015.19,
+     "wall_ms": 1011.75,
      "ops_per_us": 0.0004,
-     "cpu_ns_per_op": 86082.5,
+     "cpu_ns_per_op": 84422.5,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 198,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 4,
+     "fuzz": false,
+     "ops": 800,
+     "wall_ms": 1032.47,
+     "ops_per_us": 0.0008,
+     "cpu_ns_per_op": 66025,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 580,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1600,
+     "wall_ms": 1038.27,
+     "ops_per_us": 0.0015,
+     "cpu_ns_per_op": 50683.7,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 1353,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 1,
+     "fuzz": true,
+     "ops": 200,
+     "wall_ms": 5.73,
+     "ops_per_us": 0.0349,
+     "cpu_ns_per_op": 28000,
+     "fairness": null,
+     "violations": {},
+     "extra": {
+      "rescues": 0,
+      "cycles": 200
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "notify-one",
+     "W": 2,
+     "fuzz": true,
+     "ops": 400,
+     "wall_ms": 978.56,
+     "ops_per_us": 0.0004,
+     "cpu_ns_per_op": 87070,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -6047,75 +6111,11 @@
      "scenario": "s11",
      "lane": "notify-one",
      "W": 4,
-     "fuzz": false,
-     "ops": 800,
-     "wall_ms": 1039.1,
-     "ops_per_us": 0.0008,
-     "cpu_ns_per_op": 62750,
-     "fairness": null,
-     "violations": {},
-     "extra": {
-      "rescues": 586,
-      "cycles": 200
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "notify-one",
-     "W": 8,
-     "fuzz": false,
-     "ops": 1600,
-     "wall_ms": 1033.86,
-     "ops_per_us": 0.0015,
-     "cpu_ns_per_op": 47310.6,
-     "fairness": null,
-     "violations": {},
-     "extra": {
-      "rescues": 1351,
-      "cycles": 200
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "notify-one",
-     "W": 1,
-     "fuzz": true,
-     "ops": 200,
-     "wall_ms": 5.39,
-     "ops_per_us": 0.0371,
-     "cpu_ns_per_op": 25530,
-     "fairness": null,
-     "violations": {},
-     "extra": {
-      "rescues": 0,
-      "cycles": 200
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "notify-one",
-     "W": 2,
-     "fuzz": true,
-     "ops": 400,
-     "wall_ms": 981.84,
-     "ops_per_us": 0.0004,
-     "cpu_ns_per_op": 80392.5,
-     "fairness": null,
-     "violations": {},
-     "extra": {
-      "rescues": 196,
-      "cycles": 200
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "notify-one",
-     "W": 4,
      "fuzz": true,
      "ops": 800,
-     "wall_ms": 1039.29,
+     "wall_ms": 1038.7,
      "ops_per_us": 0.0008,
-     "cpu_ns_per_op": 67346.2,
+     "cpu_ns_per_op": 67723.8,
      "fairness": null,
      "violations": {},
      "extra": {
@@ -6129,13 +6129,13 @@
      "W": 8,
      "fuzz": true,
      "ops": 1600,
-     "wall_ms": 1036.9,
+     "wall_ms": 1039.03,
      "ops_per_us": 0.0015,
-     "cpu_ns_per_op": 49061.9,
+     "cpu_ns_per_op": 50166.3,
      "fairness": null,
      "violations": {},
      "extra": {
-      "rescues": 1342,
+      "rescues": 1346,
       "cycles": 200
      }
     },
@@ -6144,10 +6144,10 @@
      "lane": "futex-verified",
      "W": 1,
      "fuzz": false,
-     "ops": 5070512,
-     "wall_ms": 300.5,
-     "ops_per_us": 16.8734,
-     "cpu_ns_per_op": 60.4,
+     "ops": 5098384,
+     "wall_ms": 300.71,
+     "ops_per_us": 16.9546,
+     "cpu_ns_per_op": 60.3,
      "fairness": null,
      "violations": {
       "torn_reads": 0,
@@ -6163,17 +6163,17 @@
      "lane": "futex-verified",
      "W": 2,
      "fuzz": false,
-     "ops": 1289696,
+     "ops": 1197344,
      "wall_ms": 300.68,
-     "ops_per_us": 4.2892,
-     "cpu_ns_per_op": 349.6,
-     "fairness": 1,
+     "ops_per_us": 3.9821,
+     "cpu_ns_per_op": 384.1,
+     "fairness": 0.997,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 24671,
+      "waits": 23517,
       "timeouts": 0
      }
     },
@@ -6182,93 +6182,93 @@
      "lane": "futex-verified",
      "W": 4,
      "fuzz": false,
-     "ops": 1476576,
-     "wall_ms": 299.6,
-     "ops_per_us": 4.9286,
-     "cpu_ns_per_op": 502.1,
-     "fairness": 0.979,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     },
-     "extra": {
-      "waits": 19137,
-      "timeouts": 0
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "futex-verified",
-     "W": 8,
-     "fuzz": false,
-     "ops": 1679368,
-     "wall_ms": 301.02,
-     "ops_per_us": 5.5789,
-     "cpu_ns_per_op": 580.2,
-     "fairness": 0.989,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     },
-     "extra": {
-      "waits": 17656,
-      "timeouts": 0
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "futex-verified",
-     "W": 1,
-     "fuzz": true,
-     "ops": 434424,
-     "wall_ms": 300.59,
-     "ops_per_us": 1.4452,
-     "cpu_ns_per_op": 732.2,
-     "fairness": null,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     },
-     "extra": {
-      "waits": 0,
-      "timeouts": 0
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "futex-verified",
-     "W": 2,
-     "fuzz": true,
-     "ops": 187000,
-     "wall_ms": 300.58,
-     "ops_per_us": 0.6221,
-     "cpu_ns_per_op": 2196.4,
-     "fairness": 1,
-     "violations": {
-      "torn_reads": 0,
-      "lost_updates": 0
-     },
-     "extra": {
-      "waits": 15727,
-      "timeouts": 0
-     }
-    },
-    {
-     "scenario": "s11",
-     "lane": "futex-verified",
-     "W": 4,
-     "fuzz": true,
-     "ops": 166712,
-     "wall_ms": 303.02,
-     "ops_per_us": 0.5502,
-     "cpu_ns_per_op": 3407.9,
+     "ops": 1252712,
+     "wall_ms": 300.67,
+     "ops_per_us": 4.1664,
+     "cpu_ns_per_op": 580.5,
      "fairness": 0.999,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 14416,
+      "waits": 19904,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 8,
+     "fuzz": false,
+     "ops": 1744208,
+     "wall_ms": 300.78,
+     "ops_per_us": 5.799,
+     "cpu_ns_per_op": 558.1,
+     "fairness": 0.992,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 18389,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 1,
+     "fuzz": true,
+     "ops": 521744,
+     "wall_ms": 300.56,
+     "ops_per_us": 1.7359,
+     "cpu_ns_per_op": 630.7,
+     "fairness": null,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 0,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 2,
+     "fuzz": true,
+     "ops": 265560,
+     "wall_ms": 300.55,
+     "ops_per_us": 0.8836,
+     "cpu_ns_per_op": 1621,
+     "fairness": 0.997,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 17749,
+      "timeouts": 0
+     }
+    },
+    {
+     "scenario": "s11",
+     "lane": "futex-verified",
+     "W": 4,
+     "fuzz": true,
+     "ops": 294600,
+     "wall_ms": 300.6,
+     "ops_per_us": 0.98,
+     "cpu_ns_per_op": 2176.2,
+     "fairness": 0.999,
+     "violations": {
+      "torn_reads": 0,
+      "lost_updates": 0
+     },
+     "extra": {
+      "waits": 16306,
       "timeouts": 0
      }
     },
@@ -6277,17 +6277,17 @@
      "lane": "futex-verified",
      "W": 8,
      "fuzz": true,
-     "ops": 136344,
-     "wall_ms": 301.1,
-     "ops_per_us": 0.4528,
-     "cpu_ns_per_op": 5170,
-     "fairness": 0.984,
+     "ops": 188672,
+     "wall_ms": 300.79,
+     "ops_per_us": 0.6273,
+     "cpu_ns_per_op": 3729.4,
+     "fairness": 0.856,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 13903,
+      "waits": 15196,
       "timeouts": 0
      }
     },
@@ -6296,10 +6296,10 @@
      "lane": "nowake-verified",
      "W": 1,
      "fuzz": false,
-     "ops": 5894808,
-     "wall_ms": 300.41,
-     "ops_per_us": 19.6223,
-     "cpu_ns_per_op": 51.8,
+     "ops": 5186368,
+     "wall_ms": 300.57,
+     "ops_per_us": 17.2548,
+     "cpu_ns_per_op": 56.7,
      "fairness": null,
      "violations": {
       "torn_reads": 0,
@@ -6315,11 +6315,11 @@
      "lane": "nowake-verified",
      "W": 2,
      "fuzz": false,
-     "ops": 4828760,
-     "wall_ms": 304.92,
-     "ops_per_us": 15.8362,
-     "cpu_ns_per_op": 63.8,
-     "fairness": 0.979,
+     "ops": 4908384,
+     "wall_ms": 303.31,
+     "ops_per_us": 16.1825,
+     "cpu_ns_per_op": 65,
+     "fairness": 0.916,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -6334,18 +6334,18 @@
      "lane": "nowake-verified",
      "W": 4,
      "fuzz": false,
-     "ops": 4388664,
-     "wall_ms": 303.03,
-     "ops_per_us": 14.4827,
-     "cpu_ns_per_op": 75.4,
-     "fairness": 0.969,
+     "ops": 4295568,
+     "wall_ms": 303.46,
+     "ops_per_us": 14.1552,
+     "cpu_ns_per_op": 77.4,
+     "fairness": 0.831,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 45,
-      "timeouts": 45
+      "waits": 43,
+      "timeouts": 43
      }
     },
     {
@@ -6353,18 +6353,18 @@
      "lane": "nowake-verified",
      "W": 8,
      "fuzz": false,
-     "ops": 3868720,
-     "wall_ms": 312.41,
-     "ops_per_us": 12.3836,
-     "cpu_ns_per_op": 83.4,
-     "fairness": 0.788,
+     "ops": 4393872,
+     "wall_ms": 308.85,
+     "ops_per_us": 14.2265,
+     "cpu_ns_per_op": 72,
+     "fairness": 0.686,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 102,
-      "timeouts": 102
+      "waits": 105,
+      "timeouts": 105
      }
     },
     {
@@ -6372,10 +6372,10 @@
      "lane": "nowake-verified",
      "W": 1,
      "fuzz": true,
-     "ops": 440840,
+     "ops": 352464,
      "wall_ms": 300.59,
-     "ops_per_us": 1.4666,
-     "cpu_ns_per_op": 712.1,
+     "ops_per_us": 1.1726,
+     "cpu_ns_per_op": 890.4,
      "fairness": null,
      "violations": {
       "torn_reads": 0,
@@ -6391,11 +6391,11 @@
      "lane": "nowake-verified",
      "W": 2,
      "fuzz": true,
-     "ops": 391208,
-     "wall_ms": 302.85,
-     "ops_per_us": 1.2918,
-     "cpu_ns_per_op": 810.5,
-     "fairness": 0.962,
+     "ops": 375280,
+     "wall_ms": 302.63,
+     "ops_per_us": 1.2401,
+     "cpu_ns_per_op": 854.6,
+     "fairness": 0.733,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -6410,11 +6410,11 @@
      "lane": "nowake-verified",
      "W": 4,
      "fuzz": true,
-     "ops": 291952,
-     "wall_ms": 303.06,
-     "ops_per_us": 0.9634,
-     "cpu_ns_per_op": 1110.6,
-     "fairness": 0.411,
+     "ops": 306152,
+     "wall_ms": 302.67,
+     "ops_per_us": 1.0115,
+     "cpu_ns_per_op": 1054.7,
+     "fairness": 0.738,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
@@ -6429,18 +6429,18 @@
      "lane": "nowake-verified",
      "W": 8,
      "fuzz": true,
-     "ops": 323992,
-     "wall_ms": 322.84,
-     "ops_per_us": 1.0036,
-     "cpu_ns_per_op": 1033.6,
-     "fairness": 0.374,
+     "ops": 334064,
+     "wall_ms": 305.31,
+     "ops_per_us": 1.0942,
+     "cpu_ns_per_op": 927.1,
+     "fairness": 0.653,
      "violations": {
       "torn_reads": 0,
       "lost_updates": 0
      },
      "extra": {
-      "waits": 106,
-      "timeouts": 106
+      "waits": 105,
+      "timeouts": 105
      }
     }
    ]

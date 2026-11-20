@@ -63,8 +63,8 @@ def kernels : List Kernel := [
     theorems := [``Counter.newcounter_mono_spec, ``Counter.incr_mono_spec, ``Counter.read_mono_spec,
       ``Counter.newcounter_contrib_spec, ``Counter.incr_contrib_spec, ``Counter.read_contrib_spec,
       ``Counter.read_contrib_spec_1]
-    says := "a CAS-loop counter: reads are at least every completed increment (mono), and \
-      fractional contributions add up to the value (contrib); not logically atomic" },
+    says := "a CAS-loop counter: a read is at least any lower bound its caller holds (mono), \
+      and fractional contributions add up to the value (contrib); not logically atomic" },
   { name := "Spawn", source := irisLib "Spawn"
     consts := vals% [Spawn.spawn, Spawn.join]
     theorems := [``Spawn.spawn_spec, ``Spawn.join_spec]
@@ -100,8 +100,8 @@ def kernels : List Kernel := [
     consts := vals% [LeanUIIris.SpscRing.tryPush, LeanUIIris.SpscRing.tryPop]
     theorems := [``LeanUIIris.SpscRing.rb_init, ``LeanUIIris.SpscRing.tryPush_spec,
       ``LeanUIIris.SpscRing.tryPop_spec]
-    says := "the i-th push hands P i v to the i-th pop: FIFO, nothing lost or duplicated, \
-      at most n in flight; one producer and one consumer" },
+    says := "the i-th push hands P i v to the i-th pop: FIFO, nothing lost or duplicated; \
+      one producer and one consumer" },
   { name := "SpscClient loops", source := ours "SpscClient"
     consts := vals% [LeanUIIris.SpscClient.pushLoop, LeanUIIris.SpscClient.popLoop]
     theorems := [``LeanUIIris.SpscClient.pushLoop_spec, ``LeanUIIris.SpscClient.popLoop_spec]

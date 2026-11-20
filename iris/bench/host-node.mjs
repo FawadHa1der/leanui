@@ -10,8 +10,9 @@ import { Pool } from './core.mjs';
 import { launch } from '../rt/launch.mjs';
 
 const IRIS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// Whole programs run 3 times in one process and report the median: the first run also pays for
-// threads that are still starting (Emscripten's pthreads load the module asynchronously).
+// Whole programs run 3 times in one process, every run's value checked, and report the median
+// time: the first run also pays for threads that are still starting (Emscripten's pthreads load
+// the module asynchronously).
 const RUNS = 3;
 const median = (xs) => (xs && xs.length ? [...xs].sort((a, b) => a - b)[xs.length >> 1] : null);
 
@@ -43,7 +44,7 @@ export function nodeHost(out = path.resolve(IRIS, '../dist/iris')) {
         const prog = await import(url(`gen/js/${name}.mjs`));
         const progUrl = url(`gen/js/${name}.mjs`);
         const r = await launch(prog, {
-          pool: W, runs: RUNS, mb: 64, maxThreads: 64,
+          pool: W, runs: RUNS, mb: 64, maxThreads: 64, timeoutMs: 120000,
           newWorker(sab, onMessage) {
             const w = new Worker(poolWorker, { workerData: { sab, progUrl }, resourceLimits: { stackSizeMb: 64 } });
             w.on('message', onMessage);

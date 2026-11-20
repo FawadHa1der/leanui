@@ -254,6 +254,7 @@ def edgeCases : List (String × Exp × String) := [
   ("tdiv-tmod-zero", hl% (#7 / #0, #7 % #0), "(0, 7)"),
   ("tdiv-tmod-neg", hl% (#(-7 : Int) / #2, #(-7 : Int) % #2), "(-3, -1)"),
   ("shifts", hl% (#(-7 : Int) >>> #1, (#3 <<< #4, #5 <<< #(-1 : Int))), "(-4, (48, 2))"),
+  ("shift-zero-far", hl% #0 <<< #2000, "0"),
   ("bitwise-int-bool", hl% ((#12 &&& #10, #12 ||| #3), (#true ^^^ #true, ~ #5)), "((8, 15), (false, -6))"),
   ("closure-capture", hl% let a := #1; let f := (λ x, x + a); let a := #100; f #2 + a, "103"),
   ("curried-partial", hl% let add3 := (λ x y z, x + y + z); let g := add3 #1; let h := g #2; h #3, "6"),

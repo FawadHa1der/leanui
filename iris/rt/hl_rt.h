@@ -117,7 +117,8 @@ static inline int32_t shl(int32_t a, int32_t b) {
   if (n >= 0) { if (n > 30) { if (m == 0) return 0; ovf(); } int64_t r = (int64_t)m * ((int64_t)1 << n) * 8; if (r != (int32_t)r) ovf(); return (int32_t)r; }
   return (m >> (-n > 31 ? 31 : -n)) * 8;
 }
-static inline int32_t shr(int32_t a, int32_t b) { return shl(a, -b); }
+// m >>> n is m <<< (-n) in HeapLang; -b overflows for the word of -2^28 alone (m <<< 2^28)
+static inline int32_t shr(int32_t a, int32_t b) { if (b == INT32_MIN) { if ((a >> 3) == 0) return 0; ovf(); } return shl(a, -b); }
 static inline int32_t off(int32_t l, int32_t i) { return add(l, i); }
 static inline int32_t neg(int32_t w) { if (isBool(w)) return w == TRUE_W ? FALSE_W : TRUE_W; return ~(w >> 3) * 8; }
 static inline int32_t minus(int32_t w) { if (w == INT32_MIN) ovf(); return -w; }

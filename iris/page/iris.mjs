@@ -115,7 +115,7 @@ function chipHtml(lane, W) {
   const li = (xs) => `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
   return `<details class="chip proved"><summary>proved: ${c.theorems.length} theorems · ${esc(KINDS[c.kind])}</summary>
     <p><b>Scope.</b> ${esc(c.scope)}</p>
-    <p><b>Theorems</b> (axioms: ${c.axioms.join(', ')})</p><ul>${c.theorems.map((t) => `<li><code>${esc(t)}</code></li>`).join('')}</ul>
+    <p><b>Theorems of the kernels it calls</b> (axioms: ${c.axioms.join(', ')})</p><ul>${c.theorems.map((t) => `<li><code>${esc(t)}</code></li>`).join('')}</ul>
     <p><b>They say</b></p>${li(c.says)}
     <p><b>Trusted</b></p>${li(c.trusted)}
     <p><b>Not proved</b></p>${li(c.notProved)}</details>`;
@@ -129,16 +129,19 @@ function renderLegend() {
 function renderTheorems() {
   const rows = manifest.kernels.map((k) => `<tr><td class="l"><b>${esc(k.name)}</b><br><span class="muted">${esc(k.source)}</span></td>
     <td class="l">${esc(k.says)}</td><td class="l">${k.theorems.map((t) => `<code>${esc(t.split('.').pop())}</code>`).join(', ')}</td></tr>`).join('');
-  const closed = manifest.programs.filter((p) => p.closed).map((p) => `<li><code>${esc(p.closed)}</code>: <code>${esc(p.name)}</code> returns ${esc(p.expect)} in every interleaving</li>`).join('');
+  const closed = manifest.programs.filter((p) => p.closed).map((p) => `<li><code>${esc(p.closed)}</code>: in every interleaving <code>${esc(p.name)}</code> does not get stuck, and if it returns, it returns ${esc(p.expect)}</li>`).join('');
   $('#theorems').innerHTML = `<h2>What is proved</h2>
     <p>Every theorem below is checked by <code>lake build</code> in <code>iris/</code> and depends on the axioms
     propext, Classical.choice and Quot.sound only (a <code>#print axioms</code> guard fails the build otherwise).
     iris-lean ${esc(manifest.iris_lean.slice(0, 8))}, Lean ${esc(manifest.lean)}.</p>
     <div class="table-wrap"><table><thead><tr><th class="l">Kernel</th><th class="l">What the theorems say</th><th class="l">Theorems</th></tr></thead><tbody>${rows}</tbody></table></div>
     <h3>Whole programs</h3><ul>${closed}</ul>
-    <p>In every interleaving, under sequentially consistent memory, with unbounded integers and a heap that
-    never reuses a location: no thread gets stuck, and a returned value satisfies the specification. Not
-    proved: liveness (deadlock, starvation, lost wakeups), weak memory, performance, the translator
-    and runtimes, the JavaScript around a kernel, and the data plane where a payload sits in ordinary
-    typed arrays.</p>`;
+    <p>Under sequentially consistent memory, with unbounded integers and a heap that never reuses a
+    location. A whole program above: in every interleaving no thread gets stuck, and if the main thread
+    returns, its value is the one stated. A kernel: each theorem holds at a call whose caller owns its
+    precondition (one producer and one consumer for SpscRing, the cells touched only under the lock for
+    Critical, disjoint parts for ParMap, ParMapG and Shards); in the drivers and the JavaScript glue,
+    nothing checks this. Not proved: liveness (deadlock, starvation, lost wakeups), weak memory,
+    performance, the translator and runtimes, the JavaScript around a kernel, and the data plane where
+    a payload sits in ordinary typed arrays.</p>`;
 }

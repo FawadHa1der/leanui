@@ -7,7 +7,9 @@
 import * as RT from './runtime.mjs';
 
 // newWorker(sab, onMessage) starts one pool thread running pool.mjs and returns it (it has terminate()).
-export async function launch(prog, { newWorker, pool = 4, runs = 1, mb = 256, maxThreads = 512 }) {
+// Every run's value is checked: if two runs disagree, the result is "runs disagree: a / b". A run
+// that has not returned after timeoutMs (if given) ends the launch with the trap "hung".
+export async function launch(prog, { newWorker, pool = 4, runs = 1, mb = 256, maxThreads = 512, timeoutMs }) {
   const sab = new SharedArrayBuffer(mb * 1024 * 1024);
   const H = new Int32Array(sab);
   RT.initHeap(sab, prog);
@@ -46,8 +48,8 @@ export async function launch(prog, { newWorker, pool = 4, runs = 1, mb = 256, ma
     Atomics.store(H, RT.C_DONE, 0);
     const t0 = performance.now(), c0 = cpu && cpu();
     RT.fork(prog.MAIN);
-    const w = Atomics.waitAsync(H, RT.C_DONE, 0);
-    if (w.async) await w.value;
+    const w = Atomics.waitAsync(H, RT.C_DONE, 0, timeoutMs);
+    if ((w.async ? await w.value : w.value) === 'timed-out') { trap = 'hung'; break; }
     const t1 = performance.now();
     if (cpu) cpus.push(cpu() - c0);
     if (Atomics.load(H, RT.C_TRAP)) {
@@ -56,7 +58,9 @@ export async function launch(prog, { newWorker, pool = 4, runs = 1, mb = 256, ma
       break;
     }
     times.push(t1 - t0);
-    result = RT.decode(H, Atomics.load(H, RT.C_RESULT));
+    const r = RT.decode(H, Atomics.load(H, RT.C_RESULT));
+    if (run === 0) result = r;
+    else if (r !== result && !result.startsWith('runs disagree')) result = `runs disagree: ${result} / ${r}`;
   }
   stopped = true;
   for (const w of workers) w.terminate();               // other threads may still spin after a trap

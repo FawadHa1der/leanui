@@ -24,7 +24,7 @@ export async function webHost(base) {
       const progUrl = url(`gen/js/${name}.mjs`);
       const prog = await import(progUrl);
       const r = await launch(prog, {
-        pool: W, runs: 3, mb: 64, maxThreads: 64,
+        pool: W, runs: 3, mb: 64, maxThreads: 64, timeoutMs: 120000,
         newWorker(sab, onMessage) {
           const w = new Worker(url('rt/browser/worker.mjs'), { type: 'module' });
           w.onmessage = (e) => onMessage(e.data);

@@ -24,8 +24,9 @@ export const KINDS = {
 const VERIFIED = new Set(['L3', 'L3p', 'L4n', 'L4w']);
 export const isVerified = (lane) => VERIFIED.has(lane.kind);
 
-const NOT_PROVED = ['liveness: progress, fairness, deadlock, lost wakeups', 'performance',
-  'weak memory: every shared access is emitted as a SeqCst atomic instead', 'a thread that dies (HeapLang threads never do)'];
+const notProved = (kind) => ['liveness: progress, fairness, deadlock, lost wakeups', 'performance',
+  kind === 'L3p' ? "weak memory: the translated kernel's accesses are SeqCst atomics; the data plane's plain accesses are trusted"
+    : 'weak memory: every shared access is emitted as a SeqCst atomic instead', 'a thread that dies (HeapLang threads never do)'];
 const TRUSTED = {
   L3: ['the translator (Translate.lean), tested against the reference interpreter', 'the runtime (rt/runtime.mjs, rt/embed.mjs)',
     'integers: 29-bit words that trap where HeapLang has unbounded ints', 'the JS glue that calls the kernel', 'V8'],
@@ -40,7 +41,8 @@ function kernelInfo(manifest, names) {
   return { theorems: [...new Set(ks.flatMap((k) => k.theorems))], says: ks.map((k) => `${k.name}: ${k.says}`) };
 }
 
-/** The proof chip of a lane: what is proved, what is trusted, what is not proved. */
+/** The proof chip of a lane: what is proved, what is trusted, what is not proved. Its theorems are
+ * those of every kernel the lane calls, not only those about the constants it runs. */
 export function chip(manifest, lane, W = 1) {
   if (!isVerified(lane)) {
     const text = lane.kind === 'M' ? 'No proof: the invariant cannot be re-established; the reference interpreter finds the bug.'
@@ -70,7 +72,7 @@ export function chip(manifest, lane, W = 1) {
     kernels, theorems: [...new Set(theorems)], says: info.says,
     axioms: ['propext', 'Classical.choice', 'Quot.sound'],
     trusted: [...TRUSTED[lane.kind], ...(lane.trusted || [])],
-    notProved: [...NOT_PROVED, ...(lane.notProved || [])],
+    notProved: [...notProved(lane.kind), ...(lane.notProved || [])],
   };
 }
 

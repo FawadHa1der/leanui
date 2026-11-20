@@ -1,6 +1,7 @@
 // S5, disjoint tiles: render a 256×256 Mandelbrot (iteration counts, at most 200 per pixel) on W
 // threads. The verified lane is ParMapG.pmapG over the image in the HeapLang heap with the proved
-// pointwise kernel Mandel.mandel: no lock, no atomics, no invariant; ownership of disjoint halves.
+// pointwise kernel Mandel.mandel: no lock, no read-modify-write atomics, no invariant; ownership of
+// disjoint halves (translated, every heap access is an SC Atomics load or store).
 // The per-pixel cost is uneven (1 to 200 iterations), so equal bands are uneven work.
 import { mandel } from '../kernels.mjs';
 import { now } from '../core.mjs';
@@ -40,6 +41,7 @@ const program = (backend, kind, label) => ({
   id: `pmapg-${backend === 'js' ? 'verified' : backend}`, kind, label, mode: 'program', backend,
   program: (W) => `bench_s5_mandel_w${W}`, ops: () => N,
   scope: 'pmapG_spec and mandel_spec: every pixel becomes g of its index, each part owned by one thread; the init and sum loops around it are unproved glue',
+  note: () => `the time includes allocating, initialising and summing the image: about ${backend === 'js' ? 5 : 0.7} ms on the 4-vCPU VM`,
   only: backend === 'js' ? undefined : 'node', onlyWhy: 'native and wasm lanes run under Node only',
 });
 

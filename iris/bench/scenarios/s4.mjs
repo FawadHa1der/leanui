@@ -140,8 +140,8 @@ function heapRing(idBase, kind, label, push, scope) {
 // Verified protocol, trusted data plane: the ring carries block numbers (capacity CAPB); block t's
 // samples are in payload block t % B of a Float32Array. The producer fills block t before pushing
 // t, possibly while the ring is still full. That is safe only because B ≥ CAPB + 2: once push t−1
-// succeeded the consumer has popped at least t−CAPB−1 blocks, so the one it may still be reading is
-// ≥ t−CAPB−1, never ≡ t (mod B). This argument is the trusted glue; no theorem states it.
+// succeeded the consumer has popped at least t−CAPB blocks (hd ≥ t−CAPB), so the one it may still
+// be reading is ≥ t−CAPB−1, never ≡ t (mod B). This argument is the trusted glue; no theorem states it.
 function dataplane(idBase, kind, label, early) {
   return [true, false].map((tick) => ({
     id: tick ? idBase : `${idBase}-stress`, kind, label: label + (tick ? '' : ', consumer flat out'),
