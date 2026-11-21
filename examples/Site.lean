@@ -292,6 +292,11 @@ def benchmarks (m : Model) : Html Msg :=
       browser, timed live: vanilla JavaScript, LeanUI compiled to wasm64, and LeanUI interpreted by
       lean-vir. It checks that all three end in the same state.
     </p>
+    <p>
+      <a href="/iris/">Verified threads, side by side</a> runs multithreaded JavaScript in Web
+      Workers next to the same work done by kernels proved in iris-lean and translated to
+      JavaScript, in your browser.
+    </p>
     {match m.results with
       | .ok r => resultsView r
       | .failed why => <p class="error">Could not load the results: {why}</p>

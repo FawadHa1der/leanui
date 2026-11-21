@@ -32,7 +32,7 @@ cp rt/runtime.mjs rt/pool.mjs rt/launch.mjs rt/embed.mjs "$OUT/rt/"
 cp rt/browser/index.html rt/browser/worker.mjs "$OUT/rt/browser/"
 cp bench/core.mjs bench/chips.mjs bench/kernels.mjs bench/worker.mjs bench/host-web.mjs "$OUT/bench/"
 cp bench/scenarios/*.mjs "$OUT/bench/scenarios/"
-cp page/index.html page/iris.mjs page/iris.css "$OUT/"
+cp page/index.html page/*.mjs page/iris.css "$OUT/"
 
 # Each translated C program is a whole program: the runtime is two headers it includes. A compile
 # that fails fails the build (xargs exits nonzero).

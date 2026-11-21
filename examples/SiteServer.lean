@@ -23,6 +23,10 @@ built with its optional QED64 lane (`qed64/`), `/race/qed64-rt/` holds the lane'
 snapshot (about 42 MB to a visitor who adds it), under content-hashed names, so browsers may keep
 them for a year.
 
+`/iris/` is the verified-threads page (`iris/README.md`), static files from `dist/iris`
+(`iris/build.sh`, its JavaScript only): plain JavaScript next to kernels proved in iris-lean and
+translated to JavaScript, in Web Workers that share memory, so it is cross-origin isolated too.
+
 `/roster/` is the Roster demo (`roster/README.md`), static files from `dist/roster`: the app and
 its verify page, with one receipt, the Feasible preset's roster notarized when the site was staged
 (`dist/roster/receipts/feasible.ndjson`, `deploy/cloudflare/stage.sh`). The notary itself needs
@@ -91,6 +95,8 @@ def routes (o : Opts) (sessions : Sessions) (wasm : Bool) : Route :=
     Route.under "/race/qed64-rt"
       (Static.route { root := o.dist / "race" / "qed64-rt", isolate := true, cache := .immutable }),
     Route.under "/race" (Static.route { root := o.dist / "race", isolate := true }),
+    -- cross-origin isolated: its lanes are Web Workers sharing one SharedArrayBuffer
+    Route.under "/iris" (Static.route { root := o.dist / "iris", isolate := true }),
     Route.under "/roster" (Route.first [rosterNotary o, Static.route { root := o.dist / "roster" }]),
     sessions.route "/leanui",
     pageRoute sessions wasm]

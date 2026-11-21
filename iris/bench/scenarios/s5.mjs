@@ -15,6 +15,9 @@ export const sizes = { full: {}, quick: {} };
 const WIDTH = 256, ROWS = 256, N = WIDTH * ROWS, TILE = 8 * WIDTH;   // dynamic lanes claim 8 rows
 
 const imageSetup = () => ({ img: new SharedArrayBuffer(4 * N), claims: new SharedArrayBuffer(4 * (N / TILE + 16)) });
+// The claiming lanes also mark who claimed each tile (bit i for worker i, once per tile, outside the
+// pixel loop): only the page reads it, to show which worker drew which rows.
+const claimSetup = () => ({ ...imageSetup(), next: new SharedArrayBuffer(64), own: new SharedArrayBuffer(4 * (N / TILE)) });
 const band = (ctx) => [Math.floor((ctx.i * N) / ctx.W), Math.floor(((ctx.i + 1) * N) / ctx.W)];
 function check(ctx, sh, outs, img) {
   const expect = Number(ctx.manifest.programs.find((q) => q.name === 'bench_s5_mandel_w1').expect);
@@ -41,16 +44,16 @@ const program = (backend, kind, label) => ({
   id: `pmapg-${backend === 'js' ? 'verified' : backend}`, kind, label, mode: 'program', backend,
   program: (W) => `bench_s5_mandel_w${W}`, ops: () => N,
   scope: 'pmapG_spec and mandel_spec: every pixel becomes g of its index, each part owned by one thread; the init and sum loops around it are unproved glue',
-  note: () => `the time includes allocating, initialising and summing the image (on the 4-vCPU VM, ${backend === 'js' ? 'about 2 ms at W = 1 and 5 to 7 ms above' : 'about 0.7 ms'})`,
+  note: () => 'the time includes allocating, initialising and summing the image in its heap',
   only: backend === 'js' ? undefined : 'node', onlyWhy: 'native and wasm lanes run under Node only',
 });
 
 export const lanes = [
   {
     id: 'racy-claimer-js', kind: 'L0', label: 'tiles claimed with next = next + 1 (no atomics)', mode: 'fixed', fairness: false, noSpeed: true,
-    setup: () => ({ ...imageSetup(), next: new SharedArrayBuffer(64) }),
+    setup: claimSetup,
     run(ctx) {
-      const img = new Int32Array(ctx.shared.img), c = new Int32Array(ctx.shared.claims), nx = new Int32Array(ctx.shared.next), F = ctx.F;
+      const img = new Int32Array(ctx.shared.img), c = new Int32Array(ctx.shared.claims), nx = new Int32Array(ctx.shared.next), own = new Int32Array(ctx.shared.own), F = ctx.F;
       warm();
       const t0 = ctx.ready();
       let ops = 0;
@@ -58,6 +61,7 @@ export const lanes = [
         const t = nx[0]; F(); nx[0] = t + 1;
         if (t >= N / TILE) break;
         Atomics.add(c, t, 1);
+        Atomics.or(own, t, 1 << (ctx.i & 31));
         computeTile(img, t);
         ops += TILE;
       }
@@ -96,9 +100,9 @@ export const lanes = [
   },
   {
     id: 'faa-claimer-js', kind: 'L2', label: 'tiles of 8 rows claimed with Atomics.add (not verified yet)', mode: 'fixed', fairness: false,
-    setup: () => ({ ...imageSetup(), next: new SharedArrayBuffer(64) }),
+    setup: claimSetup,
     run(ctx) {
-      const img = new Int32Array(ctx.shared.img), c = new Int32Array(ctx.shared.claims), nx = new Int32Array(ctx.shared.next), F = ctx.F;
+      const img = new Int32Array(ctx.shared.img), c = new Int32Array(ctx.shared.claims), nx = new Int32Array(ctx.shared.next), own = new Int32Array(ctx.shared.own), F = ctx.F;
       warm();
       const t0 = ctx.ready();
       let ops = 0;
@@ -107,6 +111,7 @@ export const lanes = [
         const t = Atomics.add(nx, 0, 1);
         if (t >= N / TILE) break;
         Atomics.add(c, t, 1);
+        Atomics.or(own, t, 1 << (ctx.i & 31));
         computeTile(img, t);
         ops += TILE;
       }

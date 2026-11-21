@@ -456,14 +456,37 @@ names (CI passes `--backends js,native`). A program that does not compile fails 
    must; a backend built only in part fails, and so does one named in `--backends` and not
    built. The racy controls are recorded, never required: stress results are probabilistic.
 
-The page (`dist/iris/index.html`) runs the same scenario modules in module Web Workers, with a proof
-chip per lane (what is proved, the scope, what is trusted, what is not proved): its kernels and
-theorems come from the manifest, the rest is written by hand, per lane kind in `bench/chips.mjs`
-and per lane in `bench/scenarios/`. It needs cross-origin isolation; without it, it shows only
-the theorem table and why. It is not linked from the site.
+The page (`dist/iris/index.html`, from `page/`) runs the same scenario modules in module Web
+Workers, laid out like the race page (`bench/race/`): a section per scenario with its own Run
+button (Run all runs them in turn), the question it answers in plain words, a chart of its lanes
+and a verdict computed from the run (`page/views.mjs`: "the racy counter lost 68% of its updates;
+… the verified faaIncr ran at 1.1× the speed of Atomics.add"), with every row under Details. A
+chart row is a lane: a dot on a log scale for its speed (S11: a bar, the share of its waits that
+only a timeout ended), a diamond for a verified lane and a circle for a hand-written one, and for a
+lane broken on purpose what went wrong instead of a speed. A row opens to the figures of its run and the lane's proof chip
+(what is proved, the scope, what is trusted, what is not proved): its kernels and theorems come
+from the manifest, the rest is written by hand, per lane kind in `bench/chips.mjs` and per lane in
+`bench/scenarios/`. S1 and S5 are live (`page/live.mjs`): while a lane runs, the page reads shared
+memory once per animation frame (S1's counter; S5's image and, from the marks the claiming lanes
+leave per tile, which thread drew which rows); those marks, one `Atomics.or` per claimed tile, are
+all it adds to a lane. Where a lane's state is not in shared memory until it ends (counting
+locally, the postMessage bands) it shows the final state, and a whole program's heap not at all
+(S5's verified image: its checksum instead).
+
+Lanes run one at a time, at the thread count asked for (4 by default; S4's W counts pairs and
+S11's event count adds a notifier, so the page takes the largest W whose threads fit). Its runs
+are longer than the harness's short ones: at 4 threads on the 4-vCPU CI machine (to be
+re-measured on the reference Mac), about 6 s for S1, whose lanes stop at 600 ms to keep the racy
+lane's loss well below 2^32 (its counter is 32 bits wide, so the loss is counted modulo 2^32), and
+about 10 s for each other scenario (S5 draws its one image 24 times, and the chart shows the
+median). `?quick=1` uses the harness's short sizes, `?auto=1&scenarios=s1,s5&w=1,2&fuzz=off,on`
+runs at once, and `window.__iris` (or Download JSON) has every row and each verdict. It needs
+cross-origin isolation; without it, it shows only the theorem table and why. It is on the site at
+`/iris/`, cross-origin isolated like `/race/` and linked from the Benchmarks page
+(`examples/SiteServer.lean`, `deploy/cloudflare/stage.sh`).
 
     .lake/build/bin/leanui serve dist --port 5391 --coop &
-    node iris/test/page.mjs http://127.0.0.1:5391 chromium      # every scenario, then the refusal without COOP/COEP
+    node iris/test/page.mjs http://127.0.0.1:5391 chromium      # every scenario, its chart and verdict, then the refusal without COOP/COEP
     node iris/test/browser.mjs http://127.0.0.1:5391 chromium   # single programs on the browser launcher
 
 (Playwright as `tests/browser/playwright.mjs` finds it; `LEANUI_PLAYWRIGHT_FROM` names another.)
@@ -471,8 +494,9 @@ the theorem table and why. It is not linked from the site.
 CI (`.github/workflows/ci.yml`, job `iris`) builds with its own toolchain and a cached
 `iris/.lake`, runs `test/node.mjs` on JavaScript and native code, and a short harness run that
 fails on a verified-lane violation; the harness JSON is uploaded as the `iris-bench` artifact.
-The wasm lane and the page test need Emscripten and the main build's `leanui` binary, and are not
-in that job yet.
+The page goes up as the `iris-page` artifact (without `native/`, `wasm/` and `gen/c/`); the test
+job stages it in the site container and runs `test/page.mjs` against it. The wasm lane needs
+Emscripten and is not in CI.
 
 ## The embedding ABI
 
@@ -506,7 +530,7 @@ may open a heap: it gets its own allocation buffer. What the caller does around 
 | `rt/browser/` | the same launcher in a page, with module Web Workers |
 | `rt/hl_rt.h`, `rt/hl_main.h` | the C runtime and its thread pool |
 | `bench/` | the harness: `core.mjs` (runs a lane), `chips.mjs` (lane kinds, proof chips, the verdict), `kernels.mjs` (the hand-written JavaScript), `scenarios/`, the Node and page hosts, `harness.mjs`, `summary.mjs` |
-| `page/` | the side-by-side page, copied to `dist/iris/` |
+| `page/` | the side-by-side page, copied to `dist/iris/`: `iris.mjs` (runs the lanes), `views.mjs` (per scenario: question, chart, verdict), `chart.mjs`, `live.mjs` |
 | `test/node.mjs`, `test/page.mjs`, `test/browser.mjs` | the tests above |
 | `docs/` | the design, its review, the JavaScript catalogue, and the research record (`docs/research/`) |
 

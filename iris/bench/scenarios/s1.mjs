@@ -22,9 +22,11 @@ function timed(ctx, op) {
 // JS lanes: a counter cell, then one padded shard per worker
 const jsSetup = (ctx) => ({ sab: new SharedArrayBuffer(4 * LINE * (ctx.n + 2)) });
 const jsCount = (shared) => new Int32Array(shared.sab)[0];
+// The JS cell is an Int32, which wraps once a fast lane counts past 2^31: compared modulo 2^32,
+// the loss is exact whenever it is below 2^32 (a correct lane's is 0)
 const lost = (ctx, shared, outs, final) => {
-  const ops = outs.reduce((s, o) => s + o.ops, 0);
-  return { ops, violations: { lost_updates: ops - final }, extra: { lost_pct: +((100 * (ops - final)) / ops).toFixed(1) } };
+  const ops = outs.reduce((s, o) => s + o.ops, 0), n = (((ops - final) % 2 ** 32) + 2 ** 32) % 2 ** 32;
+  return { ops, violations: { lost_updates: n }, extra: { lost_pct: +((100 * n) / ops).toFixed(1) } };
 };
 const jsLane = (o) => ({ mode: 'timed', setup: jsSetup, check: (ctx, sh, outs) => lost(ctx, sh, outs, jsCount(sh)), ...o });
 

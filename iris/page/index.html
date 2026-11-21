@@ -3,35 +3,39 @@
 <body>
 <header>
   <h1>Verified threads, side by side <small>JavaScript next to iris-lean-proved kernels</small></h1>
-  <p>Each scenario runs the same work on the same shared resource in several lanes: plain
-  JavaScript (broken on purpose, idiomatic, or the same algorithm by hand) and kernels proved in
-  <a href="https://github.com/leanprover-community/iris-lean">iris-lean</a>, translated from the
-  very Lean constants the theorems are about into JavaScript over one <code>SharedArrayBuffer</code>.
-  Every lane runs in Web Workers on this page. Each verified lane carries a proof chip that says
-  what is proved, what is trusted, and what is not proved; its kernels and theorems come from the
-  generator's manifest, its scope and caveats are written per lane. The proofs cover safety under
-  sequentially consistent interleavings: nothing about speed, progress or fairness, and nothing
-  about the JavaScript around a kernel.</p>
+  <p>Each scenario runs the same multithreaded job several ways in Web Workers: hand-written
+  JavaScript, and kernels proved in <a href="https://github.com/leanprover-community/iris-lean">iris-lean</a>,
+  translated to JavaScript. The proofs cover safety under sequentially consistent interleavings, not
+  speed, progress or the JavaScript around a kernel.</p>
   <div id="gate" hidden></div>
   <form id="controls" onsubmit="return false" hidden>
-    <fieldset id="scenarios"><legend>Scenarios</legend></fieldset>
-    <fieldset id="ws"><legend>Threads W</legend></fieldset>
+    <label>Threads <select id="threads"></select></label>
     <label><input type="checkbox" id="fuzz"> fuzz mode too</label>
-    <label><input type="checkbox" id="quick" checked> short runs</label>
-    <button type="button" id="run">Run</button>
+    <button type="button" id="runall">Run all</button>
+    <button type="button" id="stop" disabled>Stop</button>
     <button type="button" id="download" disabled>Download JSON</button>
     <span id="status" role="status"></span>
   </form>
+  <p id="key" hidden><span><i class="mark verified"></i>verified: proved in iris-lean, translated</span>
+    <span><i class="mark js"></i>hand-written JavaScript</span>
+    <span><span class="bad">✗</span> broken on purpose: what went wrong, instead of a speed</span></p>
 </header>
-<main id="results" aria-live="polite"></main>
+<main id="results"></main>
 <section id="legend"></section>
 <section id="theorems"></section>
 <footer>
-  <p>Throughput is operations per microsecond, all threads together, measured in this browser on
-  this machine: read it as a ratio between lanes of one run. A page cannot see CPU time; the Node
-  harness (<code>node iris/bench/harness.mjs</code>) reports CPU time per operation and also runs
-  the native and wasm32 lanes. Broken lanes show correctness counts only. Fuzz mode adds random
-  delays before shared-memory operations: more interleavings, not a fair speed comparison.
+  <p>The hand-written lanes are broken on purpose, idiomatic, or the same algorithm by hand; the
+  verified ones are translated from the very Lean constants the theorems are about, into JavaScript
+  over one <code>SharedArrayBuffer</code>. Open a lane for its proof chip: what is proved, what is
+  trusted, and what is not proved.</p>
+  <p>Speeds are operations per microsecond, all threads together, measured in this browser on this
+  machine: read them as ratios between the lanes of one run. A lane runs alone, so lanes do not compete
+  for the cores. The live views read shared memory once per frame; the only addition to a lane is
+  one <code>Atomics.or</code> per claimed tile in S5's two claiming lanes, which records who drew it.
+  A page cannot see CPU time; the Node harness (<code>node iris/bench/harness.mjs</code>) reports CPU
+  time per operation and also runs the native and wasm32 lanes. Broken lanes show correctness counts
+  only. Fuzz mode adds random delays before shared-memory operations: more interleavings, not a fair
+  speed comparison (the charts show the runs without it; Details has both).
   <code>iris/README.md</code> in the repository has the details, the coverage of every JavaScript
   threading mechanism, and the trusted base.</p>
 </footer>

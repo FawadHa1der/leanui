@@ -6,7 +6,11 @@ server in a Cloudflare container.
 
 ## The test job
 
-One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it:
+One `ubuntu-24.04` job does all of it in order. Each step depends on the one before it. It starts
+once the `iris` job (the verified concurrency kernels, `iris/README.md`: Lean 4.36 and iris-lean,
+about 1.5 minutes with its cache) has passed, because the site serves that job's page: the job
+uploads `dist/iris` without the native programs and the C sources as the `iris-page` artifact, and
+this job downloads it into `dist/iris` before step 6.
 
 1. **Lean**: elan installs the toolchains named by each project: `lean-toolchain` (4.34.0),
    `vir/lean-toolchain` (4.36.0-rc1), and `roster/notary/lean-toolchain` and
@@ -41,16 +45,19 @@ One `ubuntu-24.04` job does all of it in order. Each step depends on the one bef
    QED64 lane, on a cross-origin isolated server), and the Roster demo's (the app against
    `leanui-roster`, which notarizes, and the receipt it makes on the verify page).
 6. **Container**: `deploy/cloudflare/stage.sh` stages the site server and its files (`dist/site`,
-   `dist/editor`, `dist/race`, `dist/roster` with the Roster demo's one receipt, notarized then),
-   and writes brotli (quality 11) and gzip siblings of every `.wasm`, `.js`, `.mjs`, `.irpkg` and
-   `.ndjson` file. The exception is the QED64 lane's `dist/race/qed64-rt` (`qed64/build.sh`): its
+   `dist/editor`, `dist/race`, `dist/roster` with the Roster demo's one receipt, notarized then,
+   and `dist/iris`, what the verified-threads page loads),
+   and writes brotli (quality 11) and gzip siblings of every `.wasm`, `.js`, `.mjs`, `.irpkg`,
+   `.ndjson` and `.json` file. The exception is the QED64 lane's `dist/race/qed64-rt` (`qed64/build.sh`): its
    `apps.<h>.snap.gz` is the snapshot itself, not a sibling, and `lean.wasm` keeps the brotli 9
    siblings it came with (quality 11 would take 4 more minutes for 1.6 MB less).
    The image is built for `linux/amd64` and started, and `/`, the wasm, the stylesheet, the
    editor, the video lab, the race page (with a wasm64 and a lean-vir file of it, and the QED64
    lane's `lean.wasm` and snapshot) and the Roster demo must answer, the wasm, the lane's
    `lean.wasm` (immutable) and the receipt brotli-encoded to a client that accepts it; the Roster
-   demo's app and verify page are tested in Chromium against it. On `main` the staged files are
+   demo's app and verify page are tested in Chromium against it, and so is the verified-threads
+   page (`iris/test/page.mjs`, short runs), after its HTML, its `COOP`/`COEP` headers and a
+   brotli-encoded translated module. On `main` the staged files are
    uploaded for the deploy job.
 
 `tests/browser/run-all.sh` is also the local entry point (`--build` builds the apps first). On a
@@ -73,6 +80,9 @@ browser ──HTTPS──▶ Worker (deploy/cloudflare/src/worker.js)
   QED64 for a visitor who adds it; `bench/race/`). lean-vir and QED64 run only there: the site and
   the editor are the wasm64 builds. `/race/qed64-rt/`, the QED64 lane's runtime and snapshot, is
   served with year-long `immutable` caching, because its file names change with their content.
+  The verified-threads page, `/iris/` (`dist/iris`, static files: plain JavaScript in Web
+  Workers next to kernels proved in iris-lean and translated to JavaScript; `iris/README.md`),
+  is cross-origin isolated like `/race/`, because its lanes share one `SharedArrayBuffer`.
   And the Roster demo, `/roster/` (`dist/roster`: the app and its verify page, with one receipt
   made when the site was staged; no notary, which needs Lean 4.35; `roster/README.md`).
 - **Compression**: the server sends the precompressed `.br`/`.gz` siblings to clients that
@@ -158,11 +168,14 @@ wasm64 archives built once (`toolchain/build-archives.sh`, needs Docker):
 lake build leanui-site leanui-roster && tools/build-app.sh SiteApp site && tools/build-app.sh EditorApp editor &&
   tools/build-app.sh VideoApp editor/video && tools/build-app.sh LifeApp life &&
   tools/build-app.sh BenchApp bench && vir/build.sh && qed64/build.sh && bench/race/build.sh &&
-  tools/build-app.sh RosterApp roster && roster/verify/build.sh && deploy/cloudflare/stage.sh
+  tools/build-app.sh RosterApp roster && roster/verify/build.sh && iris/build.sh --no-native --no-wasm &&
+  deploy/cloudflare/stage.sh
 ```
 
 `qed64/build.sh` (the race's optional QED64 lane, `qed64/README.md`) downloads about 260 MB the
-first time; without it the race page has no QED64 lane.
+first time; without it the race page has no QED64 lane. `iris/build.sh` (the verified-threads
+page, `iris/README.md`) needs Lean 4.36, and Lake fetches iris-lean the first time; the page is
+not optional: `stage.sh` stops without `dist/iris`.
 
 ```bash
 cd deploy/cloudflare && npm install && npx wrangler deploy
