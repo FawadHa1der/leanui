@@ -21,6 +21,9 @@ permissions:
 jobs:
   test:
     name: Build and test
+    # the iris job builds the verified-threads page (Lean 4.36 and iris-lean), which the site
+    # stages at /iris/; warm, it takes about 1.5 minutes
+    needs: iris
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     # The race's QED64 lane is built and raced, or the job fails (tests/browser/run-all.sh)
@@ -252,6 +255,11 @@ jobs:
           path: ${{ runner.temp }}/bench
           retention-days: 14
 
+      # The verified-threads page, from the iris job (its files only: no native programs or C)
+      - uses: actions/download-artifact@v8
+        with:
+          name: iris-page
+          path: dist/iris
       - name: Stage and smoke-test the site container
         run: |
           deploy/cloudflare/stage.sh
@@ -287,6 +295,17 @@ jobs:
           grep -qi '^content-encoding: br' "$RUNNER_TEMP/receipt.headers"
           node tests/browser/roster.mjs http://127.0.0.1:8080/roster/ chromium
           node tests/browser/roster-verify.mjs "http://127.0.0.1:8080/roster/verify/?receipt=/roster/receipts/feasible.ndjson" chromium
+          # the verified-threads page: cross-origin isolated, a translated module brotli-encoded,
+          # and its short run in Chromium (iris/test/page.mjs takes the URL that serves dist/)
+          curl -fsS -D "$RUNNER_TEMP/iris.headers" -o "$RUNNER_TEMP/iris.html" http://127.0.0.1:8080/iris/
+          grep -q "Verified threads" "$RUNNER_TEMP/iris.html"
+          grep -qi '^cross-origin-opener-policy: same-origin' "$RUNNER_TEMP/iris.headers"
+          grep -qi '^cross-origin-embedder-policy: require-corp' "$RUNNER_TEMP/iris.headers"
+          lib=$(curl -fsS http://127.0.0.1:8080/iris/gen/manifest.json | node -p 'JSON.parse(require("fs").readFileSync(0)).libs[0].name')
+          curl -fsS -o /dev/null -D "$RUNNER_TEMP/iris-lib.headers" -H 'accept-encoding: br, gzip' "http://127.0.0.1:8080/iris/gen/js/$lib.mjs"
+          grep -qi '^content-type: text/javascript' "$RUNNER_TEMP/iris-lib.headers"
+          grep -qi '^content-encoding: br' "$RUNNER_TEMP/iris-lib.headers"
+          node iris/test/page.mjs http://127.0.0.1:8080/ chromium
           tar -C deploy/cloudflare -czf "$RUNNER_TEMP/site-container.tgz" site
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -310,6 +329,66 @@ jobs:
           "$HOME/.elan/bin/elan" toolchain install "$(cat roster/hall/lean-toolchain)"
       - name: Check the proof
         run: roster/hall/build.sh
+
+  # The verified concurrency kernels (iris/README.md): iris-lean's proofs and ours, the axiom guard,
+  # the translator's tests on JavaScript and native code, and a short run of the side-by-side
+  # harness, which fails if a verified lane shows a violation. A project of its own (Lean 4.36.0,
+  # iris-lean pinned) that the main build never reads; its Lake build is cached (about 700 MB).
+  # Its page is on the site at /iris/: the test job waits for this one and stages the page.
+  iris:
+    name: Verified concurrency kernels (iris-lean)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Lean
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat iris/lean-toolchain)"
+      - name: Restore the iris Lake build
+        id: iris-lake
+        uses: actions/cache/restore@v6
+        with:
+          path: iris/.lake
+          key: iris-lake-${{ runner.os }}-${{ hashFiles('iris/lean-toolchain', 'iris/lakefile.toml', 'iris/lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            iris-lake-${{ runner.os }}-${{ hashFiles('iris/lean-toolchain', 'iris/lakefile.toml', 'iris/lake-manifest.json') }}-
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # every proof and the axiom guard, the generator, the native lane (no Emscripten here: the
+      # wasm lane is "not built")
+      - name: Build
+        run: iris/build.sh --no-wasm
+      # The page's files for the site (the test job stages them at /iris/): dist/iris without the
+      # native programs and the C sources, which the page never loads
+      - uses: actions/upload-artifact@v7
+        with:
+          name: iris-page
+          path: |
+            dist/iris
+            !dist/iris/native
+            !dist/iris/wasm
+            !dist/iris/gen/c
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save the iris Lake build
+        if: steps.iris-lake.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: iris/.lake
+          key: ${{ steps.iris-lake.outputs.cache-primary-key }}
+      - name: Tests (provenance, translator statistics, interpreter, embedding, every program)
+        run: node iris/test/node.mjs --backends js,native
+      - name: Side-by-side harness (short runs, W = 1 and 4, fuzz off and on)
+        run: node iris/bench/harness.mjs --quick --json "$RUNNER_TEMP/iris-bench.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: iris-bench
+          path: ${{ runner.temp }}/iris-bench.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   deploy:
     name: Deploy the site to Cloudflare

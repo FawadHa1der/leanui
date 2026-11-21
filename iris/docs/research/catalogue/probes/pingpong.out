@@ -1,0 +1,11 @@
+{"mode":"post","N":20000,"usPerRoundTrip":33.197,"completed":true}
+{"mode":"wait","N":50000,"usPerRoundTrip":27.84,"completed":true}
+Warning: Detected unsettled top-level await at file://<scratchpad>/iris/catalogue/probes/pingpong.mjs:26
+      while (Atomics.load(a, mine) !== k) { const r = Atomics.waitAsync(a, mine, k - 1); if (r.async) await r.value; }
+                                                                                                      ^
+Warning: Detected unsettled top-level await at file://<scratchpad>/iris/catalogue/probes/pingpong.mjs:26
+      while (Atomics.load(a, mine) !== k) { const r = Atomics.waitAsync(a, mine, k - 1); if (r.async) await r.value; }
+                                                                                                      ^
+{"mode":"waitAsync","N":20000,"usPerRoundTrip":0,"completed":false}
+{"mode":"waitAsyncKeepAlive","N":20000,"usPerRoundTrip":36.105,"completed":true}
+{"mode":"spin","N":500000,"usPerRoundTrip":0.625,"completed":true}

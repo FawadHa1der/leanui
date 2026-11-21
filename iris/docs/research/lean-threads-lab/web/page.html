@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>ThreadLab</title>
+<p id="s">running…</p>
+<script>
+// ?build=wasm-mt&workers=4&runs=[[0,512,512,20]]&where=page|worker
+const q = new URLSearchParams(location.search);
+const build = q.get("build"), workers = +q.get("workers"), runs = JSON.parse(q.get("runs") || "[]");
+const where = q.get("where") || "page";
+const out = [];
+function finish() { window.__results = out; document.getElementById("s").textContent = "done"; }
+if (where === "worker") {
+  const w = new Worker("worker.js?build=" + build);
+  w.onmessage = (e) => { if (e.data && e.data.step) { out.push("step: " + e.data.step); window.__steps = out.slice(); return; } out.push(...e.data); finish(); };
+  w.onerror = (e) => { out.push("FAILED worker " + e.message); finish(); };
+  w.postMessage({ build, workers, runs, coi: self.crossOriginIsolated });
+} else {
+  const s = document.createElement("script");
+  s.src = `../${build}/threadlab.js`;
+  s.onload = async () => {
+    const t0 = performance.now();
+    try {
+      const M = await ThreadLab({ print: (x) => out.push(x), printErr: (x) => out.push("ERR " + x),
+        mainScriptUrlOrBlob: `../${build}/threadlab.js`, locateFile: (f) => `../${build}/${f}` });
+      const t1 = performance.now();
+      if (!M._lab_boot(workers)) throw new Error("boot failed");
+      const t2 = performance.now();
+      out.push(JSON.stringify({ bench: "boot", build, where: "page main thread", crossOriginIsolated: self.crossOriginIsolated,
+        loadMs: +(t1 - t0).toFixed(1), leanInitMs: +(t2 - t1).toFixed(1) }));
+      for (const [w, a, b, c] of runs) { const s = performance.now(); M._lab_run(w, a, b, c); out.push(JSON.stringify({ bench: "suite-wall", suite: w, ms: +(performance.now() - s).toFixed(1) })); }
+    } catch (e) { out.push("FAILED " + build + ": " + e); }
+    finish();
+  };
+  s.onerror = () => { out.push("FAILED to load script"); finish(); };
+  document.head.appendChild(s);
+}
+</script>
