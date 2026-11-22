@@ -1,0 +1,44 @@
+<!doctype html><meta charset="utf-8"><title>ThreadLab responsiveness</title>
+<p id="s">running…</p>
+<script>
+// ?build=wasm-mt&workers=4&W=1280&H=720&r=2&k=4
+// The same blur twice on the page's main thread, as LeanUI runs Lean today:
+//   blocking:   lab_run(1-like) — the update computes the blur before returning;
+//   background: lab_bg — returns at once, pthreads compute, the result is posted back.
+// requestAnimationFrame counts what the page could draw meanwhile.
+const q = new URLSearchParams(location.search);
+const build = q.get("build"), workers = +q.get("workers");
+const [W, H, r, k] = ["W", "H", "r", "k"].map((x) => +q.get(x));
+const out = [];
+function frames() {
+  const gaps = []; let last = performance.now(), on = true;
+  const tick = (t) => { gaps.push(t - last); last = t; if (on) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  return () => { on = false; return { frames: gaps.length, maxGapMs: +Math.max(0, ...gaps).toFixed(1) }; };
+}
+const s = document.createElement("script");
+s.src = `../${build}/threadlab.js`;
+s.onload = async () => {
+  try {
+    const M = await ThreadLab({ print: (x) => out.push(x), printErr: (x) => out.push("ERR " + x),
+      mainScriptUrlOrBlob: `../${build}/threadlab.js`, locateFile: (f) => `../${build}/${f}` });
+    if (!M._lab_boot(workers)) throw new Error("boot failed");
+    await new Promise((res) => setTimeout(res, 500));
+    for (const [name, fn] of [["naive do-block (pure prefix)", "_lab_bg_naive"], ["IO.lazyPure inside IO.asTask", "_lab_bg"]]) {
+      const stop = frames();
+      await new Promise((res) => requestAnimationFrame(res));
+      const t0 = performance.now();
+      const doneP = new Promise((res) => { M.onLabDone = (id, v) => res({ id, v, ms: performance.now() - t0 }); });
+      M[fn](1, W, H, r, k);              // returns at once only if the work really went to a thread
+      const returnedMs = performance.now() - t0;
+      const done = await doneP;
+      await new Promise((res) => setTimeout(res, 50));
+      const f = stop();
+      out.push(JSON.stringify({ bench: "background-blur", variant: name, build, W, H, r, tasks: k, callReturnedMs: +returnedMs.toFixed(1), resultMs: +done.ms.toFixed(1), hash: done.v >>> 0, ...f }));
+      await new Promise((res) => setTimeout(res, 300));
+    }
+  } catch (e) { out.push("FAILED " + e); }
+  window.__results = out; document.getElementById("s").textContent = "done";
+};
+document.head.appendChild(s);
+</script>

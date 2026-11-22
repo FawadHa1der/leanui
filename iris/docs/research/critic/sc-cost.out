@@ -1,0 +1,10 @@
+W=1 plain                      185.6 ms (incl. worker start) hash 1842939968
+W=1 atomics-load-plain-store   1017.8 ms (incl. worker start) hash 1842939968
+W=1 atomics-all                1368.2 ms (incl. worker start) hash 1842939968
+W=1 plain                      181.4 ms (incl. worker start) hash 1842939968
+W=1 atomics-all                1367.4 ms (incl. worker start) hash 1842939968
+W=4 plain                      90.7 ms (incl. worker start) hash 1842939968
+W=4 atomics-load-plain-store   406.5 ms (incl. worker start) hash 1842939968
+W=4 atomics-all                374.5 ms (incl. worker start) hash 1842939968
+W=4 plain                      98.1 ms (incl. worker start) hash 1842939968
+W=4 atomics-all                510.8 ms (incl. worker start) hash 1842939968
